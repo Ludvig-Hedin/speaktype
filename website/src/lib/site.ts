@@ -9,7 +9,7 @@ export function getGitHubRepoSlug(): string {
     process.env.NEXT_PUBLIC_GITHUB_REPO;
   const parsed = parseRepoFromGitHubUrl(fromUrl);
   if (parsed) return parsed;
-  return "karansinghgit/speaktype";
+  return "Ludvig-Hedin/speaktype";
 }
 
 function parseRepoFromGitHubUrl(url: string | undefined): string | null {

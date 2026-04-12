@@ -15,7 +15,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **Onboarding / models:** New step downloads the RAM-recommended Whisper model before finishing setup; default selection stays in sync with on-disk models so the hotkey flow no longer shows “No model selected” when files already exist. Startup preloads WhisperKit after a disk scan for faster first transcription (SelectedModelPreference, ModelDownloadService, AppDelegate, OnboardingView, MiniRecorderView, AIModelsView, DashboardView).
 
 ## [1.0.29] - 2026-03-24
-- 
+- **Distribution:** GitHub release [v1.0.29](https://github.com/Ludvig-Hedin/speaktype/releases/tag/v1.0.29) with `SpeakType.dmg` (local `make dmg` artifact; not notarized via `release.sh`).
 
 ## [1.0.28] - 2026-03-22
 - 
