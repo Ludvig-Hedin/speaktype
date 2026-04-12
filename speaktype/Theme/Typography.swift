@@ -2,7 +2,9 @@
 //  Typography.swift
 //  speaktype
 //
-//  Typography system using Source Sans 3 for UI and system serif for headers
+//  Typography system using Source Sans 3 for UI and system serif for headers.
+//  Pair body labels with `.stCompactUI()` (View+Extensions) for tighter
+//  tracking and line rhythm — avoids airy “marketing” looseness.
 //
 
 import SwiftUI

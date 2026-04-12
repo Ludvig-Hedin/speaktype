@@ -88,6 +88,10 @@ make dmg            # Create DMG installer
 
 So the first transcription will appear ultra slow, but it will go back to instantaneous dictation right after it's warmed up. 
 
+### Marketing site (Vercel)
+
+A minimal Next.js landing page lives in [`website/`](website/). See [`website/README.md`](website/README.md) for local dev and **Vercel** deploy (set the project **Root Directory** to `website`).
+
 ### Project Structure
 
 ```

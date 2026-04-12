@@ -1,88 +1,29 @@
+import AppKit
 import AVFoundation
 import KeyboardShortcuts
 import SwiftUI
 
 struct SettingsView: View {
-    @State private var selectedTab: SettingsTab = .general
-
     var body: some View {
-        VStack(spacing: 0) {
-            // Header with tabs
-            VStack(alignment: .leading, spacing: 16) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
                 Text("Settings")
                     .font(Typography.displayLarge)
                     .foregroundStyle(Color.textPrimary)
+                    .stCompactUI()
 
-                // Tab bar
-                HStack(spacing: 0) {
-                    ForEach(SettingsTab.allCases) { tab in
-                        SettingsTabButton(
-                            tab: tab,
-                            isSelected: selectedTab == tab,
-                            action: { selectedTab = tab }
-                        )
-                    }
-                    Spacer()
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 16)
-
-            // Tab content
-            switch selectedTab {
-            case .general:
                 GeneralSettingsTab()
-            case .audio:
                 AudioSettingsTab()
-            case .permissions:
                 PermissionsSettingsTab()
             }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color.clear)
     }
 }
 
-enum SettingsTab: String, CaseIterable, Identifiable {
-    case general = "General"
-    case audio = "Audio"
-    case permissions = "Permissions"
-
-    var id: String { rawValue }
-
-    var icon: String {
-        switch self {
-        case .general: return "gearshape"
-        case .audio: return "mic"
-        case .permissions: return "shield"
-        }
-    }
-}
-
-struct SettingsTabButton: View {
-    let tab: SettingsTab
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: tab.icon)
-                    .font(.system(size: 13))
-                Text(tab.rawValue)
-                    .font(Typography.bodyMedium)
-            }
-            .foregroundStyle(isSelected ? Color.textPrimary : Color.textMuted)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(isSelected ? Color.bgHover : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - General Settings Tab
+// MARK: - General settings
 
 struct GeneralSettingsTab: View {
     @AppStorage("appTheme") private var appTheme: AppTheme = .system
@@ -111,8 +52,7 @@ struct GeneralSettingsTab: View {
     @State private var showDeactivateAlert = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
+        VStack(spacing: 16) {
                 // Appearance
                 SettingsSection {
                     SettingsSectionHeader(
@@ -155,28 +95,28 @@ struct GeneralSettingsTab: View {
                                         .foregroundStyle(Color.textPrimary)
                                     Image(systemName: "chevron.up.chevron.down")
                                         .font(.system(size: 9))
-                                        .foregroundStyle(Color.textPrimary)
+                                        .foregroundStyle(Color.textMuted)
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background(Color.bgHover)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(.thinMaterial, in: Capsule(style: .continuous))
+                                .overlay(
+                                    Capsule(style: .continuous)
+                                        .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
+                                )
                             }
                             .menuStyle(.borderlessButton)
+                            .clickActionPointerCursor()
                         }
 
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Text("Recording Mode")
                                     .font(Typography.bodyMedium)
                                     .foregroundStyle(Color.textPrimary)
                                 Spacer()
-                                Picker("", selection: $recordingMode) {
-                                    Text("Hold to record").tag(0)
-                                    Text("Toggle").tag(1)
-                                }
-                                .pickerStyle(.segmented)
-                                .frame(width: 180)
+                                RecordingModePicker(recordingMode: $recordingMode)
+                                    .frame(maxWidth: 280)
                             }
 
                             Text(
@@ -186,6 +126,7 @@ struct GeneralSettingsTab: View {
                             )
                             .font(Typography.captionSmall)
                             .foregroundStyle(Color.textMuted)
+                            .stCompactUI()
                             .padding(.top, 2)
                         }
 
@@ -207,6 +148,7 @@ struct GeneralSettingsTab: View {
                             Toggle("", isOn: $showMenuBarIcon)
                                 .labelsHidden()
                         }
+                        .clickActionPointerCursor()
                     }
                 }
 
@@ -248,14 +190,18 @@ struct GeneralSettingsTab: View {
                                     .foregroundStyle(Color.textPrimary)
                                 Image(systemName: "chevron.up.chevron.down")
                                     .font(.system(size: 9))
-                                    .foregroundStyle(Color.textPrimary)
+                                    .foregroundStyle(Color.textMuted)
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.bgHover)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(.thinMaterial, in: Capsule(style: .continuous))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
+                            )
                         }
                         .menuStyle(.borderlessButton)
+                        .clickActionPointerCursor()
                     }
 
                     Text("This is a hint for transcription. It does not choose an output language and it does not translate the result.")
@@ -294,6 +240,7 @@ struct GeneralSettingsTab: View {
                             Toggle("", isOn: $autoUpdate)
                                 .labelsHidden()
                         }
+                        .clickActionPointerCursor()
 
                         Button(action: {
                             Task {
@@ -317,12 +264,38 @@ struct GeneralSettingsTab: View {
                             }
                             .foregroundStyle(Color.textPrimary)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .background(Color.bgHover)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .padding(.vertical, 10)
+                            .background(.thinMaterial, in: Capsule(style: .continuous))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
+                            )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.stPlain)
                         .disabled(updateService.isCheckingForUpdates)
+
+                        Button(action: {
+                            NSWorkspace.shared.open(UpdateConfiguration.releasesPageURL)
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.down.circle")
+                                    .font(.system(size: 12))
+                                Text("Browse all releases…")
+                                    .font(Typography.labelMedium)
+                            }
+                            .foregroundStyle(Color.textSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.stPlain)
+                        .clickActionPointerCursor()
+
+                        Text(
+                            "Install the latest from “Check for Updates”, or download any published build (DMG) from GitHub."
+                        )
+                        .font(Typography.captionSmall)
+                        .foregroundStyle(Color.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -350,8 +323,6 @@ struct GeneralSettingsTab: View {
                 //         .buttonStyle(.stPrimary)
                 //     }
                 // }
-            }
-            .padding(24)
         }
 
         .sheet(isPresented: $showLicenseSheet) {
@@ -403,56 +374,57 @@ struct GeneralSettingsTab: View {
     ]
 }
 
-// MARK: - Audio Settings Tab
+// MARK: - Audio
 
 struct AudioSettingsTab: View {
     @StateObject private var audioRecorder = AudioRecordingService.shared
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "mic", title: "Input Device", subtitle: "Select your microphone")
+        VStack(spacing: 16) {
+            SettingsSection {
+                SettingsSectionHeader(
+                    icon: "mic", title: "Input Device", subtitle: "Select your microphone")
 
-                    VStack(spacing: 12) {
-                        if audioRecorder.availableDevices.isEmpty {
-                            Text("No input devices found")
-                                .font(Typography.bodyMedium)
-                                .foregroundStyle(Color.textMuted)
-                                .padding(.vertical, 20)
-                        } else {
-                            ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
-                                DeviceRow(
-                                    name: device.localizedName,
-                                    isActive: audioRecorder.selectedDeviceId == device.uniqueID,
-                                    isSelected: audioRecorder.selectedDeviceId == device.uniqueID
-                                )
-                                .onTapGesture {
-                                    audioRecorder.selectedDeviceId = device.uniqueID
-                                }
+                VStack(spacing: 12) {
+                    if audioRecorder.availableDevices.isEmpty {
+                        Text("No input devices found")
+                            .font(Typography.bodyMedium)
+                            .foregroundStyle(Color.textMuted)
+                            .padding(.vertical, 20)
+                    } else {
+                        ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
+                            DeviceRow(
+                                name: device.localizedName,
+                                isActive: audioRecorder.isRecording
+                                    && audioRecorder.selectedDeviceId == device.uniqueID,
+                                isSelected: audioRecorder.selectedDeviceId == device.uniqueID
+                            )
+                            .onTapGesture {
+                                audioRecorder.selectedDeviceId = device.uniqueID
                             }
                         }
                     }
-
-                    Button(action: { audioRecorder.fetchAvailableDevices() }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 12))
-                            Text("Refresh Devices")
-                                .font(Typography.labelMedium)
-                        }
-                        .foregroundStyle(Color.textPrimary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Color.bgHover)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 8)
                 }
+
+                Button(action: { audioRecorder.fetchAvailableDevices() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12))
+                        Text("Refresh Devices")
+                            .font(Typography.labelMedium)
+                    }
+                    .foregroundStyle(Color.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(.thinMaterial, in: Capsule(style: .continuous))
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
+                    )
+                }
+                .buttonStyle(.stPlain)
+                .padding(.top, 8)
             }
-            .padding(24)
         }
         .onAppear {
             audioRecorder.fetchAvailableDevices()
@@ -460,7 +432,7 @@ struct AudioSettingsTab: View {
     }
 }
 
-// MARK: - Permissions Settings Tab
+// MARK: - Permissions
 
 struct PermissionsSettingsTab: View {
     @State private var micStatus: AVAuthorizationStatus = .notDetermined
@@ -468,38 +440,35 @@ struct PermissionsSettingsTab: View {
     @State private var timer: Timer?
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "shield", title: "App Permissions",
-                        subtitle: "Required for full functionality")
+        VStack(spacing: 16) {
+            SettingsSection {
+                SettingsSectionHeader(
+                    icon: "shield", title: "App Permissions",
+                    subtitle: "Required for full functionality")
 
-                    VStack(spacing: 10) {
-                        SettingsPermissionItem(
-                            icon: "mic.fill",
-                            color: Color.textSecondary,
-                            title: "Microphone Access",
-                            desc: "Record your voice for transcription",
-                            isGranted: micStatus == .authorized,
-                            action: { openSettings(for: "Privacy_Microphone") }
-                        )
+                VStack(spacing: 10) {
+                    SettingsPermissionItem(
+                        icon: "mic.fill",
+                        color: Color.textSecondary,
+                        title: "Microphone Access",
+                        desc: "Record your voice for transcription",
+                        isGranted: micStatus == .authorized,
+                        action: { openSettings(for: "Privacy_Microphone") }
+                    )
 
-                        SettingsPermissionItem(
-                            icon: "hand.raised.fill",
-                            color: Color.textSecondary,
-                            title: "Accessibility Access",
-                            desc: "Paste transcribed text directly",
-                            isGranted: accessibilityStatus,
-                            action: {
-                                ClipboardService.shared.requestAccessibilityPermission()
-                                // System dialog handles opening Settings when user clicks "Open System Settings"
-                            }
-                        )
-                    }
+                    SettingsPermissionItem(
+                        icon: "hand.raised.fill",
+                        color: Color.textSecondary,
+                        title: "Accessibility Access",
+                        desc: "Paste transcribed text directly",
+                        isGranted: accessibilityStatus,
+                        action: {
+                            ClipboardService.shared.requestAccessibilityPermission()
+                            // System dialog handles opening Settings when user clicks "Open System Settings"
+                        }
+                    )
                 }
             }
-            .padding(24)
         }
         .onAppear {
             checkPermissions()
@@ -549,6 +518,7 @@ struct SettingsSectionHeader: View {
                 Text(subtitle)
                     .font(Typography.captionSmall)
                     .foregroundStyle(Color.textMuted)
+                    .stCompactUI()
             }
 
             Spacer()
@@ -595,28 +565,40 @@ struct RadioButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 ZStack {
                     Circle()
                         .strokeBorder(
-                            isSelected ? Color.accentPrimary : Color.textMuted, lineWidth: 1.5
+                            isSelected ? Color.textPrimary : Color.textMuted.opacity(0.55),
+                            lineWidth: isSelected ? 2 : 1.25
                         )
-                        .frame(width: 18, height: 18)
+                        .frame(width: 20, height: 20)
 
                     if isSelected {
                         Circle()
-                            .fill(Color.accentPrimary)
-                            .frame(width: 10, height: 10)
+                            .fill(Color.textPrimary)
+                            .frame(width: 8, height: 8)
                     }
                 }
 
                 Text(title)
                     .font(Typography.bodyMedium)
-                    .foregroundStyle(Color.textPrimary)
+                    .fontWeight(isSelected ? .semibold : .regular)
+                    .foregroundStyle(isSelected ? Color.textPrimary : Color.textSecondary)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(isSelected ? Color.bgSelected.opacity(0.85) : Color.clear)
+            }
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.border.opacity(isSelected ? 0.4 : 0), lineWidth: 0.5)
+            )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.stPlain)
     }
 }
 
@@ -657,21 +639,76 @@ struct SettingsPermissionItem: View {
                     action()
                 }
                 .font(Typography.labelSmall)
+                .fontWeight(.semibold)
                 .foregroundStyle(Color.textPrimary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.bgHover)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .buttonStyle(.plain)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.thinMaterial, in: Capsule(style: .continuous))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
+                )
+                .buttonStyle(.stPlain)
             }
         }
         .padding(16)
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .background {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.ultraThinMaterial)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.border.opacity(0.5), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.border.opacity(0.45), lineWidth: 1)
         )
+    }
+}
+
+// MARK: - Recording mode (custom pills — clearer active segment than system segmented control)
+
+private struct RecordingModePicker: View {
+    @Binding var recordingMode: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            modeSegment(tag: 0, title: "Hold to record")
+            modeSegment(tag: 1, title: "Toggle")
+        }
+        .padding(4)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.bgHover.opacity(0.55))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(Color.border.opacity(0.35), lineWidth: 0.5)
+        )
+    }
+
+    private func modeSegment(tag: Int, title: String) -> some View {
+        let selected = recordingMode == tag
+        return Button {
+            recordingMode = tag
+        } label: {
+            Text(title)
+                .font(Typography.labelMedium)
+                .fontWeight(selected ? .semibold : .regular)
+                .foregroundStyle(selected ? Color.textPrimary : Color.textMuted)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
+                .background {
+                    if selected {
+                        Capsule(style: .continuous)
+                            .fill(.ultraThinMaterial)
+                    }
+                }
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.textPrimary.opacity(selected ? 0.12 : 0), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.stPlain)
     }
 }
 

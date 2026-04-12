@@ -5,6 +5,7 @@
 //  Created by Karan Singh on 7/1/26.
 //
 
+import AppKit
 import KeyboardShortcuts
 import SwiftData
 import SwiftUI
@@ -45,7 +46,8 @@ struct speaktypeApp: App {
             .environmentObject(licenseManager)
             .environmentObject(trialManager)
             .preferredColorScheme(appTheme.colorScheme)
-            .tint(Color.navyInk)
+            // System accent — sparing highlight for standard controls; chrome stays neutral in views.
+            .tint(Color(nsColor: .controlAccentColor))
         }
         .defaultSize(width: 1200, height: 800)
         .windowStyle(.hiddenTitleBar)

@@ -43,7 +43,7 @@ struct HistoryView: View {
                             .background(Color.bgHover)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.stPlain)
                     }
                 }
                 .padding(.horizontal, 24)
@@ -287,7 +287,7 @@ struct HistoryCard: View {
                 .padding(20)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.stPlain)
             
             // Expanded content
             if isExpanded {
@@ -318,7 +318,7 @@ struct HistoryCard: View {
                                 .background(Color.bgHover)
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.stPlain)
                             
                             Button(role: .destructive, action: onDelete) {
                                 HStack(spacing: 6) {
@@ -333,7 +333,7 @@ struct HistoryCard: View {
                                 .background(Color.bgHover)
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.stPlain)
                             
                             if let audioURL = item.audioFileURL, audioFileExists {
                                 Button(action: {
@@ -355,7 +355,7 @@ struct HistoryCard: View {
                                     .background(Color.bgHover)
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.stPlain)
                                 
                                 Button(action: {
                                     NSWorkspace.shared.activateFileViewerSelecting([audioURL])
@@ -372,7 +372,7 @@ struct HistoryCard: View {
                                     .background(Color.bgHover)
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.stPlain)
                             } else if item.audioFileURL != nil {
                                 HStack(spacing: 6) {
                                     Image(systemName: "exclamationmark.triangle")

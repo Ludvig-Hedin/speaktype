@@ -15,7 +15,7 @@ struct MiniRecorderView: View {
     var onCommit: ((String) -> Void)?
     var onCancel: (() -> Void)?
 
-    @AppStorage("selectedModelVariant") private var selectedModel: String = ""
+    @AppStorage(wrappedValue: SelectedModelPreference.recommendedVariant(), SelectedModelPreference.storageKey) private var selectedModel: String
     @AppStorage("recordingMode") private var recordingMode: Int = 0
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
     @AppStorage("recentTranscriptionLanguages") private var recentLanguagesString: String = ""
@@ -177,6 +177,7 @@ struct MiniRecorderView: View {
                         }
                         .menuIndicator(.hidden)
                         .menuStyle(.borderlessButton)
+                        .clickActionPointerCursor()
                         .fixedSize()
                         .help(spokenLanguageHelpText)
 
@@ -191,9 +192,9 @@ struct MiniRecorderView: View {
                 .transition(.opacity)
             }
         }
-        .frame(width: 260, height: 50)
-        .clipShape(RoundedRectangle(cornerRadius: 25))
-        .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 2)
+        .frame(width: 300, height: 50)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .shadow(color: .black.opacity(0.22), radius: 14, x: 0, y: 4)
         .contextMenu {
             modelSelectionMenu
         }
@@ -271,35 +272,53 @@ struct MiniRecorderView: View {
     // MARK: - Subviews
 
     private var stopButton: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 10)  // Squircle
-                .fill(Color(red: 1.0, green: 0.2, blue: 0.2))  // Bright Red
-                .frame(width: 32, height: 32)  // Smaller button
-                .shadow(color: Color.red.opacity(0.4), radius: 4, x: 0, y: 0)
+        Button {
+            handleRecordingControlTap()
+        } label: {
+            HStack(spacing: 6) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(red: 1.0, green: 0.2, blue: 0.2))
+                        .frame(width: 26, height: 26)
+                        .shadow(color: Color.red.opacity(0.35), radius: 3, x: 0, y: 0)
 
-            // Inner square icon
-            RoundedRectangle(cornerRadius: 3)
-                .fill(Color.black.opacity(0.4))
-                .frame(width: 10, height: 10)
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .fill(Color.black.opacity(0.35))
+                        .frame(width: 8, height: 8)
+                }
+
+                Text("Stop")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.95))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.white.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
-        .contentShape(RoundedRectangle(cornerRadius: 10))
-        .onTapGesture {
-            handleHotkeyTrigger()
-        }
+        .buttonStyle(.stPlain)
+        .help("Stop recording and transcribe")
     }
 
     private var backgroundView: some View {
-        ZStack {
-            // Dark background with blur, all clipped to capsule
-            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow, cornerRadius: 25)
-                .clipShape(RoundedRectangle(cornerRadius: 25))
+        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+        return ZStack {
+            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow, cornerRadius: 26)
+                .clipShape(shape)
 
-            RoundedRectangle(cornerRadius: 25)
-                .fill(Color.black.opacity(0.85))
+            shape.fill(Color.black.opacity(0.72))
 
-            // Subtle border
-            RoundedRectangle(cornerRadius: 25)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            shape.strokeBorder(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.22),
+                        Color.white.opacity(0.06),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
         }
     }
 
@@ -355,8 +374,10 @@ struct MiniRecorderView: View {
         }
     }
 
-    private func handleHotkeyTrigger() {
-        if isListening {
+    /// Recording control in the floating bar must follow `AudioRecordingService.isRecording`, not only
+    /// local `@State`, so Stop still works if `isListening` drifts out of sync (e.g. toggle mode + hotkey flow).
+    private func handleRecordingControlTap() {
+        if isListening || audioRecorder.isRecording {
             stopAndTranscribe()
         } else {
             startRecording()

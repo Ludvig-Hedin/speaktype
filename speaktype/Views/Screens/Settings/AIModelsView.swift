@@ -5,7 +5,7 @@ struct AIModelsView: View {
     // MARK: - Properties
 
     @StateObject private var downloadService = ModelDownloadService.shared
-    @AppStorage("selectedModelVariant") private var selectedModel: String = ""
+    @AppStorage(wrappedValue: SelectedModelPreference.recommendedVariant(), SelectedModelPreference.storageKey) private var selectedModel: String
     @State private var models = AIModel.availableModels
 
     // MARK: - Computed Properties
@@ -39,30 +39,8 @@ struct AIModelsView: View {
         }
         .background(Color.clear)
         .onAppear {
-            // Refresh model download status when view appears
             Task {
                 await downloadService.refreshDownloadedModels()
-
-                // Auto-fallback: If selected model isn't downloaded, switch to first available
-                if !selectedModel.isEmpty {
-                    let isSelectedModelDownloaded =
-                        downloadService.downloadProgress[selectedModel] ?? 0.0 >= 1.0
-
-                    if !isSelectedModelDownloaded {
-                        // Find first downloaded model
-                        if let firstDownloaded = downloadService.downloadProgress.first(where: {
-                            $0.value >= 1.0
-                        })?.key {
-                            print(
-                                "⚠️ Selected model '\(selectedModel)' not found. Auto-switching to '\(firstDownloaded)'"
-                            )
-                            selectedModel = firstDownloaded
-                        } else {
-                            print("⚠️ No models downloaded. Please download a model to use the app.")
-                            selectedModel = ""  // Clear invalid selection
-                        }
-                    }
-                }
             }
         }
     }
@@ -83,6 +61,7 @@ struct AIModelsView: View {
                 )
                 .font(Typography.bodySmall)
                 .foregroundStyle(Color.textSecondary)
+                .stCompactUI()
 
                 // Info icon with tooltip on hover
                 Image(systemName: "info.circle")
@@ -109,13 +88,20 @@ struct AIModelsView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                    .fill(Color.bgCard.opacity(0.55))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.border.opacity(0.5), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                .strokeBorder(Color.border.opacity(0.5), lineWidth: 1)
         )
-        .cardShadow()
+        .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 4)
     }
 
     private var modelsListSection: some View {
@@ -154,12 +140,12 @@ struct AIModelsView: View {
         }
         .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.textPrimary.opacity(0.05))
+            RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                .fill(Color.textPrimary.opacity(0.04))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.textPrimary.opacity(0.1), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                .strokeBorder(Color.textPrimary.opacity(0.08), lineWidth: 1)
         )
     }
 }

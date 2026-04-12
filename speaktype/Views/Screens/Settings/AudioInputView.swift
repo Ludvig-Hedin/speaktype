@@ -46,12 +46,15 @@ struct AudioInputView: View {
                             }
                             .font(Typography.bodySmall)
                             .foregroundStyle(Color.textSecondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.bgHover)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(.thinMaterial, in: Capsule(style: .continuous))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.border.opacity(0.4), lineWidth: 0.5)
+                            )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.stPlain)
                     }
                     
                     Text("Note: SpeakType will use the selected device for all recordings.")
@@ -67,7 +70,8 @@ struct AudioInputView: View {
                             ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
                                 DeviceRow(
                                     name: device.localizedName,
-                                    isActive: audioRecorder.selectedDeviceId == device.uniqueID, // Simple check
+                                    isActive: audioRecorder.isRecording
+                                        && audioRecorder.selectedDeviceId == device.uniqueID,
                                     isSelected: audioRecorder.selectedDeviceId == device.uniqueID
                                 )
                                 .onTapGesture {
@@ -113,20 +117,31 @@ struct DeviceRow: View {
                     Text("Active")
                 }
                 .font(Typography.labelSmall)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
                 .background(Color.accentSuccess.opacity(0.15))
                 .foregroundStyle(Color.accentSuccess)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(Capsule(style: .continuous))
             }
         }
         .padding(16)
-        .background(isSelected ? Color.bgSelected : Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                    .fill((isSelected ? Color.bgSelected : Color.bgCard).opacity(0.72))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isSelected ? Color.bgSelected : Color.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                .strokeBorder(
+                    isSelected ? Color.textPrimary.opacity(0.18) : Color.border.opacity(0.45),
+                    lineWidth: isSelected ? 1.25 : 1
+                )
         )
-        .cardShadow()
+        .shadow(color: .black.opacity(0.04), radius: 10, x: 0, y: 3)
+        .clickActionPointerCursor()
     }
 }

@@ -17,8 +17,14 @@ enum Constants {
     }
     
     // MARK: - UI Constants
+    /// 4/8-pt rhythm: base unit4; cards and sheets use multiples for calmer grouping.
     enum UI {
-        static let cornerRadius: CGFloat = 8.0
+        /// Default control rounding (buttons, chips). Prefer `Capsule()` for primary actions.
+        static let cornerRadius: CGFloat = 12.0
+        /// Large surfaces (cards, panels) — Apple-style continuous corners.
+        static let cardCornerRadius: CGFloat = 18.0
+        /// Sidebar rows and nested groups.
+        static let sidebarItemCornerRadius: CGFloat = 12.0
         static let padding: CGFloat = 16.0
         static let smallPadding: CGFloat = 8.0
         static let largePadding: CGFloat = 24.0

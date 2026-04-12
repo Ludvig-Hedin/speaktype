@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import KeyboardShortcuts
 import SwiftUI
@@ -14,6 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastHandledHotkeyPressedState = false
     private var globalKeyDownMonitor: Any?
     private var localKeyDownMonitor: Any?
+    private weak var updateWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         miniRecorderController = MiniRecorderWindowController()
@@ -29,6 +31,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.showUpdateWindow()
             }
             .store(in: &cancellables)
+
+        // Scan disk for Core ML models, sync `selectedModelVariant`, then warm WhisperKit so the first hotkey is responsive.
+        Task(priority: .userInitiated) {
+            await ModelDownloadService.shared.refreshDownloadedModels()
+            await SelectedModelPreference.preloadSelectedModelIfDownloaded()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -242,14 +250,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         Task {
             await updateService.checkForUpdates(silent: true)
-            if updateService.availableUpdate != nil && updateService.shouldShowReminder() {
-                await MainActor.run { self.showUpdateWindow() }
-            }
         }
     }
 
     private func showUpdateWindow() {
         guard let update = UpdateService.shared.availableUpdate else { return }
+
+        if let existing = updateWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
 
         let updateSheetView = UpdateSheet(update: update)
         let hostingController = NSHostingController(rootView: updateSheetView)
@@ -260,7 +271,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.isReleasedWhenClosed = false
         window.center()
         window.isMovableByWindowBackground = true
+        updateWindow = window
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        NSApp.activate(ignoringOtherApps: true)
     }
 }

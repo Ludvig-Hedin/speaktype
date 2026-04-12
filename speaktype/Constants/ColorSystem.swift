@@ -1,7 +1,12 @@
+import AppKit
 import SwiftUI
 
 // MARK: - SpeakType Design System
-// Inspired by Wispr Flow - warm, seamless, typographically rich
+//
+// Visual direction (2026 refresh): monochrome + liquid glass.
+// — Lavender/purple tints removed; selection uses neutral grays so the UI reads “tool”, not “AI demo”.
+// — Cards stack `.ultraThinMaterial` with a light surface tint + soft stroke for depth (Apple glass).
+// — Spacing follows 4/8pt; corners are continuous and larger for a calmer, product-native feel.
 
 extension Color {
 
@@ -16,9 +21,9 @@ extension Color {
     static let inkLight = Color(hex: "252525")
     static let inkSurface = Color(hex: "2F2F2F")
 
-    /// Accent - lavender tint for selected states (like Flow)
-    static let lavender = Color(hex: "F0EBFF")
-    static let lavenderDark = Color(hex: "3D3560")
+    /// Legacy names kept for call sites; values are neutral (no purple).
+    static let lavender = Color(hex: "ECECEE")
+    static let lavenderDark = Color(hex: "3A3A3C")
 
     // MARK: - Semantic Colors
 
@@ -81,8 +86,8 @@ extension Color {
             name: "bgSelected",
             dynamicProvider: { appearance in
                 appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(hex: "3D3560")  // Dark lavender
-                    : NSColor(hex: "F0EBFF")  // Light lavender
+                    ? NSColor(hex: "3A3A3C")  // Elevated neutral (sidebar / lists)
+                    : NSColor(hex: "E8E8ED")  // Soft gray selection, not tinted
             }))
 
     // MARK: - Borders
@@ -114,7 +119,8 @@ extension Color {
                     : NSColor(hex: "E8E6E3")
             }))
 
-    static let borderActive = Color(hex: "2C2C54")
+    /// Focus / emphasis ring — neutral graphite, not purple.
+    static let borderActive = Color(hex: "48484A")
 
     // MARK: - Text
 
@@ -194,9 +200,9 @@ extension Color {
     static let chartBlue = Color(hex: "2D5DA6")
     static let chartGreen = Color(hex: "22C55E")
 
-    // Legacy
-    static let navyInk = Color(hex: "2C2C54")
-    static let navyLight = Color(hex: "3D3D6B")
+    // Legacy (formerly navy — now neutral for charts/dividers)
+    static let navyInk = Color(hex: "3A3A3C")
+    static let navyLight = Color(hex: "545456")
     static let navyMuted = Color(hex: "6B6B6B")
     static let charcoal = Color(hex: "1A1A1A")
     static let charcoalLight = Color(hex: "252525")
@@ -239,13 +245,13 @@ extension Color {
     static let badgeMutedBg = Color(hex: "9A9A9A").opacity(0.12)
     static let badgeMutedText = Color(hex: "9A9A9A")
 
-    // No gradients
+    // No gradients (single-stop kept for call-site compatibility)
     static let gradientPrimary = LinearGradient(
         colors: [Color(hex: "1A1A1A")], startPoint: .leading, endPoint: .trailing)
     static let gradientButton = LinearGradient(
         colors: [Color(hex: "1A1A1A")], startPoint: .leading, endPoint: .trailing)
     static let gradientSidebarActive = LinearGradient(
-        colors: [Color(hex: "F0EBFF")], startPoint: .leading, endPoint: .trailing)
+        colors: [Color(hex: "E8E8ED")], startPoint: .leading, endPoint: .trailing)
     static let gradientWarm = LinearGradient(
         colors: [Color.clear], startPoint: .leading, endPoint: .trailing)
 }
@@ -273,25 +279,53 @@ extension View {
 // MARK: - Reusable Card Modifier
 
 struct ThemedCardModifier: ViewModifier {
-    var padding: CGFloat = 24
-    var cornerRadius: CGFloat = 12
+    var padding: CGFloat = 20
+    var cornerRadius: CGFloat = Constants.UI.cardCornerRadius
+    @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
-        content
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return content
             .padding(padding)
-            .background(Color.bgCard)
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .background {
+                ZStack {
+                    shape.fill(.ultraThinMaterial)
+                    shape.fill(
+                        colorScheme == .dark
+                            ? Color.white.opacity(0.05)
+                            : Color.white.opacity(0.72)
+                    )
+                }
+            }
+            .clipShape(shape)
             .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(Color.border, lineWidth: 1)
+                shape.strokeBorder(
+                    Color.border.opacity(colorScheme == .dark ? 0.45 : 0.55),
+                    lineWidth: 1
+                )
             )
-            .cardShadow()
+            .overlay(
+                shape.strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(colorScheme == .dark ? 0.14 : 0.55),
+                            Color.white.opacity(0.04),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.5
+                )
+            )
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.05), radius: 14, x: 0, y: 6)
     }
 }
 
 extension View {
-    /// Standard card with padding, background, border, and shadow
-    func themedCard(padding: CGFloat = 24, cornerRadius: CGFloat = 12) -> some View {
+    /// Glass-tinted card: material + neutral tint + hairline — reads “system chrome”, not flat dashboard.
+    func themedCard(padding: CGFloat = 20, cornerRadius: CGFloat = Constants.UI.cardCornerRadius)
+        -> some View
+    {
         modifier(ThemedCardModifier(padding: padding, cornerRadius: cornerRadius))
     }
 }
@@ -302,12 +336,14 @@ struct STButtonPrimary: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(Typography.bodyMedium)
+            // Inverted pair: light = ink pill on cream label color; dark = white pill on ink label.
             .foregroundStyle(Color.bgApp)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 18)
             .padding(.vertical, 10)
             .background(Color.accentPrimary)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .opacity(configuration.isPressed ? 0.8 : 1)
+            .clipShape(Capsule(style: .continuous))
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .modifier(ClickActionPointerCursorModifier())
     }
 }
 
@@ -316,11 +352,15 @@ struct STButtonSecondary: ButtonStyle {
         configuration.label
             .font(Typography.bodyMedium)
             .foregroundStyle(Color.textPrimary)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 18)
             .padding(.vertical, 10)
-            .background(Color.bgHover)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .opacity(configuration.isPressed ? 0.8 : 1)
+            .background(.thinMaterial, in: Capsule(style: .continuous))
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.border.opacity(0.55), lineWidth: 1)
+            )
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .modifier(ClickActionPointerCursorModifier())
     }
 }
 
@@ -329,11 +369,26 @@ struct STButtonGhost: ButtonStyle {
         configuration.label
             .font(Typography.bodySmall)
             .foregroundStyle(Color.textSecondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(configuration.isPressed ? Color.bgHover : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                configuration.isPressed ? Color.bgHover : Color.clear,
+                in: Capsule(style: .continuous)
+            )
+            .modifier(ClickActionPointerCursorModifier())
     }
+}
+
+/// Plain label with pointing-hand cursor (replaces `.plain` for clickable controls).
+struct STPlainButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .modifier(ClickActionPointerCursorModifier())
+    }
+}
+
+extension ButtonStyle where Self == STPlainButtonStyle {
+    static var stPlain: STPlainButtonStyle { STPlainButtonStyle() }
 }
 
 extension ButtonStyle where Self == STButtonPrimary {
@@ -353,10 +408,10 @@ extension ButtonStyle where Self == STButtonGhost {
 struct SelectionBackground: View {
     let isSelected: Bool
     let isHovered: Bool
-    var cornerRadius: CGFloat = 8
+    var cornerRadius: CGFloat = Constants.UI.sidebarItemCornerRadius
 
     var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(
                 isSelected
                     ? Color.bgSelected

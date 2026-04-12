@@ -71,6 +71,7 @@ struct LicenseView: View {
                             .font(.system(size: 14))
                     }
                     .buttonStyle(.borderless)
+                    .clickActionPointerCursor()
                     .help("Paste from clipboard")
                     .disabled(licenseManager.isValidating)
                 }
@@ -133,6 +134,7 @@ struct LicenseView: View {
                 .frame(height: 36)
             }
             .buttonStyle(.borderedProminent)
+            .clickActionPointerCursor()
             .controlSize(.large)
             .disabled(licenseKeyInput.isEmpty || licenseManager.isValidating)
             .padding(.horizontal, 40)
@@ -153,6 +155,7 @@ struct LicenseView: View {
                         openPurchaseURL()
                     }
                     .buttonStyle(.link)
+                    .clickActionPointerCursor()
                     .font(Typography.captionSmall)
                 }
                 .padding(.vertical, 16)
@@ -162,7 +165,7 @@ struct LicenseView: View {
                     Button("Continue with Free Version") {
                         dismiss()
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.stPlain)
                     .font(Typography.captionSmall)
                     .foregroundColor(.secondary)
                     .padding(.bottom, 16)

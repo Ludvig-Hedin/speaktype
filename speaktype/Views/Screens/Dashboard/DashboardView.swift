@@ -15,7 +15,7 @@ struct DashboardView: View {
     @EnvironmentObject var trialManager: TrialManager
     @EnvironmentObject var licenseManager: LicenseManager
 
-    @AppStorage("selectedModelVariant") private var selectedModel: String = "openai_whisper-base"
+    @AppStorage(wrappedValue: SelectedModelPreference.recommendedVariant(), SelectedModelPreference.storageKey) private var selectedModel: String
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
     @State private var showFileImporter = false
     @State private var isTranscribing = false
@@ -120,7 +120,7 @@ struct DashboardView: View {
                                 }
                                 .foregroundStyle(Color.textSecondary)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.stPlain)
                         }
                     }
 
@@ -151,13 +151,25 @@ struct DashboardView: View {
                         }
                     }
                 }
-                .padding(24)
-                .background(Color.bgCard)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .padding(22)
+                .background {
+                    ZStack {
+                        RoundedRectangle(
+                            cornerRadius: Constants.UI.cardCornerRadius, style: .continuous
+                        )
+                        .fill(.ultraThinMaterial)
+                        RoundedRectangle(
+                            cornerRadius: Constants.UI.cardCornerRadius, style: .continuous
+                        )
+                        .fill(Color.bgCard.opacity(0.5))
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.border, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                        .strokeBorder(Color.border.opacity(0.5), lineWidth: 1)
                 )
+                .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 4)
             }
             .padding(20)
         }
@@ -413,7 +425,7 @@ struct ActivityChartCard: View {
                             .frame(height: 14)
 
                         // Bar
-                        RoundedRectangle(cornerRadius: 5)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .fill(data.count > 0 ? Color.textPrimary : Color.border.opacity(0.3))
                             .frame(height: max(CGFloat(data.count) / CGFloat(maxCount) * 120, 8))
 
@@ -534,12 +546,15 @@ struct RecentTranscriptionRow: View {
                             .foregroundStyle(
                                 showCopySuccess ? Color.accentSuccess : Color.textSecondary
                             )
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color.bgHover)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(.thinMaterial, in: Capsule(style: .continuous))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.border.opacity(0.35), lineWidth: 0.5)
+                            )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.stPlain)
 
                         // Play audio button (if available)
                         if item.audioFileURL != nil {
@@ -551,26 +566,34 @@ struct RecentTranscriptionRow: View {
                                         .font(Typography.captionSmall)
                                 }
                                 .foregroundStyle(Color.textSecondary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.bgHover)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(.thinMaterial, in: Capsule(style: .continuous))
+                                .overlay(
+                                    Capsule(style: .continuous)
+                                        .strokeBorder(Color.border.opacity(0.35), lineWidth: 0.5)
+                                )
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.stPlain)
                         }
                     }
                     .opacity(isHovered ? 1 : 0.5)
                 }
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isHovered ? Color.bgHover.opacity(0.7) : Color.bgCard)
-        )
+        .padding(14)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isHovered ? Color.bgHover.opacity(0.55) : Color.bgCard.opacity(0.42))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.border.opacity(0.5), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.border.opacity(0.45), lineWidth: 1)
         )
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {

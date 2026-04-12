@@ -52,7 +52,7 @@ struct UpgradePromptView: View {
         VStack(spacing: 16) {
             Image(systemName: feature.icon)
                 .font(.system(size: 40))
-                .foregroundStyle(.blue.gradient)
+                .foregroundStyle(Color.textPrimary)
             
             Text(feature.displayName)
                 .font(Typography.headlineLarge)
@@ -70,6 +70,7 @@ struct UpgradePromptView: View {
                     .frame(maxWidth: 200)
             }
             .buttonStyle(.borderedProminent)
+            .clickActionPointerCursor()
             .controlSize(.large)
         }
         .padding(40)
@@ -88,14 +89,8 @@ struct ProBadge: View {
             .foregroundColor(.white)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(
-                LinearGradient(
-                    colors: [.blue, .purple],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .background(Color.btnPrimaryBg)
+            .clipShape(Capsule(style: .continuous))
     }
 }
 
@@ -123,6 +118,7 @@ struct FeatureLockOverlay: View {
                     showLicenseSheet = true
                 }
                 .buttonStyle(.borderedProminent)
+                .clickActionPointerCursor()
             }
         }
         .sheet(isPresented: $showLicenseSheet) {

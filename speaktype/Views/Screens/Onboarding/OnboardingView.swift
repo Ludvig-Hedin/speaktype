@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import SwiftUI
 
@@ -23,8 +24,13 @@ struct OnboardingView: View {
                             withAnimation(.easeInOut(duration: 0.5)) { currentPage = 2 }
                         })
                         .transition(.opacity)
+                    } else if currentPage == 2 {
+                        PermissionsPage(onContinue: {
+                            withAnimation(.easeInOut(duration: 0.5)) { currentPage = 3 }
+                        })
+                        .transition(.opacity)
                     } else {
-                        PermissionsPage(finishAction: {
+                        OnboardingModelDownloadPage(finishAction: {
                             completeOnboarding()
                         })
                         .transition(.opacity)
@@ -41,6 +47,10 @@ struct OnboardingView: View {
     func completeOnboarding() {
         withAnimation {
             hasCompletedOnboarding = true
+        }
+        Task(priority: .userInitiated) {
+            await ModelDownloadService.shared.refreshDownloadedModels()
+            await SelectedModelPreference.preloadSelectedModelIfDownloaded()
         }
     }
 }
@@ -121,13 +131,14 @@ struct GetStartedButton: View {
                     .offset(x: isHovered ? 3 : 0)
             }
             .foregroundStyle(Color.bgApp)
-            .frame(width: 160, height: 44)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                Capsule(style: .continuous)
                     .fill(Color.textPrimary)
             )
             .shadow(
-                color: Color.black.opacity(isHovered ? 0.2 : 0.1), radius: isHovered ? 12 : 6, x: 0,
+                color: Color.black.opacity(isHovered ? 0.18 : 0.08), radius: isHovered ? 14 : 8, x: 0,
                 y: isHovered ? 6 : 3
             )
             .scaleEffect(isPressed ? 0.97 : 1.0)
@@ -137,6 +148,17 @@ struct GetStartedButton: View {
         .animation(.easeOut(duration: 0.1), value: isPressed)
         .onHover { hovering in
             isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                NSCursor.pop()
+                isHovered = false
+            }
         }
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
@@ -147,7 +169,7 @@ struct GetStartedButton: View {
 }
 
 struct PermissionsPage: View {
-    var finishAction: () -> Void
+    var onContinue: () -> Void
     @State private var micStatus: AVAuthorizationStatus = .notDetermined
     @State private var accessibilityStatus: Bool = false
     @State private var documentsAccessGranted: Bool = false
@@ -211,7 +233,7 @@ struct PermissionsPage: View {
             ContinueButton(
                 isEnabled: micStatus == .authorized && accessibilityStatus
                     && documentsAccessGranted,
-                action: finishAction
+                action: onContinue
             )
             .padding(.bottom, 48)
         }
@@ -479,7 +501,7 @@ struct OnboardingPermissionRow: View {
                                 .fill(Color.textPrimary)
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.stPlain)
             }
         }
         .padding(.horizontal, 20)
@@ -504,6 +526,8 @@ struct ContinueButton: View {
     let action: () -> Void
     @State private var isHovered = false
     @State private var isPressed = false
+    /// Tracks whether this control called `NSCursor.pointingHand.push()` so we can balance on disappear or when disabled mid-hover.
+    @State private var handCursorPushed = false
 
     var body: some View {
         Button(action: action) {
@@ -532,6 +556,28 @@ struct ContinueButton: View {
         .animation(.easeOut(duration: 0.1), value: isPressed)
         .onHover { hovering in
             if isEnabled { isHovered = hovering }
+            if isEnabled {
+                if hovering {
+                    NSCursor.pointingHand.push()
+                    handCursorPushed = true
+                } else {
+                    NSCursor.pop()
+                    handCursorPushed = false
+                }
+            }
+        }
+        .onChange(of: isEnabled) { _, enabled in
+            if !enabled && handCursorPushed {
+                NSCursor.pop()
+                handCursorPushed = false
+            }
+        }
+        .onDisappear {
+            if handCursorPushed {
+                NSCursor.pop()
+                handCursorPushed = false
+            }
+            isHovered = false
         }
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
@@ -583,7 +629,7 @@ struct GlobeKeyOptimizationPage: View {
                             .fill(Color.textPrimary)
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.stPlain)
             }
             .padding(.top, 40)
 
@@ -602,6 +648,185 @@ struct GlobeKeyOptimizationPage: View {
     private func openKeyboardSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.keyboard") {
             NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+// MARK: - Model download (onboarding)
+
+/// Lets new users pull the recommended Core ML model before the first hotkey, so transcription works immediately after setup.
+struct OnboardingModelDownloadPage: View {
+    let finishAction: () -> Void
+    @ObservedObject private var downloadService = ModelDownloadService.shared
+    @State private var showOtherModels = false
+
+    private var recommended: AIModel {
+        AIModel.recommendedModel(forDeviceRAMGB: WhisperService.deviceRAMGB)
+    }
+
+    private var otherModels: [AIModel] {
+        AIModel.availableModels.filter { $0.variant != recommended.variant }
+    }
+
+    private var hasAnyModelDownloaded: Bool {
+        downloadService.downloadProgress.values.contains { $0 >= 1.0 }
+    }
+
+    private func progress(for variant: String) -> Double {
+        downloadService.downloadProgress[variant] ?? 0
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            VStack(spacing: 16) {
+                Text("VOICE MODEL")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .textCase(.uppercase)
+                    .tracking(2)
+
+                Text("Download transcription model")
+                    .font(.system(size: 40, weight: .regular, design: .serif))
+                    .foregroundStyle(Color.textPrimary)
+                    .multilineTextAlignment(.center)
+
+                Text(
+                    "SpeakType runs entirely on your Mac. Grab the recommended model for \(WhisperService.deviceRAMGB) GB RAM — you can start dictating as soon as the download finishes."
+                )
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 460)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                recommendedCard
+
+                DisclosureGroup(isExpanded: $showOtherModels) {
+                    VStack(spacing: 10) {
+                        ForEach(otherModels) { model in
+                            otherModelRow(model)
+                        }
+                    }
+                    .padding(.top, 8)
+                } label: {
+                    Text("Other models")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.textPrimary)
+                }
+                .tint(Color.textPrimary)
+            }
+            .frame(maxWidth: 520)
+            .padding(.top, 36)
+
+            Spacer()
+
+            ContinueButton(isEnabled: hasAnyModelDownloaded, action: finishAction)
+                .padding(.bottom, 48)
+        }
+        .padding(.horizontal, 60)
+        .padding(.vertical, 40)
+        .onAppear {
+            Task {
+                await downloadService.refreshDownloadedModels()
+            }
+        }
+    }
+
+    private var recommendedCard: some View {
+        let variant = recommended.variant
+        let p = progress(for: variant)
+        let loading = downloadService.isDownloading[variant] == true
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(recommended.name)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.textPrimary)
+                    Text("\(recommended.size) · \(recommended.details)")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.textSecondary)
+                    Text("Best match for your Mac (\(WhisperService.deviceRAMGB) GB RAM)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.textMuted)
+                }
+                Spacer()
+                statusTrailing(variant: variant, progress: p, isDownloading: loading)
+            }
+
+            if p > 0 && p < 1 {
+                ProgressView(value: p)
+                    .controlSize(.small)
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.bgCard)
+                .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.textPrimary.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private func otherModelRow(_ model: AIModel) -> some View {
+        let p = progress(for: model.variant)
+        let loading = downloadService.isDownloading[model.variant] == true
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.name)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.textPrimary)
+                    Text(model.size)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.textSecondary)
+                }
+                Spacer()
+                statusTrailing(variant: model.variant, progress: p, isDownloading: loading)
+            }
+            if p > 0 && p < 1 {
+                ProgressView(value: p)
+                    .controlSize(.small)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.textPrimary.opacity(0.04))
+        )
+    }
+
+    @ViewBuilder
+    private func statusTrailing(variant: String, progress: Double, isDownloading: Bool) -> some View {
+        if progress >= 1.0 {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 22))
+                .foregroundStyle(Color.green)
+        } else if isDownloading {
+            ProgressView()
+                .controlSize(.regular)
+        } else {
+            Button {
+                downloadService.downloadModel(variant: variant)
+            } label: {
+                Text("Download")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.bgApp)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.textPrimary)
+                    )
+            }
+            .buttonStyle(.stPlain)
         }
     }
 }

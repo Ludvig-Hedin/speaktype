@@ -2,10 +2,10 @@
 //  Theme.swift
 //  speaktype
 //
-//  Clean, minimal design system
-//  Sharp lines, no rounded corners, professional
+//  Environment theme tokens; accent is neutral / system (no purple).
 //
 
+import AppKit
 import SwiftUI
 
 // MARK: - Theme Environment Key
@@ -64,8 +64,9 @@ enum SpeakTypeTheme {
         }
     }
     
+    /// Sparingly used; prefer `Color.borderActive` / `accentPrimary` for most UI.
     var accent: Color {
-        return Color(hex: "2C2C54")
+        Color(nsColor: .controlAccentColor)
     }
 }
 

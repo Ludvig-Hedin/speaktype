@@ -4,7 +4,7 @@ import SwiftUI
 struct UpdateSheet: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var updateService = UpdateService.shared
-    @AppStorage("autoUpdate") private var autoUpdate = false
+    @AppStorage("autoUpdate") private var autoUpdate = true
 
     let update: AppVersion
     let appName = "SpeakType"
@@ -112,6 +112,7 @@ struct UpdateSheet: View {
                     }
                     .toggleStyle(.checkbox)
                 }
+                .clickActionPointerCursor()
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
             }
@@ -165,6 +166,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .background(Color.blue)
             .cornerRadius(8)
             .opacity(configuration.isPressed ? 0.8 : 1.0)
+            .modifier(ClickActionPointerCursorModifier())
     }
 }
 
@@ -178,6 +180,7 @@ struct SecondaryButtonStyle: ButtonStyle {
             .background(Color(nsColor: .controlBackgroundColor))
             .cornerRadius(8)
             .opacity(configuration.isPressed ? 0.8 : 1.0)
+            .modifier(ClickActionPointerCursorModifier())
     }
 }
 

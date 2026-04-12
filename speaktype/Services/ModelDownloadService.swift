@@ -14,12 +14,7 @@ class ModelDownloadService: ObservableObject {
     private init() {
         // Force a custom cache directory to avoid "Multiple models found" conflicts
         setupCustomCache()
-        
-        // Check for already-downloaded models on launch
-        Task { @MainActor in
-            await refreshDownloadedModels()
-            // Don't auto-select - let user explicitly pick a model which will load it
-        }
+        // Launch-time `refreshDownloadedModels()` runs from AppDelegate to avoid racing duplicate Tasks.
     }
     
     private func setupCustomCache() {
@@ -114,6 +109,8 @@ class ModelDownloadService: ObservableObject {
             } else {
                 print("✅ Found \(foundModels.count) usable model(s)")
             }
+
+            SelectedModelPreference.ensureValidSelection(downloadService: self)
         }
     }
     
@@ -159,6 +156,7 @@ class ModelDownloadService: ObservableObject {
                     self.isDownloading[variant] = false
                     self.downloadProgress[variant] = 1.0
                     self.activeTasks[variant] = nil // Cleanup task
+                    SelectedModelPreference.ensureValidSelection(downloadService: self)
                 }
             } catch {
                 if Task.isCancelled {
@@ -204,6 +202,7 @@ class ModelDownloadService: ObservableObject {
                              self.downloadProgress[variant] = 1.0
                              self.downloadError[variant] = nil
                              self.activeTasks[variant] = nil
+                             SelectedModelPreference.ensureValidSelection(downloadService: self)
                          }
                      } catch {
                          if Task.isCancelled { return }

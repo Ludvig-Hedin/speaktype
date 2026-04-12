@@ -120,15 +120,23 @@ struct ModelRow: View {
                 downloadProgressSection
             }
         }
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                    .fill(Color.bgCard.opacity(isActive ? 0.62 : 0.48))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(
-                    isActive ? Color.textPrimary.opacity(0.3) : Color.border.opacity(0.5),
-                    lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
+                .strokeBorder(
+                    isActive ? Color.textPrimary.opacity(0.22) : Color.border.opacity(0.45),
+                    lineWidth: isActive ? 1.25 : 1
+                )
         )
-        .cardShadow()
+        .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 4)
     }
 
     // MARK: - Subviews
@@ -190,7 +198,7 @@ struct ModelRow: View {
                     .padding(.vertical, 8)
                     .background(Color.orange.opacity(0.2))
                     .foregroundStyle(Color.orange)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .clipShape(Capsule(style: .continuous))
                     .help(
                         "This model is selected but not downloaded. Download it or select another model."
                     )
@@ -203,9 +211,9 @@ struct ModelRow: View {
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(Color.black)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.btnPrimaryBg)
+                    .foregroundStyle(Color.btnPrimaryFg)
+                    .clipShape(Capsule(style: .continuous))
                 }
             } else {
                 if isLoadingModel {
@@ -223,9 +231,9 @@ struct ModelRow: View {
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(Color(white: 0.95))
-                        .foregroundStyle(Color.black.opacity(0.7))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(Color.bgHover)
+                        .foregroundStyle(Color.textSecondary)
+                        .clipShape(Capsule(style: .continuous))
 
                         if loadingElapsed > 15 {
                             Text(
@@ -246,11 +254,14 @@ struct ModelRow: View {
                             .font(Typography.buttonLabelSmall)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
-                            .background(Color.white)
-                            .foregroundStyle(Color.black)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(.thinMaterial, in: Capsule(style: .continuous))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
+                            )
+                            .foregroundStyle(Color.textPrimary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.stPlain)
                     .help("Set as default model")
                 }
             }
@@ -265,7 +276,7 @@ struct ModelRow: View {
                     .foregroundStyle(Color.textMuted)
                     .padding(8)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.stPlain)
             .help("Delete Model")
         }
     }
@@ -282,11 +293,11 @@ struct ModelRow: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(Color(white: 0.9))
-            .foregroundStyle(Color.black)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(Color.bgHover)
+            .foregroundStyle(Color.textPrimary)
+            .clipShape(Capsule(style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.stPlain)
     }
 
     private var downloadButton: some View {
@@ -301,11 +312,14 @@ struct ModelRow: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
-            .background(Color.white)
-            .foregroundStyle(Color.black)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(.thinMaterial, in: Capsule(style: .continuous))
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
+            )
+            .foregroundStyle(Color.textPrimary)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.stPlain)
     }
 
     // MARK: - Model Loading
@@ -401,7 +415,7 @@ private struct RatingDots: View {
     VStack(spacing: 16) {
         ModelRow(
             model: .constant(AIModel.availableModels[0]),
-            selectedModel: .constant("openai_whisper-base")
+            selectedModel: .constant("openai_whisper-base.en")
         )
     }
     .padding()

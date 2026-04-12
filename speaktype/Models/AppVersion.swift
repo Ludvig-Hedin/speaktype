@@ -32,7 +32,8 @@ extension AppVersion {
 
         self.version = cleanVersion
         self.buildNumber = "0"
-        self.releaseNotes = release.body
+        let rawBody = release.body ?? ""
+        self.releaseNotes = rawBody
             .components(separatedBy: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
@@ -60,7 +61,7 @@ struct GitHubAsset: Codable {
 /// Structure to decode GitHub API response
 struct GitHubRelease: Codable {
     let tagName: String
-    let body: String
+    let body: String?
     let htmlUrl: String
     let publishedAt: String
     let assets: [GitHubAsset]

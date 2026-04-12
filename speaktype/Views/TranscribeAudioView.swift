@@ -32,6 +32,7 @@ struct TranscribeAudioView: View {
                     .foregroundStyle(Color.border)
                     .frame(maxWidth: .infinity, maxHeight: 360)
                     .contentShape(Rectangle())
+                    .clickActionPointerCursor()
                     .onTapGesture {
                         showFileImporter = true
                     }
@@ -85,7 +86,7 @@ struct TranscribeAudioView: View {
                             .foregroundStyle(.white)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.stPlain)
                     } else if isTranscribing {
                         VStack(spacing: 8) {
                             ProgressView()

@@ -52,7 +52,7 @@ struct HistoryDetailView: View {
                         .foregroundStyle(.white)
                         .cornerRadius(12)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.stPlain)
                 }
                 
                 Divider()
@@ -104,7 +104,7 @@ struct HistoryDetailView: View {
                                     .font(.title3)
                                     .foregroundStyle(.orange)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.stPlain)
                             .help("Show in Finder")
                             
                             Spacer()
@@ -115,7 +115,7 @@ struct HistoryDetailView: View {
                                     .font(.title2)
                                     .foregroundStyle(.blue)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.stPlain)
                             
                             Spacer()
                             
@@ -127,7 +127,7 @@ struct HistoryDetailView: View {
                                     .font(.title3)
                                     .foregroundStyle(.green)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.stPlain)
                             .help("Restart")
                         }
                         .padding(.vertical, 8)

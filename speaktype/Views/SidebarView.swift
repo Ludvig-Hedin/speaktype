@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SidebarView: View {
@@ -37,14 +38,7 @@ struct SidebarView: View {
                     .tracking(3)
                     .foregroundStyle(Color.textMuted.opacity(0.25))
             }
-            .buttonStyle(.plain)
-            .onHover { hovering in
-                if hovering {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
+            .buttonStyle(.stPlain)
             .padding(.bottom, 6)
 
             // Build version indicator — debug only, never shown in production
@@ -77,8 +71,8 @@ private enum SidebarConstants {
     static let itemSpacing: CGFloat = 2
     static let bottomPadding: CGFloat = 20
     static let iconSize: CGFloat = 17
-    static let itemVerticalPadding: CGFloat = 11
-    static let itemCornerRadius: CGFloat = 8
+    static let itemVerticalPadding: CGFloat = 10
+    static let itemCornerRadius: CGFloat = Constants.UI.sidebarItemCornerRadius
 }
 
 // MARK: - Components
@@ -123,8 +117,15 @@ struct SidebarButton: View {
             .padding(.horizontal, 12)
             .padding(.vertical, SidebarConstants.itemVerticalPadding)
             .background(
-                RoundedRectangle(cornerRadius: SidebarConstants.itemCornerRadius)
+                RoundedRectangle(cornerRadius: SidebarConstants.itemCornerRadius, style: .continuous)
                     .fill(isSelected ? Color.bgSelected : (isHovered ? Color.bgHover : Color.clear))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SidebarConstants.itemCornerRadius, style: .continuous)
+                    .strokeBorder(
+                        Color.textPrimary.opacity(isSelected ? 0.12 : 0),
+                        lineWidth: 1
+                    )
             )
             .contentShape(Rectangle())
         }
@@ -132,6 +133,18 @@ struct SidebarButton: View {
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.1)) {
                 isHovered = hovering
+            }
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            // If the sidebar row is torn down while hovered (e.g. window closes), balance the cursor stack.
+            if isHovered {
+                NSCursor.pop()
+                isHovered = false
             }
         }
     }
@@ -156,16 +169,15 @@ private struct SidebarPromoCard: View {
                 Text("Upgrade to Pro")
                     .font(Typography.sidebarPromoButton)
                     .foregroundStyle(Color.textPrimary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(Color.bgCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.thinMaterial, in: Capsule(style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.border, lineWidth: 0.5)
+                        Capsule(style: .continuous)
+                            .stroke(Color.border.opacity(0.45), lineWidth: 0.5)
                     )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.stPlain)
             .padding(.top, 8)
         }
         .padding(14)

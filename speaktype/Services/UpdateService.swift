@@ -39,10 +39,9 @@ class UpdateService: ObservableObject {
         await MainActor.run { isCheckingForUpdates = true }
 
         do {
-            let url = URL(
-                string: "https://api.github.com/repos/karansinghgit/speaktype/releases/latest")!
-            var request = URLRequest(url: url)
+            var request = URLRequest(url: UpdateConfiguration.latestReleaseAPIURL)
             request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+            request.setValue("SpeakType/\(AppVersion.currentVersion)", forHTTPHeaderField: "User-Agent")
 
             let (data, _) = try await URLSession.shared.data(for: request)
             let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
@@ -51,9 +50,20 @@ class UpdateService: ObservableObject {
 
             await MainActor.run {
                 if AppVersion.isNewerVersion(releaseVersion.version, than: currentVersion) {
-                    if !silent || !self.isVersionSkipped(releaseVersion.version) {
+                    let skipped = self.isVersionSkipped(releaseVersion.version)
+                    if !silent || !skipped {
                         self.availableUpdate = releaseVersion
-                        self.showUpdateWindowPublisher.send(releaseVersion)
+                        // Silent checks only raise the window on the reminder schedule so
+                        // users aren’t nagged on every launch; manual “Check for Updates” always prompts.
+                        if silent {
+                            if self.shouldShowReminder() {
+                                self.showUpdateWindowPublisher.send(releaseVersion)
+                            }
+                        } else {
+                            self.showUpdateWindowPublisher.send(releaseVersion)
+                        }
+                    } else {
+                        self.availableUpdate = nil
                     }
                 } else {
                     self.availableUpdate = nil
