@@ -51,7 +51,7 @@ gh auth login
 4. ✅ **Updates CHANGELOG** with release date
 5. ✅ **Commits changes locally** - Creates commit and git tag (not pushed yet!)
 6. ✅ **Builds and signs the app** - Release configuration with Developer ID
-7. ✅ **Creates and signs DMG**
+7. ✅ **Creates and signs DMG** (`SpeakType-x.y.z.dmg`; also writes `dist/SpeakType.dmg` as a local copy for tooling — not uploaded twice by `release.sh`)
 8. ✅ **Submits to Apple for notarization** (~2-5 minutes)
 9. ✅ **Staples the notarization ticket**
 10. ✅ **Prompts: Push to GitHub?** - Only after successful build
@@ -81,7 +81,17 @@ The script prompts you at key decision points:
 2. **📦 Upload DMG to GitHub releases? (y/n)**
    - Only asked if you said `y` to push
    - Uses GitHub CLI to create the release
-   - You can always upload manually later with: `gh release create v1.0.15 SpeakType-1.0.15.dmg --generate-notes`
+   - You can always upload manually later with: `gh release create v1.0.15 SpeakType-1.0.15.dmg --generate-notes` (add `SpeakType.dmg` as a second asset only if you need the stable `/releases/latest/download/SpeakType.dmg` URL; see below)
+
+### Website download URL
+
+The marketing site expects a **stable asset name** on every GitHub release:
+
+`https://github.com/<you>/<repo>/releases/latest/download/SpeakType.dmg`
+
+**`./scripts/create-release.sh`** + **`./scripts/deploy-release.sh`** attach **both** the versioned DMG and **`SpeakType.dmg`** (same build, two asset names) so `.../releases/latest/download/SpeakType.dmg` keeps working.
+
+**`./scripts/release.sh`** uploads **only** the versioned DMG (avoids two identical blobs on the release). For a stable **`SpeakType.dmg`** asset name, use **`deploy-release.sh`**, or set **`NEXT_PUBLIC_LATEST_DMG_URL`** on the marketing site, or rely on **`resolveLatestMacDownloadHref`** (first `.dmg` on `GET /releases/latest`). If you publish by hand, add **`SpeakType.dmg`** only when you need that exact URL (or set env overrides as above).
 
 ---
 

@@ -227,6 +227,11 @@ if echo "$SUBMIT_OUTPUT" | grep -q "status: Accepted"; then
   echo ""
   echo "🔍 Final verification..."
   spctl --assess --type open --context context:primary-signature --verbose "$DMG_NAME" || true
+
+  mkdir -p dist
+  cp -f "$DMG_NAME" "dist/SpeakType.dmg"
+  echo ""
+  echo "Also wrote dist/SpeakType.dmg (same build; upload with versioned DMG for website download URL)"
   
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -260,6 +265,10 @@ if echo "$SUBMIT_OUTPUT" | grep -q "status: Accepted"; then
   echo ""
   if [[ $REPLY =~ ^[Yy]$ ]]; then
     if command -v gh &> /dev/null; then
+      # Single attachment: the versioned notarized DMG. A second upload of dist/SpeakType.dmg
+      # duplicates identical bytes. For .../releases/latest/download/SpeakType.dmg as a named asset,
+      # use deploy-release.sh (versioned + SpeakType.dmg) or set NEXT_PUBLIC_LATEST_DMG_URL; the
+      # site resolves the latest release's first .dmg via the GitHub API when no override is set.
       gh release create "v${VERSION}" "$DMG_NAME" --generate-notes
       echo ""
       echo "✅ Release published!"

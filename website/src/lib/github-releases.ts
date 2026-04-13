@@ -1,4 +1,4 @@
-import { getGitHubRepoSlug } from "@/lib/site";
+import { getGitHubRepoSlug, LATEST_DMG_DOWNLOAD_URL } from "@/lib/site";
 
 export type ReleaseAsset = {
   name: string;
@@ -14,6 +14,12 @@ export type ReleaseForWeb = {
   /** First .dmg asset, if any */
   dmg: ReleaseAsset | null;
   otherAssets: ReleaseAsset[];
+};
+
+type GitHubLatestReleaseApi = {
+  tag_name: string;
+  name: string | null;
+  assets: { name: string; browser_download_url: string }[];
 };
 
 type GitHubReleaseApi = {
@@ -47,6 +53,53 @@ function mapRelease(r: GitHubReleaseApi): ReleaseForWeb | null {
     dmg,
     otherAssets,
   };
+}
+
+/**
+ * Best URL for “download latest Mac app”: explicit env, else first `.dmg` on
+ * `GET /repos/.../releases/latest`, else static `releases/latest/download/{DMG_ASSET_NAME}`.
+ */
+export async function resolveLatestMacDownloadHref(): Promise<string> {
+  const explicit = process.env.NEXT_PUBLIC_LATEST_DMG_URL?.trim();
+  if (explicit) return explicit;
+
+  const slug = getGitHubRepoSlug();
+  const url = `https://api.github.com/repos/${slug}/releases/latest`;
+
+  const headers: HeadersInit = {
+    Accept: "application/vnd.github.v3+json",
+    "User-Agent": "SpeakType-Website",
+  };
+  const token = process.env.GITHUB_TOKEN;
+  if (token) {
+    (headers as Record<string, string>).Authorization = `Bearer ${token}`;
+  }
+
+  try {
+    const res = await fetch(url, {
+      headers,
+      next: { revalidate: 300 },
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "(could not read body)");
+      console.error("GitHub latest release fetch failed:", res.status, body);
+      return LATEST_DMG_DOWNLOAD_URL;
+    }
+
+    const raw = (await res.json()) as GitHubLatestReleaseApi;
+    const dmg = raw.assets?.find((a) => a.name.toLowerCase().endsWith(".dmg"));
+    if (dmg?.browser_download_url) {
+      return dmg.browser_download_url;
+    }
+  } catch (error) {
+    console.error(
+      "GitHub latest release resolution failed (network or JSON parse):",
+      error,
+    );
+  }
+
+  return LATEST_DMG_DOWNLOAD_URL;
 }
 
 /**

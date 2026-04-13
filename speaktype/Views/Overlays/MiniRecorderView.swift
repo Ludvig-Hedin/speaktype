@@ -600,12 +600,19 @@ struct MiniRecorderView: View {
                 return
             }
 
+            let shouldPolish = TranscriptionFinalizer.willPolishNextTranscript()
+            if shouldPolish, !cancelCommit {
+                await MainActor.run { statusMessage = "Polishing..." }
+            }
+            let finalText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: text)
+            debugLog("Final text (after optional polish): \(finalText.prefix(50))...")
+
             let duration = await getAudioDuration(url: url)
             let modelName =
                 AIModel.availableModels.first(where: { $0.variant == selectedModel })?.name
                 ?? selectedModel
             HistoryService.shared.addItem(
-                transcript: text,
+                transcript: finalText,
                 duration: duration,
                 audioFileURL: url,
                 modelUsed: modelName,
@@ -615,7 +622,7 @@ struct MiniRecorderView: View {
             debugLog("Calling onCommit...")
             await MainActor.run {
                 if !cancelCommit {
-                    onCommit?(text)
+                    onCommit?(finalText)
                 }
                 isProcessing = false
 

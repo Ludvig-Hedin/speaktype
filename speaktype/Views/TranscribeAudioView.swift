@@ -9,6 +9,7 @@ struct TranscribeAudioView: View {
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
     @State private var transcribedText: String = ""
     @State private var isTranscribing = false
+    @State private var transcribingStatusText = "Transcribing..."
     @State private var showFileImporter = false
     
     var body: some View {
@@ -90,7 +91,7 @@ struct TranscribeAudioView: View {
                     } else if isTranscribing {
                         VStack(spacing: 8) {
                             ProgressView()
-                            Text("Transcribing...")
+                            Text(transcribingStatusText)
                                 .font(Typography.bodySmall)
                                 .foregroundStyle(Color.textSecondary)
                         }
@@ -240,11 +241,17 @@ struct TranscribeAudioView: View {
     private func startTranscription(url: URL) {
         Task {
             isTranscribing = true
+            transcribingStatusText = "Transcribing..."
             do {
-                transcribedText = try await whisperService.transcribe(audioFile: url, language: transcriptionLanguage)
+                let raw = try await whisperService.transcribe(audioFile: url, language: transcriptionLanguage)
+                if TranscriptionFinalizer.willPolishNextTranscript() {
+                    await MainActor.run { transcribingStatusText = "Polishing..." }
+                }
+                transcribedText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: raw)
                 // Save to History
                 let duration = try await getAudioDuration(url: url)
-                HistoryService.shared.addItem(transcript: transcribedText, duration: duration, audioFileURL: url)
+                HistoryService.shared.addItem(
+                    transcript: transcribedText, duration: duration, audioFileURL: url)
             } catch {
                 transcribedText = "Error: \(error.localizedDescription)"
             }

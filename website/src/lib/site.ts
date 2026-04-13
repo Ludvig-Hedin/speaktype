@@ -31,3 +31,15 @@ export const RELEASES_URL =
 
 /** All releases page (browser). */
 export const ALL_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
+
+/** DMG filename attached to each GitHub release (for /releases/latest/download/...). */
+export const DMG_ASSET_NAME =
+  process.env.NEXT_PUBLIC_DMG_FILENAME?.trim() || "SpeakType.dmg";
+
+/**
+ * Direct download of the latest release asset — GitHub redirects to the file.
+ * Override if your asset name differs or you mirror the file elsewhere.
+ */
+export const LATEST_DMG_DOWNLOAD_URL =
+  process.env.NEXT_PUBLIC_LATEST_DMG_URL?.trim() ||
+  `${GITHUB_REPO_URL}/releases/latest/download/${encodeURIComponent(DMG_ASSET_NAME)}`;

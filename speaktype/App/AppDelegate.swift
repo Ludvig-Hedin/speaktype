@@ -20,6 +20,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         miniRecorderController = MiniRecorderWindowController()
 
+        WritingPolishUserDefaults.registerDefaults(in: .standard)
+
         // Setup dynamic hotkey monitoring based on user selection
         setupHotkeyMonitoring()
 

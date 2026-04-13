@@ -29,6 +29,11 @@ struct OnboardingView: View {
                             withAnimation(.easeInOut(duration: 0.5)) { currentPage = 3 }
                         })
                         .transition(.opacity)
+                    } else if currentPage == 3 {
+                        OnboardingPolishModelPage(onContinue: {
+                            withAnimation(.easeInOut(duration: 0.5)) { currentPage = 4 }
+                        })
+                        .transition(.opacity)
                     } else {
                         OnboardingModelDownloadPage(finishAction: {
                             completeOnboarding()
@@ -82,7 +87,7 @@ struct WelcomePage: View {
                     .tracking(-0.5)
 
                 HStack(spacing: 0) {
-                    Text("Voice to text, powered by AI.")
+                    Text("Speech into clear writing—on your Mac, powered by AI.")
                         .font(.system(size: 16, weight: .regular))
                         .foregroundStyle(Color.textSecondary)
 
@@ -649,6 +654,81 @@ struct GlobeKeyOptimizationPage: View {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.keyboard") {
             NSWorkspace.shared.open(url)
         }
+    }
+}
+
+// MARK: - Ollama polish model (onboarding)
+
+/// Guided download of a small Ollama model for writing polish (one tap pull + use).
+struct OnboardingPolishModelPage: View {
+    let onContinue: () -> Void
+
+    @AppStorage(WritingPolishUserDefaults.ollamaBaseURLKey) private var ollamaBaseURL =
+        WritingPolishUserDefaults.defaultOllamaBaseURL
+    @AppStorage(WritingPolishUserDefaults.ollamaModelKey) private var ollamaModel =
+        WritingPolishUserDefaults.defaultOllamaModel
+    @AppStorage("writingPolishEnabled") private var writingPolishEnabled = true
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            VStack(spacing: 16) {
+                Text("WRITING POLISH")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .textCase(.uppercase)
+                    .tracking(2)
+
+                Text("Pick a polish model")
+                    .font(.system(size: 40, weight: .regular, design: .serif))
+                    .foregroundStyle(Color.textPrimary)
+                    .multilineTextAlignment(.center)
+
+                Text(
+                    "SpeakType can tighten dictation with a local model through Ollama. Choose a size that fits your Mac — download is one tap. Skip anytime; you can change this in Settings."
+                )
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 480)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Ollama server")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.textPrimary)
+                TextField("http://127.0.0.1:11434", text: $ollamaBaseURL)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 13))
+            }
+            .frame(maxWidth: 520)
+            .padding(.top, 28)
+
+            OllamaRecommendedModelsView(
+                ollamaBaseURL: $ollamaBaseURL,
+                selectedModelTag: $ollamaModel,
+                layout: .onboarding
+            )
+            .frame(maxWidth: 520)
+            .padding(.top, 12)
+
+            Toggle(isOn: $writingPolishEnabled) {
+                Text("Enable writing polish after setup")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.textPrimary)
+            }
+            .toggleStyle(.switch)
+            .frame(maxWidth: 520, alignment: .leading)
+            .padding(.top, 8)
+
+            Spacer()
+
+            ContinueButton(isEnabled: true, action: onContinue)
+                .padding(.bottom, 48)
+        }
+        .padding(.horizontal, 60)
+        .padding(.vertical, 40)
     }
 }
 

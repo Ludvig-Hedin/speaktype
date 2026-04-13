@@ -194,6 +194,13 @@ if echo "$SUBMIT_OUTPUT" | grep -q "status: Accepted"; then
   echo "🔍 Final Gatekeeper check..."
   spctl --assess --type open --context context:primary-signature --verbose "$DMG_PATH" || true
 
+  # Stable asset name for the website:
+  # …/releases/latest/download/SpeakType.dmg (see website/src/lib/site.ts)
+  STABLE_DMG="dist/SpeakType.dmg"
+  cp -f "$DMG_PATH" "$STABLE_DMG"
+  echo ""
+  echo "Also wrote ${STABLE_DMG} (same build; upload with versioned DMG for stable URL)"
+
   # Write a small metadata file so deploy-release.sh can pick up the version/path
   echo "${VERSION}" > dist/.release-version
   echo "${DMG_PATH}"  > dist/.release-dmg

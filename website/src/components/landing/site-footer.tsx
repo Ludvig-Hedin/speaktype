@@ -1,7 +1,14 @@
 import Link from "next/link";
-import { GITHUB_REPO_URL, RELEASES_URL } from "@/lib/site";
+import { GITHUB_REPO_URL, LATEST_DMG_DOWNLOAD_URL } from "@/lib/site";
 
-export function SiteFooter() {
+type SiteFooterProps = {
+  /** Resolved latest DMG URL (e.g. from GitHub API); defaults to static latest/download link. */
+  macDownloadHref?: string;
+};
+
+export function SiteFooter({
+  macDownloadHref = LATEST_DMG_DOWNLOAD_URL,
+}: SiteFooterProps) {
   const year = new Date().getFullYear();
   return (
     <footer className="border-t border-zinc-200/70 px-6 py-12 dark:border-zinc-800/80">
@@ -14,20 +21,19 @@ export function SiteFooter() {
           className="order-1 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 sm:order-2 sm:justify-end"
           aria-label="Footer"
         >
-          <Link
-            href="/#releases"
+          <a
+            href={macDownloadHref}
             className="text-zinc-700 underline-offset-4 transition hover:text-zinc-950 hover:underline dark:text-zinc-300 dark:hover:text-zinc-50"
-          >
-            All versions
-          </Link>
-          <Link
-            href={RELEASES_URL}
-            className="text-zinc-700 underline-offset-4 transition hover:text-zinc-950 hover:underline dark:text-zinc-300 dark:hover:text-zinc-50"
-            prefetch={false}
             target="_blank"
             rel="noopener noreferrer"
           >
-            Latest on GitHub
+            Download
+          </a>
+          <Link
+            href="/downloads"
+            className="text-zinc-700 underline-offset-4 transition hover:text-zinc-950 hover:underline dark:text-zinc-300 dark:hover:text-zinc-50"
+          >
+            All versions
           </Link>
           <Link
             href={GITHUB_REPO_URL}

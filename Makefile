@@ -172,6 +172,7 @@ dmg:
 		"dist/SpeakType.dmg" \
 		"$$APP_PATH"
 	@echo "✅ Created dist/SpeakType.dmg"
+	@echo "   Use this filename on GitHub releases for …/releases/latest/download/SpeakType.dmg"
 	@ls -lh dist/SpeakType.dmg
 
 # Prepare release (both ZIP and DMG)

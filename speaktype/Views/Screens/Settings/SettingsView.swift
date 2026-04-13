@@ -225,6 +225,8 @@ struct GeneralSettingsTab: View {
                         .padding(.top, 4)
                 }
 
+                WritingPolishSettingsSection()
+
                 // Updates
                 SettingsSection {
                     SettingsSectionHeader(

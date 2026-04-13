@@ -40,6 +40,13 @@ if [ ! -f "$DMG_PATH" ]; then
   exit 1
 fi
 
+STABLE_DMG="dist/SpeakType.dmg"
+# Always refresh stable copy so it never points at an older build when redeploying.
+echo "Syncing ${STABLE_DMG} from ${DMG_PATH} (stable download URL)..."
+cp -f "$DMG_PATH" "$STABLE_DMG"
+
+echo "Stable DMG : ${STABLE_DMG} (for website /releases/latest/download/SpeakType.dmg)"
+
 echo "💿 DMG     : ${DMG_PATH}"
 echo "🏷️  Tag     : v${VERSION}"
 echo ""
@@ -83,12 +90,12 @@ fi
 
 # Fall back to --generate-notes if we end up with nothing
 if [ -z "$NOTES" ]; then
-  gh release create "v${VERSION}" "$DMG_PATH" \
+  gh release create "v${VERSION}" "$DMG_PATH" "$STABLE_DMG" \
     --title "SpeakType v${VERSION}" \
     --generate-notes \
     --latest
 else
-  gh release create "v${VERSION}" "$DMG_PATH" \
+  gh release create "v${VERSION}" "$DMG_PATH" "$STABLE_DMG" \
     --title "SpeakType v${VERSION}" \
     --notes "$NOTES" \
     --latest
@@ -97,7 +104,12 @@ fi
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🎉  v${VERSION} is live!"
-echo "    https://github.com/karansinghgit/speaktype/releases/tag/v${VERSION}"
+REL_URL=$(gh repo view --json url -q .url 2>/dev/null || true)
+if [ -n "$REL_URL" ]; then
+  echo "    ${REL_URL}/releases/tag/v${VERSION}"
+else
+  echo "    Open GitHub → Releases → v${VERSION}"
+fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Clean up marker files

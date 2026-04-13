@@ -78,17 +78,17 @@ export function Features() {
           id="features-heading"
           className="sr-only"
         >
-          Features
+          Why SpeakType
         </h2>
         <div className="grid gap-6 md:grid-cols-2 md:gap-8">
           <FeatureCard
-            title="Private by design"
-            body="Transcription stays on your machine. No accounts, no servers, and no audio leaves your Mac—ideal for sensitive notes, code, and everyday dictation."
+            title="Your voice stays yours"
+            body="Recordings are turned into text on your Mac. No account, no upload, no company listening in—so you can use it for personal notes, work, or anything sensitive without a second thought."
             icon={<IconShield />}
           />
           <FeatureCard
-            title="Fast, fluid workflow"
-            body="Optimized for Apple Silicon with WhisperKit. Trigger dictation from a global hotkey, then drop text into Mail, Slack, Xcode, or the browser—wherever the cursor is."
+            title="Built for real days"
+            body="Use a shortcut when you’re ready to speak, then paste or keep typing as usual. It fits the apps you already use—mail, documents, chat—without changing how you work."
             icon={<IconZap />}
           />
         </div>

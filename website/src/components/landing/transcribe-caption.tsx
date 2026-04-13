@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 
 const PHRASES = [
-  "Press the hotkey, speak…",
-  "Your words become text—instantly.",
-  "Works in any app, any field.",
+  "Hold your shortcut, say what you mean…",
+  "Your sentence appears—ready to send or edit.",
+  "Same flow in every app you use.",
 ];
 
 export function TranscribeCaption() {
@@ -18,26 +18,26 @@ export function TranscribeCaption() {
     if (display.length < phrase.length) {
       const t = window.setTimeout(() => {
         setDisplay(phrase.slice(0, display.length + 1));
-      }, 42 + Math.random() * 38);
+      }, 78 + Math.random() * 55);
       return () => window.clearTimeout(t);
     }
 
     const hold = window.setTimeout(() => {
       setDisplay("");
       setPhraseIndex((i) => (i + 1) % PHRASES.length);
-    }, 2200);
+    }, 3600);
     return () => window.clearTimeout(hold);
   }, [display, phrase]);
 
   return (
     <p
-      className="mt-8 min-h-[1.75rem] font-mono text-sm tracking-tight text-zinc-500 dark:text-zinc-400"
+      className="mt-10 min-h-[2rem] text-sm font-normal tracking-tight text-zinc-500 dark:text-zinc-500 sm:text-base"
       aria-live="polite"
     >
-      <span className="text-zinc-800 dark:text-zinc-200">{display}</span>
+      <span className="text-zinc-700 dark:text-zinc-300">{display}</span>
       <span
-        className={`ml-0.5 inline-block w-2 translate-y-px border-l border-current ${
-          isTyping ? "animate-caret-blink" : "opacity-40"
+        className={`ml-0.5 inline-block h-4 w-px translate-y-0.5 bg-current ${
+          isTyping ? "animate-caret-blink" : "opacity-35"
         }`}
         aria-hidden
       />

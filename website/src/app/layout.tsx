@@ -13,20 +13,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SpeakType — Offline voice-to-text for Mac",
+  title: "SpeakType — Talk, and it types for you (Mac)",
   description:
-    "Privacy-first dictation for macOS. Whisper runs locally—press a hotkey, speak, paste anywhere.",
+    "Dictate on your Mac and drop text wherever you’re typing. Your voice stays on your device—no cloud required.",
   openGraph: {
     title: "SpeakType",
     description:
-      "Fast, offline voice-to-text for macOS. No cloud. No tracking.",
+      "Dictate on your Mac. Text appears where your cursor is—private and simple.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "SpeakType",
     description:
-      "Fast, offline voice-to-text for macOS. No cloud. No tracking.",
+      "Dictate on your Mac. Text appears where your cursor is—private and simple.",
   },
 };
 

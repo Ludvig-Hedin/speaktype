@@ -26,7 +26,7 @@ Environment variables (see `.env.example`):
 - `NEXT_PUBLIC_RELEASES_URL` — optional override for the “latest” button
 - `GITHUB_TOKEN` — optional; GitHub PAT for higher API rate limits when listing releases
 
-The home page fetches releases server-side (revalidates every 5 minutes).
+The **home** page uses a one-click **DMG** link (`…/releases/latest/download/SpeakType.dmg` by default). Each GitHub release should include an asset with that **exact name** (the repo’s `create-release.sh` / `deploy-release.sh` attach it automatically). The **`/downloads`** page lists every release (fetched server-side, revalidates every 5 minutes).
 
 ## Build
 

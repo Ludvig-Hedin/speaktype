@@ -263,6 +263,10 @@ struct DashboardView: View {
                 if !whisperService.isInitialized { try? await whisperService.initialize() }
 
                 let text = try await whisperService.transcribe(audioFile: url, language: transcriptionLanguage)
+                if TranscriptionFinalizer.willPolishNextTranscript() {
+                    await MainActor.run { transcriptionStatus = "Polishing..." }
+                }
+                let finalText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: text)
                 let duration = try await getAudioDuration(url: url)
                 let modelName =
                     AIModel.availableModels.first(where: { $0.variant == selectedModel })?.name
@@ -270,7 +274,7 @@ struct DashboardView: View {
 
                 DispatchQueue.main.async {
                     historyService.addItem(
-                        transcript: text,
+                        transcript: finalText,
                         duration: duration,
                         audioFileURL: url,
                         modelUsed: modelName,

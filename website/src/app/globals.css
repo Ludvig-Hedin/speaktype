@@ -35,25 +35,24 @@ body {
   }
 }
 
-/* Bar spectrum — staggered scale from bottom */
+/* Taller, softer bar motion — slower and less “bouncy” */
 @keyframes wave-bounce {
   0%,
   100% {
-    transform: scaleY(0.22);
-    opacity: 0.55;
+    transform: scaleY(0.14);
+    opacity: 0.42;
   }
   50% {
-    transform: scaleY(1);
-    opacity: 1;
+    transform: scaleY(0.68);
+    opacity: 0.62;
   }
 }
 
 .wave-bar {
   transform-origin: bottom;
-  animation: wave-bounce 1.12s ease-in-out infinite;
+  animation: wave-bounce 2.85s ease-in-out infinite;
 }
 
-/* Flowing wavelength lines */
 @keyframes wave-dash {
   to {
     stroke-dashoffset: -200;
@@ -61,13 +60,13 @@ body {
 }
 
 .wave-stroke-dash {
-  stroke-dasharray: 28 140;
-  animation: wave-dash 5.5s linear infinite;
+  stroke-dasharray: 32 180;
+  animation: wave-dash 16s linear infinite;
 }
 
 .wave-stroke-dash--slow {
-  animation-duration: 8.5s;
-  stroke-dasharray: 20 160;
+  animation-duration: 24s;
+  stroke-dasharray: 28 200;
 }
 
 @keyframes caret-blink {
@@ -82,5 +81,15 @@ body {
 }
 
 .animate-caret-blink {
-  animation: caret-blink 1.05s step-end infinite;
+  animation: caret-blink 1.45s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wave-bar,
+  .wave-stroke-dash,
+  .wave-stroke-dash--slow,
+  .animate-caret-blink {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
