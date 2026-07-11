@@ -455,6 +455,17 @@ struct MiniRecorderView: View {
         debugLog("Starting recording...")
         audioRecorder.startRecording()
         isListening = true
+
+        // Warm the model in parallel with the user speaking. On low-RAM Macs the model is
+        // released when idle, so loading it now (not at Stop) hides the reload latency under
+        // the time spent dictating. Coalesced with the safety load in processRecording().
+        whisperService.cancelIdleUnload()
+        if !whisperService.isInitialized || whisperService.currentModelVariant != selectedModel {
+            let variant = selectedModel
+            Task.detached(priority: .userInitiated) {
+                try? await WhisperService.shared.loadModel(variant: variant)
+            }
+        }
     }
 
     private func stopAndTranscribe() {

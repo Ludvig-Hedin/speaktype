@@ -20,20 +20,29 @@ class AudioPlayerService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     
     /// Load audio file and prepare for playback
     func loadAudio(from url: URL) {
+        // Bail cleanly if the recording file was deleted/moved — otherwise a stale player from a
+        // previous item lingers (duration/currentAudioURL out of sync) and the Play button no-ops
+        // silently. Resetting keeps observed state consistent with "nothing loaded".
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            print("Audio file not found, resetting player: \(url.path)")
+            reset()
+            return
+        }
         do {
             // Reset previous state
             stop()
-            
+
             audioPlayer = try AVAudioPlayer(contentsOf: url)
             audioPlayer?.delegate = self
             audioPlayer?.prepareToPlay()
-            
+
             currentAudioURL = url
             duration = audioPlayer?.duration ?? 0
             currentTime = 0
-            
+
         } catch {
             print("Error loading audio: \(error)")
+            reset()
         }
     }
     

@@ -464,6 +464,7 @@ struct StatCard: View {
 
             Text(value)
                 .font(.system(size: 32, weight: .light, design: .serif))
+                .monospacedDigit()
                 .foregroundStyle(Color.textPrimary)
 
             Text(label)
@@ -500,6 +501,7 @@ struct DetailCard: View {
                     .foregroundStyle(Color.textSecondary)
                 Text(value)
                     .font(Typography.labelMedium)
+                    .monospacedDigit()
                     .foregroundStyle(Color.textPrimary)
             }
 

@@ -1,10 +1,3 @@
-//
-//  speaktypeApp.swift
-//  speaktype
-//
-//  Created by Karan Singh on 7/1/26.
-//
-
 import AppKit
 import KeyboardShortcuts
 import SwiftData
@@ -15,6 +8,7 @@ struct speaktypeApp: App {
     @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding: Bool = false
     @AppStorage("appTheme") private var appTheme: AppTheme = .system
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
+    @AppStorage("hotkeyEnabled") private var hotkeyEnabled: Bool = true
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
@@ -46,36 +40,48 @@ struct speaktypeApp: App {
             .environmentObject(licenseManager)
             .environmentObject(trialManager)
             .preferredColorScheme(appTheme.colorScheme)
-            // System accent — sparing highlight for standard controls; chrome stays neutral in views.
             .tint(Color(nsColor: .controlAccentColor))
         }
         .defaultSize(width: 1200, height: 800)
         .windowStyle(.hiddenTitleBar)
-        .handlesExternalEvents(matching: ["main-dashboard", "open"])  // Only open for matching IDs
+        .handlesExternalEvents(matching: ["main-dashboard", "open"])
         .commands {
             SidebarCommands()
         }
 
-        // Note: Mini Recorder is now managed manually by AppDelegate -> MiniRecorderWindowController
-        // to prevent SwiftUI from auto-opening the main dashboard on activation.
-
         // Menu Bar Extra (Always running listener)
-        MenuBarExtra("SpeakType", systemImage: "waveform", isInserted: $showMenuBarIcon) {
+        MenuBarExtra(isInserted: $showMenuBarIcon) {
             ThemeProvider {
                 MenuBarDashboardView(
                     openDashboard: openDashboard,
+                    startRecording: startRecordingFromMenuBar,
                     quit: { NSApplication.shared.terminate(nil) }
                 )
             }
             .preferredColorScheme(appTheme.colorScheme)
+        } label: {
+            // Icon changes when the hotkey is disabled so the user has a persistent visual cue
+            Label(
+                "SpeakType",
+                systemImage: hotkeyEnabled ? "waveform" : "waveform.badge.minus"
+            )
+            .labelStyle(.iconOnly)
         }
         .menuBarExtraStyle(.window)
     }
 
+    // MARK: - Actions
+
     private func openDashboard() {
-        // Using URL forces the specific window group to handle the request consistently.
+        // Ensure a Dock presence + focus so the window opens in front, even when the app
+        // is running as a background agent (Dock icon hidden).
+        appDelegate.presentDashboardForeground()
         if let url = URL(string: "speaktype://open") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    private func startRecordingFromMenuBar() {
+        appDelegate.startRecordingFromMenuBar()
     }
 }

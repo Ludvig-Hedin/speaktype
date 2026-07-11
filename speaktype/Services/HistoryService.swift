@@ -73,25 +73,35 @@ class HistoryService: ObservableObject {
     
     func deleteItem(at offsets: IndexSet, deleteAudioFile: Bool = true) {
         let itemsToDelete = offsets.compactMap { items.indices.contains($0) ? items[$0] : nil }
+        let deletedIds = Set(itemsToDelete.map(\.id))
         items.remove(atOffsets: offsets)
+        // Statistics read from `statsEntries`, not `items`; without this mirror-delete a removed
+        // transcript keeps inflating word/duration totals forever (the orphaned entry is also
+        // re-persisted across launches). Keep the two stores in lockstep.
+        statsEntries.removeAll { deletedIds.contains($0.id) }
         if deleteAudioFile {
             itemsToDelete.forEach(removeAudioFileIfNeeded(for:))
         }
         saveHistory()
+        saveStats()
     }
-    
+
     func deleteItem(id: UUID, deleteAudioFile: Bool = true) {
         let itemToDelete = items.first { $0.id == id }
         items.removeAll { $0.id == id }
+        statsEntries.removeAll { $0.id == id }
         if deleteAudioFile, let itemToDelete {
             removeAudioFileIfNeeded(for: itemToDelete)
         }
         saveHistory()
+        saveStats()
     }
-    
+
     func clearAll() {
         items.removeAll()
+        statsEntries.removeAll()
         saveHistory()
+        saveStats()
     }
 
     func totalWordCount() -> Int {

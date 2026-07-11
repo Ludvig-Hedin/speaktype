@@ -69,6 +69,7 @@ struct UpdateSheet: View {
                         Spacer()
                         Text("\(Int(updateService.installProgress * 100))%")
                             .font(Typography.bodySmall)
+                            .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
 
@@ -89,14 +90,14 @@ struct UpdateSheet: View {
             if let error = updateService.installError {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.accentWarning)
                     Text(error)
                         .font(Typography.bodySmall)
                         .foregroundStyle(.primary)
                     Spacer()
                 }
                 .padding(12)
-                .background(Color.orange.opacity(0.1))
+                .background(Color.accentWarning.opacity(0.1))
                 .cornerRadius(8)
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
@@ -163,7 +164,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(.white)
             .padding(.horizontal, 24)
             .padding(.vertical, 10)
-            .background(Color.blue)
+            .background(Color.accentBlue)
             .cornerRadius(8)
             .opacity(configuration.isPressed ? 0.8 : 1.0)
             .modifier(ClickActionPointerCursorModifier())

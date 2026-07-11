@@ -23,7 +23,7 @@ struct LicenseView: View {
             VStack(spacing: 12) {
                 Image(systemName: "key.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(.blue.gradient)
+                    .foregroundStyle(Color.accentBlue.gradient)
                     .padding(.top, 40)
                 
                 Text("Activate Pro License")
@@ -55,7 +55,7 @@ struct LicenseView: View {
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
                                 .strokeBorder(
-                                    showError ? Color.red.opacity(0.5) : Color.gray.opacity(0.2),
+                                    showError ? Color.accentError.opacity(0.5) : Color.gray.opacity(0.2),
                                     lineWidth: 1
                                 )
                         )
@@ -82,12 +82,12 @@ struct LicenseView: View {
             if showError {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.red)
+                        .foregroundColor(Color.accentError)
                         .font(.system(size: 12))
                     
                     Text(errorMessage)
                         .font(Typography.captionSmall)
-                        .foregroundColor(.red)
+                        .foregroundColor(Color.accentError)
                         .fixedSize(horizontal: false, vertical: true)
                     
                     Spacer()
@@ -101,12 +101,12 @@ struct LicenseView: View {
             if showSuccess {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(Color.accentSuccess)
                         .font(.system(size: 12))
                     
                     Text("License activated successfully!")
                         .font(Typography.captionSmall)
-                        .foregroundColor(.green)
+                        .foregroundColor(Color.accentSuccess)
                 }
                 .padding(.horizontal, 40)
                 .padding(.top, 8)

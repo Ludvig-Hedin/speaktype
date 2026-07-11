@@ -31,6 +31,8 @@ struct GeneralSettingsTab: View {
     @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
     @AppStorage("recordingMode") private var recordingMode: Int = 0  // 0: Hold to record, 1: Toggle
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
+    @AppStorage("showDockIcon") private var showDockIcon: Bool = false
+    @AppStorage("launchAtLogin") private var launchAtLogin: Bool = true
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
     @AppStorage("recentTranscriptionLanguages") private var recentLanguagesString: String = ""
 
@@ -50,6 +52,8 @@ struct GeneralSettingsTab: View {
 
     @State private var showLicenseSheet = false
     @State private var showDeactivateAlert = false
+    // Mirrors CustomShortcutStorage so the picker label updates live after recording.
+    @State private var customShortcutDisplay = CustomShortcutStorage.displayString
 
     var body: some View {
         VStack(spacing: 16) {
@@ -77,20 +81,49 @@ struct GeneralSettingsTab: View {
                     )
 
                     VStack(spacing: 16) {
+                        // Primary hotkey picker
                         HStack {
                             Text("Primary Hotkey")
                                 .font(Typography.bodyMedium)
                                 .foregroundStyle(Color.textPrimary)
                             Spacer()
                             Menu {
-                                ForEach(HotkeyOption.allCases) { option in
-                                    Button(option.displayName) {
-                                        selectedHotkey = option
-                                    }
+                                // Modifier-only keys
+                                Group {
+                                    Button(HotkeyOption.fn.displayName)          { selectedHotkey = .fn }
+                                    Button(HotkeyOption.capsLock.displayName)     { selectedHotkey = .capsLock }
+                                    Divider()
+                                    Button(HotkeyOption.leftCommand.displayName)  { selectedHotkey = .leftCommand }
+                                    Button(HotkeyOption.rightCommand.displayName) { selectedHotkey = .rightCommand }
+                                    Divider()
+                                    Button(HotkeyOption.leftControl.displayName)  { selectedHotkey = .leftControl }
+                                    Button(HotkeyOption.rightControl.displayName) { selectedHotkey = .rightControl }
+                                    Divider()
+                                    Button(HotkeyOption.leftOption.displayName)   { selectedHotkey = .leftOption }
+                                    Button(HotkeyOption.rightOption.displayName)  { selectedHotkey = .rightOption }
+                                    Divider()
+                                    Button(HotkeyOption.leftShift.displayName)    { selectedHotkey = .leftShift }
+                                    Button(HotkeyOption.rightShift.displayName)   { selectedHotkey = .rightShift }
                                 }
+                                // Function keys
+                                Divider()
+                                Group {
+                                    Button(HotkeyOption.f13.displayName) { selectedHotkey = .f13 }
+                                    Button(HotkeyOption.f14.displayName) { selectedHotkey = .f14 }
+                                    Button(HotkeyOption.f15.displayName) { selectedHotkey = .f15 }
+                                    Button(HotkeyOption.f16.displayName) { selectedHotkey = .f16 }
+                                    Button(HotkeyOption.f17.displayName) { selectedHotkey = .f17 }
+                                    Button(HotkeyOption.f18.displayName) { selectedHotkey = .f18 }
+                                    Button(HotkeyOption.f19.displayName) { selectedHotkey = .f19 }
+                                }
+                                // Custom combo
+                                Divider()
+                                Button(HotkeyOption.custom.displayName) { selectedHotkey = .custom }
                             } label: {
                                 HStack(spacing: 6) {
-                                    Text(selectedHotkey.displayName)
+                                    Text(selectedHotkey == .custom && !customShortcutDisplay.isEmpty
+                                         ? customShortcutDisplay
+                                         : selectedHotkey.displayName)
                                         .font(Typography.bodySmall)
                                         .foregroundStyle(Color.textPrimary)
                                     Image(systemName: "chevron.up.chevron.down")
@@ -107,6 +140,48 @@ struct GeneralSettingsTab: View {
                             }
                             .menuStyle(.borderlessButton)
                             .clickActionPointerCursor()
+                        }
+
+                        // Custom shortcut recorder — only visible when .custom is selected
+                        if selectedHotkey == .custom {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(alignment: .center) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Custom Shortcut")
+                                            .font(Typography.bodyMedium)
+                                            .foregroundStyle(Color.textPrimary)
+                                        Text("Click the badge to record a new shortcut")
+                                            .font(Typography.captionSmall)
+                                            .foregroundStyle(Color.textMuted)
+                                    }
+                                    Spacer()
+                                    ShortcutRecorderView(onChange: {
+                                        customShortcutDisplay = CustomShortcutStorage.displayString
+                                    })
+                                    .frame(width: 160, height: 32)
+                                }
+
+                                if customShortcutDisplay.isEmpty {
+                                    Label(
+                                        "No shortcut recorded yet. Click the badge above to record one.",
+                                        systemImage: "info.circle"
+                                    )
+                                    .font(Typography.captionSmall)
+                                    .foregroundStyle(Color.accentBlue)
+                                }
+
+                                Text("Requires at least one modifier key (⌃ ⌥ ⇧ ⌘) unless using F13–F19.")
+                                    .font(Typography.captionSmall)
+                                    .foregroundStyle(Color.textMuted)
+                            }
+                            .padding(14)
+                            .background(Color.bgCard.opacity(0.6))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(Color.border.opacity(0.5), lineWidth: 0.5)
+                            )
+                            .onAppear { customShortcutDisplay = CustomShortcutStorage.displayString }
                         }
 
                         VStack(alignment: .leading, spacing: 8) {
@@ -129,7 +204,6 @@ struct GeneralSettingsTab: View {
                             .stCompactUI()
                             .padding(.top, 2)
                         }
-
                     }
                 }
 
@@ -140,15 +214,71 @@ struct GeneralSettingsTab: View {
                     )
 
                     VStack(spacing: 16) {
-                        HStack {
-                            Text("Show menu bar icon")
-                                .font(Typography.bodyMedium)
-                                .foregroundStyle(Color.textPrimary)
-                            Spacer()
-                            Toggle("", isOn: $showMenuBarIcon)
-                                .labelsHidden()
+                        VStack(spacing: 6) {
+                            HStack {
+                                Text("Launch at login")
+                                    .font(Typography.bodyMedium)
+                                    .foregroundStyle(Color.textPrimary)
+                                Spacer()
+                                Toggle("", isOn: $launchAtLogin)
+                                    .labelsHidden()
+                            }
+                            .clickActionPointerCursor()
+
+                            Text("Start SpeakType automatically in the background when you log in, so the hotkey is always ready.")
+                                .font(Typography.captionSmall)
+                                .foregroundStyle(Color.textMuted)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .clickActionPointerCursor()
+                        .onChange(of: launchAtLogin) { _, newValue in
+                            LaunchAtLoginService.setEnabled(newValue)
+                        }
+
+                        VStack(spacing: 6) {
+                            HStack {
+                                Text("Run in background (hide Dock icon)")
+                                    .font(Typography.bodyMedium)
+                                    .foregroundStyle(Color.textPrimary)
+                                Spacer()
+                                Toggle("", isOn: Binding(
+                                    get: { !showDockIcon },
+                                    set: { showDockIcon = !$0 }
+                                ))
+                                .labelsHidden()
+                            }
+                            .clickActionPointerCursor()
+
+                            Text("Removes the Dock icon and runs SpeakType as a menu-bar-only background app. Open this window anytime from the menu bar icon.")
+                                .font(Typography.captionSmall)
+                                .foregroundStyle(Color.textMuted)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .onChange(of: showDockIcon) { _, newValue in
+                            // In background mode the menu bar is the only way back in — never
+                            // allow both the Dock icon and the menu bar icon to be hidden.
+                            if !newValue { showMenuBarIcon = true }
+                            (NSApp.delegate as? AppDelegate)?.applyActivationPolicy()
+                        }
+
+                        VStack(spacing: 6) {
+                            HStack {
+                                Text("Show menu bar icon")
+                                    .font(Typography.bodyMedium)
+                                    .foregroundStyle(Color.textPrimary)
+                                Spacer()
+                                Toggle("", isOn: $showMenuBarIcon)
+                                    .labelsHidden()
+                                    .disabled(!showDockIcon)
+                            }
+                            .clickActionPointerCursor()
+
+                            if !showDockIcon {
+                                Text("Required while the Dock icon is hidden — it's the only way to open SpeakType.")
+                                    .font(Typography.captionSmall)
+                                    .foregroundStyle(Color.textMuted)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
                     }
                 }
 

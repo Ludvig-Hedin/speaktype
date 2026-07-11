@@ -162,7 +162,7 @@ struct OllamaRecommendedModelsView: View {
                                 .padding(.vertical, 7)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(isSelected ? Color.green.opacity(0.85) : Color.textPrimary)
+                                        .fill(isSelected ? Color.accentSuccess.opacity(0.85) : Color.textPrimary)
                                 )
                         }
                         .buttonStyle(.stPlain)

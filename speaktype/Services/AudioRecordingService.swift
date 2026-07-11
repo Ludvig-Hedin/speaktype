@@ -16,9 +16,17 @@ class AudioRecordingService: NSObject, ObservableObject {
     @Published var availableDevices: [AVCaptureDevice] = []
     @Published var selectedDeviceId: String? {
         didSet {
+            // Persist the choice so it survives relaunch — the Settings UI promises the selected
+            // device is "used for all recordings", but without this it reset to the first device
+            // on every launch.
+            if let selectedDeviceId {
+                UserDefaults.standard.set(selectedDeviceId, forKey: Self.selectedDeviceKey)
+            }
             setupSession()
         }
     }
+
+    private static let selectedDeviceKey = "selectedAudioDeviceId"
 
     private var captureSession: AVCaptureSession?
     private var audioOutput: AVCaptureAudioDataOutput?
@@ -105,10 +113,10 @@ class AudioRecordingService: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        // `fetchAvailableDevices()` populates `availableDevices` asynchronously on the main queue
+        // and restores the persisted (or default) selection once the list is ready, so there is no
+        // synchronous device pick here — doing one would race the restore and clobber it.
         fetchAvailableDevices()
-        if let first = availableDevices.first {
-            selectedDeviceId = first.uniqueID
-        }
 
         // Listen for device changes (plug/unplug)
         NotificationCenter.default.addObserver(
@@ -141,33 +149,71 @@ class AudioRecordingService: NSObject, ObservableObject {
             self.availableDevices = discoverySession.devices.filter { device in
                 !device.localizedName.localizedCaseInsensitiveContains("Microsoft Teams")
             }
-            if self.selectedDeviceId == nil, let first = self.availableDevices.first {
-                self.selectedDeviceId = first.uniqueID
+            // First time we have a device list with nothing chosen yet: restore the user's
+            // previously persisted mic if it is still present, otherwise fall back to the first
+            // available device. (We never override an existing selection here so we don't fight
+            // the user's pick on a manual Refresh.)
+            if self.selectedDeviceId == nil {
+                let savedId = UserDefaults.standard.string(forKey: Self.selectedDeviceKey)
+                if let savedId, self.availableDevices.contains(where: { $0.uniqueID == savedId }) {
+                    self.selectedDeviceId = savedId
+                } else if let first = self.availableDevices.first {
+                    self.selectedDeviceId = first.uniqueID
+                }
             }
         }
     }
 
+    /// Configure the capture graph WITHOUT blocking the caller.
+    ///
+    /// `AVCaptureSession()` creation and especially `AVCaptureDeviceInput(device:)` are
+    /// blocking calls — the first one triggers a CoreMedia/TCC hardware handshake that can
+    /// stall the calling thread for a noticeable time. This used to run on the main thread
+    /// (via `selectedDeviceId.didSet`, which fires during `init` and from the dashboard),
+    /// freezing the UI with a spinning cursor right as a window appeared. Per Apple's
+    /// guidance, all session configuration now runs on the serial `audioQueue`, which also
+    /// keeps it ordered with start/stop calls.
     func setupSession() {
-        captureSession?.stopRunning()
-        captureSession = AVCaptureSession()
+        let deviceId = selectedDeviceId
+        audioQueue.async { [weak self] in
+            self?.configureSession(deviceId: deviceId)
+        }
+    }
 
-        guard let deviceId = selectedDeviceId,
-            let device = AVCaptureDevice(uniqueID: deviceId),
+    /// Builds the capture graph. MUST be called on `audioQueue`.
+    private func configureSession(deviceId: String?) {
+        captureSession?.stopRunning()
+
+        let session = AVCaptureSession()
+
+        // Resolve the chosen device; if it can't be found (e.g. the mic was unplugged mid-session),
+        // fall back to the system default input. Without this, a stale `selectedDeviceId` leaves
+        // `captureSession` nil, so recording produces a silent WAV → "No speech detected" every time
+        // until the user manually reselects a device or relaunches.
+        let resolvedDevice = deviceId.flatMap { AVCaptureDevice(uniqueID: $0) }
+            ?? AVCaptureDevice.default(for: .audio)
+
+        guard let device = resolvedDevice,
             let input = try? AVCaptureDeviceInput(device: device)
         else {
-            print("Failed to find or add device with ID: \(selectedDeviceId ?? "nil")")
+            print("Failed to find or add any audio input device (requested ID: \(deviceId ?? "nil"))")
+            captureSession = nil
+            audioOutput = nil
             return
         }
 
-        if captureSession?.canAddInput(input) == true {
-            captureSession?.addInput(input)
+        if session.canAddInput(input) {
+            session.addInput(input)
         }
 
-        audioOutput = AVCaptureAudioDataOutput()
-        if captureSession?.canAddOutput(audioOutput!) == true {
-            captureSession?.addOutput(audioOutput!)
-            audioOutput?.setSampleBufferDelegate(self, queue: audioQueue)
+        let output = AVCaptureAudioDataOutput()
+        if session.canAddOutput(output) {
+            session.addOutput(output)
+            output.setSampleBufferDelegate(self, queue: audioQueue)
         }
+
+        audioOutput = output
+        captureSession = session
 
         // Don't start session here - only start when recording begins
         // This prevents continuous CPU usage when idle

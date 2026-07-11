@@ -337,12 +337,15 @@ class ModelDownloadService: ObservableObject {
             activeTasks[variant] = nil
             print("Cancelled download task for \(variant)")
         }
-        
-        isDownloading[variant] = false
-        downloadProgress[variant] = 0.0
+
         downloadError[variant] = nil
-        
-        // Delete any partial download
+        // Keep `isDownloading` TRUE while we delete the partial files. `downloadModel()` guards on
+        // `isDownloading[variant] != true`, so this blocks a rapid re-tap of Download until cleanup
+        // finishes — otherwise the new download races this delete and the cleanup can wipe the
+        // freshly-downloading files, leaving an incomplete model. `deleteModel` flips
+        // `isDownloading`/`downloadProgress` back to false/0 on the main actor when it completes.
+        isDownloading[variant] = true
+
         Task {
             let result = await deleteModel(variant: variant)
             print("🗑️ Cleaned up partial download: \(result)")

@@ -87,7 +87,7 @@ struct WelcomePage: View {
                     .tracking(-0.5)
 
                 HStack(spacing: 0) {
-                    Text("Speech into clear writing—on your Mac, powered by AI.")
+                    Text("Turn speech into clear writing, right on your Mac.")
                         .font(.system(size: 16, weight: .regular))
                         .foregroundStyle(Color.textSecondary)
 
@@ -195,7 +195,7 @@ struct PermissionsPage: View {
                     .font(.system(size: 40, weight: .regular, design: .serif))
                     .foregroundStyle(Color.textPrimary)
 
-                Text("Grant these permissions to unlock the full experience.")
+                Text("Three quick permissions and you're ready to dictate.")
                     .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
@@ -475,7 +475,7 @@ struct OnboardingPermissionRow: View {
             // Clean icon
             Image(systemName: isGranted ? "checkmark.circle.fill" : icon)
                 .font(.system(size: 24, weight: .regular))
-                .foregroundStyle(isGranted ? Color.green : Color.textPrimary.opacity(0.7))
+                .foregroundStyle(isGranted ? Color.accentSuccess : Color.textPrimary.opacity(0.7))
                 .frame(width: 40)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -493,7 +493,7 @@ struct OnboardingPermissionRow: View {
             if isGranted {
                 Image(systemName: "checkmark")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.green)
+                    .foregroundStyle(Color.accentSuccess)
             } else {
                 Button(action: action) {
                     Text("Allow")
@@ -888,7 +888,7 @@ struct OnboardingModelDownloadPage: View {
         if progress >= 1.0 {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 22))
-                .foregroundStyle(Color.green)
+                .foregroundStyle(Color.accentSuccess)
         } else if isDownloading {
             ProgressView()
                 .controlSize(.regular)

@@ -209,7 +209,14 @@ enum OllamaPolishClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
-        request.timeoutInterval = 120
+        // Polish runs inline in the dictation → insert flow: a slow/wedged Ollama server (up,
+        // but model cold-loading or the box thrashing) blocks insertion this whole time while
+        // the recorder shows "Polishing…", and the call is not cancellable. A healthy local
+        // polish on a small model responds in well under 10s even cold, so cap the worst-case
+        // freeze at 45s — past that we fall back to the raw transcript (WritingPolishService
+        // catches the timeout) rather than holding the user's text hostage. (Connection-refused
+        // when the server is down fails instantly and is unaffected by this value.)
+        request.timeoutInterval = 45
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ClientError.httpStatus(-1) }

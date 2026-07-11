@@ -20,7 +20,7 @@ struct HistoryDetailView: View {
                     
                     Text(formatDuration(item.duration))
                         .font(Typography.labelMedium)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.accentBlue)
                 }
                 
                 // Badges and copy button
@@ -30,7 +30,7 @@ struct HistoryDetailView: View {
                         .font(Typography.badge)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color.blue)
+                        .background(Color.accentBlue)
                         .foregroundStyle(.white)
                         .cornerRadius(12)
                     
@@ -48,7 +48,7 @@ struct HistoryDetailView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color.blue)
+                        .background(Color.accentBlue)
                         .foregroundStyle(.white)
                         .cornerRadius(12)
                     }
@@ -65,8 +65,11 @@ struct HistoryDetailView: View {
                 
                 Divider()
                 
-                // Audio playback section
-                if let audioURL = item.audioFileURL {
+                // Audio playback section — only when the recording file is actually present, so we
+                // don't render a dead Play button for an item whose audio was deleted/moved
+                // (matches the existence gating already used in HistoryView).
+                if let audioURL = item.audioFileURL,
+                   FileManager.default.fileExists(atPath: audioURL.path) {
                     VStack(spacing: 16) {
                         // Recording label with duration
                         HStack {
@@ -102,7 +105,7 @@ struct HistoryDetailView: View {
                             }) {
                                 Image(systemName: "folder")
                                     .font(.title3)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(Color.accentWarning)
                             }
                             .buttonStyle(.stPlain)
                             .help("Show in Finder")
@@ -113,7 +116,7 @@ struct HistoryDetailView: View {
                             Button(action: togglePlayback) {
                                 Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                                     .font(.title2)
-                                    .foregroundStyle(.blue)
+                                    .foregroundStyle(Color.accentBlue)
                             }
                             .buttonStyle(.stPlain)
                             
@@ -125,7 +128,7 @@ struct HistoryDetailView: View {
                             }) {
                                 Image(systemName: "arrow.clockwise")
                                     .font(.title3)
-                                    .foregroundStyle(.green)
+                                    .foregroundStyle(Color.accentSuccess)
                             }
                             .buttonStyle(.stPlain)
                             .help("Restart")

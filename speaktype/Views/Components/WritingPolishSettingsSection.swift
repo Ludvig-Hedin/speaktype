@@ -103,7 +103,7 @@ struct WritingPolishSettingsSection: View {
                     Text(ping)
                         .font(Typography.captionSmall)
                         .foregroundStyle(
-                            ping.hasPrefix("OK") ? Color.green.opacity(0.9) : Color.textSecondary
+                            ping.hasPrefix("OK") ? Color.accentSuccess.opacity(0.9) : Color.textSecondary
                         )
                         .fixedSize(horizontal: false, vertical: true)
                 }

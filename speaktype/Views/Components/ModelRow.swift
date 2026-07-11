@@ -92,7 +92,7 @@ struct ModelRow: View {
                             Text(warning)
                                 .font(.system(size: 11))
                         }
-                        .foregroundStyle(Color.orange)
+                        .foregroundStyle(Color.accentWarning)
                     }
 
                     // Load error display
@@ -104,7 +104,7 @@ struct ModelRow: View {
                                 .font(.system(size: 11))
                                 .lineLimit(2)
                         }
-                        .foregroundStyle(Color.red)
+                        .foregroundStyle(Color.accentError)
                     }
                 }
 
@@ -196,8 +196,8 @@ struct ModelRow: View {
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(Color.orange.opacity(0.2))
-                    .foregroundStyle(Color.orange)
+                    .background(Color.accentWarning.opacity(0.2))
+                    .foregroundStyle(Color.accentWarning)
                     .clipShape(Capsule(style: .continuous))
                     .help(
                         "This model is selected but not downloaded. Download it or select another model."
@@ -241,7 +241,7 @@ struct ModelRow: View {
                                     ? "Taking longer than expected…" : "\(Int(loadingElapsed))s"
                             )
                             .font(.system(size: 10))
-                            .foregroundStyle(loadingElapsed > 30 ? Color.orange : Color.textMuted)
+                            .foregroundStyle(loadingElapsed > 30 ? Color.accentWarning : Color.textMuted)
                         }
                     }
                     .help("First load may take 10-30 seconds")

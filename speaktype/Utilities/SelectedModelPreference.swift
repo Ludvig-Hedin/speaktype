@@ -56,7 +56,9 @@ enum SelectedModelPreference {
         }
     }
 
-    /// Warm WhisperKit when the selected variant is already on disk (first hotkey / post-onboarding).
+    /// Warm WhisperKit at launch **only when the Mac has ample free RAM** to keep the model
+    /// resident (per `ModelMemoryPolicy`). On low-memory Macs this is a no-op — the model loads
+    /// lazily on the first hotkey press instead and is released when idle, keeping idle RAM low.
     static func preloadSelectedModelIfDownloaded() async {
         let variant = await MainActor.run { UserDefaults.standard.string(forKey: storageKey) ?? "" }
         guard !variant.isEmpty else { return }
@@ -64,6 +66,11 @@ enum SelectedModelPreference {
             ModelDownloadService.shared.downloadProgress[variant] ?? 0
         }
         guard progress >= 1.0 else { return }
+
+        guard ModelMemoryPolicy.shouldKeepResident(variant: variant) else {
+            print("🪶 Low free RAM — skipping launch preload; model loads on first dictation.")
+            return
+        }
         try? await WhisperService.shared.loadModel(variant: variant)
     }
 }

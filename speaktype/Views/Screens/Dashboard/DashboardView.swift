@@ -326,6 +326,7 @@ struct StatsCard: View {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text("\(wordCount)")
                         .font(.system(size: 64, weight: .light, design: .serif))
+                        .monospacedDigit()
                         .foregroundStyle(Color.textPrimary)
 
                     Text("words transcribed")
@@ -397,6 +398,7 @@ struct ActivityChartCard: View {
                 HStack(spacing: 6) {
                     Text("\(totalThisWeek)")
                         .font(Typography.bodyMedium)
+                        .monospacedDigit()
                         .foregroundStyle(Color.textPrimary)
                     Text("transcriptions")
                         .font(Typography.bodySmall)
@@ -425,6 +427,7 @@ struct ActivityChartCard: View {
                         // Count label on top (only if > 0)
                         Text(data.count > 0 ? "\(data.count)" : "")
                             .font(Typography.captionSmall)
+                            .monospacedDigit()
                             .foregroundStyle(Color.textMuted)
                             .frame(height: 14)
 
@@ -464,6 +467,7 @@ struct StatBlock: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(value)
                     .font(.system(size: 24, weight: .medium, design: .serif))
+                    .monospacedDigit()
                     .foregroundStyle(Color.textPrimary)
 
                 Text(label)
