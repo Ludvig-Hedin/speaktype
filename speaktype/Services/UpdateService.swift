@@ -164,7 +164,9 @@ class UpdateService: ObservableObject {
                     self.installStatus = "Checking downloaded update…"
                     self.setInstallProgress(0.84)
                 }
-                try verifyDMG(at: dmgURL)
+                try await Task.detached(priority: .userInitiated) {
+                    try Self.verifyDMG(at: dmgURL)
+                }.value
 
                 // 3. Mount the DMG
                 await MainActor.run {
@@ -172,7 +174,9 @@ class UpdateService: ObservableObject {
                     self.installStatus = "Opening downloaded update…"
                     self.setInstallProgress(0.9)
                 }
-                let mountPoint = try mountDMG(at: dmgURL)
+                let mountPoint = try await Task.detached(priority: .userInitiated) {
+                    try Self.mountDMG(at: dmgURL)
+                }.value
 
                 // 4. Find the .app inside the mounted volume
                 await MainActor.run {
@@ -180,13 +184,14 @@ class UpdateService: ObservableObject {
                     self.installStatus = "Copying new app into place…"
                     self.setInstallProgress(0.95)
                 }
-                let appInDMG = try findApp(in: mountPoint)
 
-                // 5. Replace the running app
-                try replaceCurrentApp(with: appInDMG)
-
-                // 6. Detach the volume (best-effort)
-                detachDMG(mountPoint: mountPoint)
+                // 5. Find + replace the running app, then detach — all blocking work off the
+                // main actor (this type is implicitly @MainActor) so the UI stays responsive.
+                try await Task.detached(priority: .userInitiated) {
+                    let appInDMG = try Self.findApp(in: mountPoint)
+                    try Self.replaceCurrentApp(with: appInDMG)
+                    Self.detachDMG(mountPoint: mountPoint)
+                }.value
 
                 // 7. Relaunch
                 await MainActor.run {
@@ -260,7 +265,7 @@ class UpdateService: ObservableObject {
         return dest
     }
 
-    private func verifyDMG(at dmgURL: URL) throws {
+    nonisolated private static func verifyDMG(at dmgURL: URL) throws {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         proc.arguments = ["verify", dmgURL.path]
@@ -274,7 +279,7 @@ class UpdateService: ObservableObject {
         }
     }
 
-    private func mountDMG(at dmgURL: URL) throws -> URL {
+    nonisolated private static func mountDMG(at dmgURL: URL) throws -> URL {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         proc.arguments = ["attach", dmgURL.path, "-nobrowse", "-readonly", "-plist"]
@@ -303,7 +308,7 @@ class UpdateService: ObservableObject {
         return URL(fileURLWithPath: mountPath)
     }
 
-    private func findApp(in mountPoint: URL) throws -> URL {
+    nonisolated private static func findApp(in mountPoint: URL) throws -> URL {
         let contents = try FileManager.default.contentsOfDirectory(
             at: mountPoint,
             includingPropertiesForKeys: nil
@@ -314,7 +319,7 @@ class UpdateService: ObservableObject {
         return appURL
     }
 
-    private func replaceCurrentApp(with sourceApp: URL) throws {
+    nonisolated private static func replaceCurrentApp(with sourceApp: URL) throws {
         // Determine destination: where the current bundle lives
         let runningPath = Bundle.main.bundlePath
         let destURL = URL(fileURLWithPath: runningPath)
@@ -328,7 +333,7 @@ class UpdateService: ObservableObject {
         try fm.copyItem(at: sourceApp, to: destURL)
     }
 
-    private func detachDMG(mountPoint: URL) {
+    nonisolated private static func detachDMG(mountPoint: URL) {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         proc.arguments = ["detach", mountPoint.path, "-force"]

@@ -74,7 +74,9 @@ struct WaveformView: View {
 
     /// Peak-amplitude downsample of the first audio channel into `bucketCount` normalized (0...1)
     /// bars. Returns `[]` on any failure (missing/unreadable file) so the view simply draws nothing.
-    private static func extractSamples(from url: URL, bucketCount: Int) -> [Float] {
+    /// `nonisolated` so it genuinely runs off the main actor inside `Task.detached` — otherwise
+    /// (this type is implicitly @MainActor) the decode hops back to main and hitches the UI.
+    nonisolated private static func extractSamples(from url: URL, bucketCount: Int) -> [Float] {
         guard bucketCount > 0,
               let file = try? AVAudioFile(forReading: url) else { return [] }
 
