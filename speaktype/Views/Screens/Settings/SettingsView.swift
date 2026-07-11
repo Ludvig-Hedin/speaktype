@@ -57,24 +57,7 @@ struct GeneralSettingsTab: View {
 
     var body: some View {
         VStack(spacing: 16) {
-                // Appearance
-                SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "paintpalette", title: "Appearance",
-                        subtitle: "Choose your preferred theme")
-
-                    HStack(spacing: 20) {
-                        ForEach(AppTheme.allCases) { theme in
-                            RadioButton(
-                                title: theme.rawValue,
-                                isSelected: appTheme == theme,
-                                action: { appTheme = theme }
-                            )
-                        }
-                    }
-                }
-
-                // Shortcuts
+                // Shortcuts — the app's primary control, so it leads.
                 SettingsSection {
                     SettingsSectionHeader(
                         icon: "command", title: "Shortcuts", subtitle: "Configure recording hotkeys"
@@ -358,6 +341,23 @@ struct GeneralSettingsTab: View {
                 RemoteTranscriptionSettingsSection()
 
                 WritingPolishSettingsSection()
+
+                // Appearance — cosmetic, kept near the bottom.
+                SettingsSection {
+                    SettingsSectionHeader(
+                        icon: "paintpalette", title: "Appearance",
+                        subtitle: "Choose your preferred theme")
+
+                    HStack(spacing: 20) {
+                        ForEach(AppTheme.allCases) { theme in
+                            RadioButton(
+                                title: theme.rawValue,
+                                isSelected: appTheme == theme,
+                                action: { appTheme = theme }
+                            )
+                        }
+                    }
+                }
 
                 // Updates
                 SettingsSection {
