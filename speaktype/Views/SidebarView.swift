@@ -26,6 +26,9 @@ struct SidebarView: View {
                 }
             }
             .padding(.horizontal, SidebarConstants.itemHorizontalPadding)
+            // Suppress the system keyboard focus ring so the first nav row isn't
+            // outlined (accent-colored) the moment the window opens.
+            .focusEffectDisabled()
 
             Spacer()
 

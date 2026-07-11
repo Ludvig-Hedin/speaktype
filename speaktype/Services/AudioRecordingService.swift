@@ -140,25 +140,33 @@ class AudioRecordingService: NSObject, ObservableObject {
     }
 
     func fetchAvailableDevices() {
-        let discoverySession = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.microphone],
-            mediaType: .audio,
-            position: .unspecified
-        )
-        DispatchQueue.main.async {
-            self.availableDevices = discoverySession.devices.filter { device in
+        // `AVCaptureDevice.DiscoverySession` construction and `.devices` enumeration touch
+        // CoreMedia and can stall the calling thread. This used to run on whatever thread called
+        // `init()` (the main thread, as the dashboard window appeared) — a source of the spinning
+        // cursor on launch. Do the enumeration on `audioQueue`, then publish on main.
+        audioQueue.async { [weak self] in
+            let discoverySession = AVCaptureDevice.DiscoverySession(
+                deviceTypes: [.microphone],
+                mediaType: .audio,
+                position: .unspecified
+            )
+            let devices = discoverySession.devices.filter { device in
                 !device.localizedName.localizedCaseInsensitiveContains("Microsoft Teams")
             }
-            // First time we have a device list with nothing chosen yet: restore the user's
-            // previously persisted mic if it is still present, otherwise fall back to the first
-            // available device. (We never override an existing selection here so we don't fight
-            // the user's pick on a manual Refresh.)
-            if self.selectedDeviceId == nil {
-                let savedId = UserDefaults.standard.string(forKey: Self.selectedDeviceKey)
-                if let savedId, self.availableDevices.contains(where: { $0.uniqueID == savedId }) {
-                    self.selectedDeviceId = savedId
-                } else if let first = self.availableDevices.first {
-                    self.selectedDeviceId = first.uniqueID
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.availableDevices = devices
+                // First time we have a device list with nothing chosen yet: restore the user's
+                // previously persisted mic if it is still present, otherwise fall back to the first
+                // available device. (We never override an existing selection here so we don't fight
+                // the user's pick on a manual Refresh.)
+                if self.selectedDeviceId == nil {
+                    let savedId = UserDefaults.standard.string(forKey: Self.selectedDeviceKey)
+                    if let savedId, self.availableDevices.contains(where: { $0.uniqueID == savedId }) {
+                        self.selectedDeviceId = savedId
+                    } else if let first = self.availableDevices.first {
+                        self.selectedDeviceId = first.uniqueID
+                    }
                 }
             }
         }

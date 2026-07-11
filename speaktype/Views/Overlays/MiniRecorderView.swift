@@ -569,8 +569,11 @@ struct MiniRecorderView: View {
     private func processRecording(url: URL) async {
         debugLog("processRecording started with url: \(url.lastPathComponent)")
         do {
-            // Ensure model is loaded before transcribing
-            if !whisperService.isInitialized || whisperService.currentModelVariant != selectedModel
+            let route = TranscriptionCoordinator.willUseRemoteNextTranscript()
+
+            // Only warm up the on-device model when the next transcription will run locally.
+            if !route.isRemote,
+                !whisperService.isInitialized || whisperService.currentModelVariant != selectedModel
             {
                 debugLog("Loading model: \(selectedModel)")
                 await MainActor.run { statusMessage = "Warming up model — first use is slower..." }
@@ -594,9 +597,11 @@ struct MiniRecorderView: View {
             // If user has already cancelled (pressed Escape), skip transcription UI updates
             // but still run the transcription in the background to save to history
             if !cancelCommit {
-                await MainActor.run { statusMessage = "Transcribing..." }
+                let status = route.isRemote ? "Transcribing via \(route.providerLabel ?? "cloud")…" : "Transcribing..."
+                await MainActor.run { statusMessage = status }
             }
-            let text = try await whisperService.transcribe(audioFile: url, language: transcriptionLanguage)
+            let outcome = try await TranscriptionCoordinator.transcribe(audioFile: url, language: transcriptionLanguage)
+            let text = outcome.text
             debugLog("Transcription result: \(text.prefix(50))...")
 
             guard !text.isEmpty else {
@@ -619,15 +624,14 @@ struct MiniRecorderView: View {
             debugLog("Final text (after optional polish): \(finalText.prefix(50))...")
 
             let duration = await getAudioDuration(url: url)
-            let modelName =
-                AIModel.availableModels.first(where: { $0.variant == selectedModel })?.name
-                ?? selectedModel
             HistoryService.shared.addItem(
                 transcript: finalText,
                 duration: duration,
                 audioFileURL: url,
-                modelUsed: modelName,
-                transcriptionTime: nil
+                modelUsed: outcome.modelLabel,
+                transcriptionTime: outcome.transcriptionTime,
+                provider: outcome.provider.rawValue,
+                estimatedCostUSD: outcome.estimatedCostUSD
             )
 
             debugLog("Calling onCommit...")

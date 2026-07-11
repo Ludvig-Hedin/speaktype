@@ -7,7 +7,10 @@ import UniformTypeIdentifiers
 struct DashboardView: View {
     @Binding var selection: SidebarItem?
     @StateObject private var historyService = HistoryService.shared
-    @StateObject private var audioRecorder = AudioRecordingService()
+    // Reuse the shared instance instead of spinning up a second recorder (and a second
+    // synchronous device enumeration) on the main thread while the window is appearing —
+    // that duplicate init was a source of the spinning-cursor stall on launch.
+    @StateObject private var audioRecorder = AudioRecordingService.shared
     private var whisperService: WhisperService { WhisperService.shared }
     @State private var leftColumnHeight: CGFloat = 0
 
@@ -260,25 +263,24 @@ struct DashboardView: View {
             transcriptionStatus = "Transcribing..."
 
             do {
-                if !whisperService.isInitialized { try? await whisperService.initialize() }
-
-                let text = try await whisperService.transcribe(audioFile: url, language: transcriptionLanguage)
+                // Coordinator picks on-device vs cloud per the user's mode + machine resources,
+                // self-heals a local model load, and falls back automatically.
+                let outcome = try await TranscriptionCoordinator.transcribe(audioFile: url, language: transcriptionLanguage)
                 if TranscriptionFinalizer.willPolishNextTranscript() {
                     await MainActor.run { transcriptionStatus = "Polishing..." }
                 }
-                let finalText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: text)
+                let finalText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: outcome.text)
                 let duration = try await getAudioDuration(url: url)
-                let modelName =
-                    AIModel.availableModels.first(where: { $0.variant == selectedModel })?.name
-                    ?? selectedModel
 
                 DispatchQueue.main.async {
                     historyService.addItem(
                         transcript: finalText,
                         duration: duration,
                         audioFileURL: url,
-                        modelUsed: modelName,
-                        transcriptionTime: nil
+                        modelUsed: outcome.modelLabel,
+                        transcriptionTime: outcome.transcriptionTime,
+                        provider: outcome.provider.rawValue,
+                        estimatedCostUSD: outcome.estimatedCostUSD
                     )
                     transcriptionStatus = "Done!"
                     isTranscribing = false

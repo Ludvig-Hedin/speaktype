@@ -106,7 +106,36 @@ struct StatisticsView: View {
                 label: "Transcriptions",
                 value: "\(transcriptionCount(for: selectedPeriod))"
             )
+
+            // Only surfaces once cloud transcription has actually incurred a cost.
+            if totalCost(for: selectedPeriod) > 0 {
+                StatCard(
+                    icon: "dollarsign.circle",
+                    label: "Est. Cloud Cost",
+                    value: formattedCost(for: selectedPeriod)
+                )
+            }
         }
+    }
+
+    private func startDate(for period: StatisticsPeriod) -> Date {
+        let calendar = Calendar.current
+        let now = Date()
+        switch period {
+        case .week: return calendar.date(byAdding: .day, value: -6, to: now)!
+        case .month: return calendar.date(byAdding: .day, value: -29, to: now)!
+        case .year: return calendar.date(byAdding: .day, value: -364, to: now)!
+        }
+    }
+
+    private func totalCost(for period: StatisticsPeriod) -> Double {
+        historyService.totalEstimatedCostUSD(since: startDate(for: period))
+    }
+
+    private func formattedCost(for period: StatisticsPeriod) -> String {
+        let cost = totalCost(for: period)
+        if cost > 0 && cost < 0.01 { return "<$0.01" }
+        return String(format: "$%.2f", cost)
     }
 
     private var barChartSection: some View {

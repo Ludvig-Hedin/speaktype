@@ -243,15 +243,17 @@ struct TranscribeAudioView: View {
             isTranscribing = true
             transcribingStatusText = "Transcribing..."
             do {
-                let raw = try await whisperService.transcribe(audioFile: url, language: transcriptionLanguage)
+                let outcome = try await TranscriptionCoordinator.transcribe(audioFile: url, language: transcriptionLanguage)
                 if TranscriptionFinalizer.willPolishNextTranscript() {
                     await MainActor.run { transcribingStatusText = "Polishing..." }
                 }
-                transcribedText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: raw)
+                transcribedText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: outcome.text)
                 // Save to History
                 let duration = try await getAudioDuration(url: url)
                 HistoryService.shared.addItem(
-                    transcript: transcribedText, duration: duration, audioFileURL: url)
+                    transcript: transcribedText, duration: duration, audioFileURL: url,
+                    modelUsed: outcome.modelLabel, transcriptionTime: outcome.transcriptionTime,
+                    provider: outcome.provider.rawValue, estimatedCostUSD: outcome.estimatedCostUSD)
             } catch {
                 transcribedText = "Error: \(error.localizedDescription)"
             }

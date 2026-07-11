@@ -7,6 +7,9 @@ struct HistoryStatsEntry: Identifiable, Codable, Hashable {
     let date: Date
     let wordCount: Int
     let duration: TimeInterval
+    // Optional so existing persisted JSON (which lacks these keys) decodes unchanged.
+    var provider: String? = nil
+    var estimatedCostUSD: Double? = nil
 }
 
 struct HistoryItem: Identifiable, Codable, Hashable {
@@ -17,7 +20,10 @@ struct HistoryItem: Identifiable, Codable, Hashable {
     let audioFileURL: URL?
     let modelUsed: String?
     let transcriptionTime: TimeInterval?
-    
+    // Optional so existing persisted JSON decodes unchanged; carry provenance + cost for stats.
+    var provider: String? = nil
+    var estimatedCostUSD: Double? = nil
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
@@ -41,7 +47,7 @@ class HistoryService: ObservableObject {
         loadHistory()
     }
     
-    func addItem(transcript: String, duration: TimeInterval, audioFileURL: URL? = nil, modelUsed: String? = nil, transcriptionTime: TimeInterval? = nil) {
+    func addItem(transcript: String, duration: TimeInterval, audioFileURL: URL? = nil, modelUsed: String? = nil, transcriptionTime: TimeInterval? = nil, provider: String? = nil, estimatedCostUSD: Double? = nil) {
         let normalizedTranscript = WhisperService.normalizedTranscription(from: transcript)
         guard !normalizedTranscript.isEmpty else { return }
 
@@ -57,13 +63,17 @@ class HistoryService: ObservableObject {
             duration: duration,
             audioFileURL: audioFileURL,
             modelUsed: modelUsed,
-            transcriptionTime: transcriptionTime
+            transcriptionTime: transcriptionTime,
+            provider: provider,
+            estimatedCostUSD: estimatedCostUSD
         )
         let statsEntry = HistoryStatsEntry(
             id: newItem.id,
             date: timestamp,
             wordCount: wordCount,
-            duration: duration
+            duration: duration,
+            provider: provider,
+            estimatedCostUSD: estimatedCostUSD
         )
         items.insert(newItem, at: 0) // Newest first
         statsEntries.insert(statsEntry, at: 0)
@@ -156,7 +166,9 @@ class HistoryService: ObservableObject {
                     duration: item.duration,
                     audioFileURL: item.audioFileURL,
                     modelUsed: item.modelUsed,
-                    transcriptionTime: item.transcriptionTime
+                    transcriptionTime: item.transcriptionTime,
+                    provider: item.provider,
+                    estimatedCostUSD: item.estimatedCostUSD
                 )
             }
 
@@ -190,7 +202,9 @@ class HistoryService: ObservableObject {
                     .components(separatedBy: .whitespacesAndNewlines)
                     .filter { !$0.isEmpty }
                     .count,
-                duration: item.duration
+                duration: item.duration,
+                provider: item.provider,
+                estimatedCostUSD: item.estimatedCostUSD
             )
         }
         saveStats()
@@ -199,6 +213,11 @@ class HistoryService: ObservableObject {
     private func filteredStatsEntries(since startDate: Date?) -> [HistoryStatsEntry] {
         guard let startDate else { return statsEntries }
         return statsEntries.filter { $0.date >= startDate }
+    }
+
+    /// Total estimated USD spent on cloud transcription in the period (0 when all on-device).
+    func totalEstimatedCostUSD(since startDate: Date?) -> Double {
+        filteredStatsEntries(since: startDate).compactMap { $0.estimatedCostUSD }.reduce(0, +)
     }
 
     private func removeAudioFileIfNeeded(for item: HistoryItem) {

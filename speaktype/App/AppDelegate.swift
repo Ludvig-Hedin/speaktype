@@ -51,6 +51,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         miniRecorderController = MiniRecorderWindowController()
 
         WritingPolishUserDefaults.registerDefaults(in: .standard)
+        // Transcription defaults to on-device only (privacy-safe) until the user opts into cloud.
+        TranscriptionModeUserDefaults.registerDefaults()
+        // Start network monitoring early so `auto` mode can pre-decide before the first dictation.
+        _ = NetworkReachability.shared
 
         // Register defaults so hotkeyEnabled is true when first launched
         UserDefaults.standard.register(defaults: ["hotkeyEnabled": true])
