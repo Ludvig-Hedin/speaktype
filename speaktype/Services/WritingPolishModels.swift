@@ -10,11 +10,21 @@ enum WritingPolishUserDefaults {
     static let ollamaModelKey = "writingPolishOllamaModel"
     static let ollamaTemperatureKey = "writingPolishOllamaTemperature"
 
+    // Cleanup provider selection (Part 1). Default = OpenRouter + latest Gemini flash.
+    static let cleanupProviderKey = "cleanupProvider"
+    static let cleanupModelKey = "cleanupModelId"
+    /// Below this much free RAM, a local (Ollama) cleanup auto-falls back to a configured cloud provider.
+    static let cleanupRAMThresholdKey = "cleanupLocalRAMThresholdGB"
+
     /// Default Ollama HTTP API base. User can point at another host or TLS reverse proxy.
     static let defaultOllamaBaseURL = "http://127.0.0.1:11434"
 
     /// Default polish model: balanced Qwen 3.5 2B (user can pick another in Settings / onboarding).
     static let defaultOllamaModel = "qwen3.5:2b"
+
+    static let defaultCleanupProvider = CleanupProvider.openRouter.rawValue
+    static let defaultCleanupModel = CleanupModel.defaultModelID
+    static let defaultCleanupRAMThresholdGB = 6.0
 
     static func registerDefaults(in defaults: UserDefaults = .standard) {
         defaults.register(defaults: [
@@ -24,6 +34,9 @@ enum WritingPolishUserDefaults {
             ollamaBaseURLKey: defaultOllamaBaseURL,
             ollamaModelKey: defaultOllamaModel,
             ollamaTemperatureKey: 0.2,
+            cleanupProviderKey: defaultCleanupProvider,
+            cleanupModelKey: defaultCleanupModel,
+            cleanupRAMThresholdKey: defaultCleanupRAMThresholdGB,
         ])
     }
 }
@@ -105,6 +118,10 @@ struct WritingPolishConfiguration: Equatable {
     var ollamaBaseURL: String
     var ollamaModel: String
     var ollamaTemperature: Double
+    // Defaults so existing initializers (e.g. Settings' config summary) keep compiling.
+    var cleanupProvider: CleanupProvider = .openRouter
+    var cleanupModelID: String = CleanupModel.defaultModelID
+    var cleanupRAMThresholdGB: Double = WritingPolishUserDefaults.defaultCleanupRAMThresholdGB
 
     static func loadFromUserDefaults(_ defaults: UserDefaults = .standard) -> WritingPolishConfiguration {
         WritingPolishUserDefaults.registerDefaults(in: defaults)
@@ -122,13 +139,23 @@ struct WritingPolishConfiguration: Equatable {
             ?? WritingPolishUserDefaults.defaultOllamaModel
         let temp = defaults.object(forKey: WritingPolishUserDefaults.ollamaTemperatureKey) as? Double
             ?? 0.2
+        let cleanupProviderRaw = defaults.string(forKey: WritingPolishUserDefaults.cleanupProviderKey)
+            ?? WritingPolishUserDefaults.defaultCleanupProvider
+        let cleanupProvider = CleanupProvider(rawValue: cleanupProviderRaw) ?? .openRouter
+        let cleanupModel = defaults.string(forKey: WritingPolishUserDefaults.cleanupModelKey)
+            ?? WritingPolishUserDefaults.defaultCleanupModel
+        let ramThreshold = defaults.object(forKey: WritingPolishUserDefaults.cleanupRAMThresholdKey) as? Double
+            ?? WritingPolishUserDefaults.defaultCleanupRAMThresholdGB
         return WritingPolishConfiguration(
             isEnabled: enabled,
             preset: preset,
             removeFillers: removeFillers,
             ollamaBaseURL: base,
             ollamaModel: model,
-            ollamaTemperature: temp
+            ollamaTemperature: temp,
+            cleanupProvider: cleanupProvider,
+            cleanupModelID: cleanupModel,
+            cleanupRAMThresholdGB: ramThreshold
         )
     }
 }

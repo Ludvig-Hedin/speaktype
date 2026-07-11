@@ -55,6 +55,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         TranscriptionModeUserDefaults.registerDefaults()
         // Start network monitoring early so `auto` mode can pre-decide before the first dictation.
         _ = NetworkReachability.shared
+        // Validate cleanup model IDs against the live OpenRouter list; log + repair stale slugs.
+        Task(priority: .utility) { await ModelValidationService.validateOnStartup() }
 
         // Register defaults so hotkeyEnabled is true when first launched
         UserDefaults.standard.register(defaults: ["hotkeyEnabled": true])

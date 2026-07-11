@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Shared writing-polish controls for Settings and Onboarding (same `UserDefaults` keys).
@@ -16,8 +17,93 @@ struct WritingPolishSettingsSection: View {
     @State private var ollamaPingResult: String?
     @State private var isPingingOllama = false
 
+    @AppStorage(WritingPolishUserDefaults.cleanupProviderKey) private var cleanupProviderRaw =
+        WritingPolishUserDefaults.defaultCleanupProvider
+    @AppStorage(WritingPolishUserDefaults.cleanupModelKey) private var cleanupModelID =
+        WritingPolishUserDefaults.defaultCleanupModel
+    @State private var cleanupKeyInput = ""
+    @State private var cleanupKeySaved = false
+    @State private var cleanupKeyStatus = ""
+
+    private var cleanupProvider: CleanupProvider {
+        CleanupProvider(rawValue: cleanupProviderRaw) ?? .openRouter
+    }
+
     private var selectedPreset: WritingPolishPreset {
         WritingPolishPreset(rawValue: writingPolishPresetRaw) ?? .clean
+    }
+
+    private func refreshCleanupKey() {
+        cleanupKeySaved = cleanupProvider.isRemote
+            ? RemoteAPIKeyStore.hasKey(account: cleanupProvider.keychainAccount, envVar: cleanupProvider.envVar)
+            : true
+    }
+
+    private func saveCleanupKey() {
+        if RemoteAPIKeyStore.save(cleanupKeyInput, account: cleanupProvider.keychainAccount) {
+            cleanupKeyInput = ""
+            cleanupKeySaved = true
+            cleanupKeyStatus = "Saved to Keychain."
+        } else {
+            cleanupKeyStatus = "Couldn't save the key."
+        }
+    }
+
+    private func removeCleanupKey() {
+        RemoteAPIKeyStore.delete(account: cleanupProvider.keychainAccount)
+        cleanupKeySaved = false
+        cleanupKeyInput = ""
+        cleanupKeyStatus = "Key removed."
+    }
+
+    private func cleanupModelLabel(_ m: CleanupModel) -> String {
+        let resolved = ModelValidationService.resolvedCleanupIDs
+        if !resolved.isEmpty, !resolved.contains(m.id) { return m.label + " (unavailable)" }
+        return m.label
+    }
+
+    @ViewBuilder private var cleanupKeyField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("\(cleanupProvider.displayName) API key")
+                    .font(Typography.bodyMedium)
+                    .foregroundStyle(Color.textPrimary)
+                Spacer()
+                if let urlStr = cleanupProvider.apiKeyURL {
+                    Button("Get a key ↗") {
+                        if let url = URL(string: urlStr) { NSWorkspace.shared.open(url) }
+                    }
+                    .buttonStyle(.link)
+                    .font(Typography.captionSmall)
+                }
+            }
+
+            if cleanupKeySaved {
+                HStack(spacing: 10) {
+                    Label("Key saved", systemImage: "checkmark.seal.fill")
+                        .font(Typography.captionSmall)
+                        .foregroundStyle(.green)
+                    Spacer()
+                    Button("Replace") { cleanupKeySaved = false; cleanupKeyInput = "" }
+                        .buttonStyle(.link).font(Typography.captionSmall)
+                    Button("Remove", role: .destructive) { removeCleanupKey() }
+                        .buttonStyle(.link).font(Typography.captionSmall)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    SecureField("sk-…" + (cleanupProvider.envVar.map { "  (or $\($0))" } ?? ""), text: $cleanupKeyInput)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Save") { saveCleanupKey() }
+                        .disabled(cleanupKeyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+
+            if !cleanupKeyStatus.isEmpty {
+                Text(cleanupKeyStatus)
+                    .font(Typography.captionSmall)
+                    .foregroundStyle(Color.textMuted)
+            }
+        }
     }
 
     private var configSummary: String {
@@ -57,6 +143,54 @@ struct WritingPolishSettingsSection: View {
                     .font(Typography.captionSmall)
                     .foregroundStyle(Color.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
+
+                // Cleanup engine (Part 1): OpenRouter (default) / OpenAI / Local Ollama.
+                Divider().overlay(Color.border.opacity(0.4))
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Cleanup engine")
+                        .font(Typography.labelMedium)
+                        .foregroundStyle(Color.textSecondary)
+                    HStack(spacing: 8) {
+                        ForEach(CleanupProvider.allCases) { p in
+                            RadioButton(
+                                title: p.displayName,
+                                isSelected: cleanupProvider == p,
+                                action: { cleanupProviderRaw = p.rawValue; refreshCleanupKey() }
+                            )
+                        }
+                        Spacer()
+                    }
+
+                    if cleanupProvider.isRemote {
+                        HStack {
+                            Text("Cleanup model")
+                                .font(Typography.bodyMedium)
+                                .foregroundStyle(Color.textPrimary)
+                            Spacer()
+                            Picker("", selection: $cleanupModelID) {
+                                ForEach(CleanupModel.catalog) { m in
+                                    Text(cleanupModelLabel(m)).tag(m.id)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(maxWidth: 260)
+                        }
+
+                        cleanupKeyField
+
+                        Text("Runs at temperature 0 with a strict cleanup prompt — preserves English/Swedish, never answers the dictation. OpenRouter requests send a no-train (data_collection: deny) policy.")
+                            .font(Typography.captionSmall)
+                            .foregroundStyle(Color.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("Local cleanup uses your Ollama settings below. It also serves as the offline fallback when a cloud engine is unreachable.")
+                            .font(Typography.captionSmall)
+                            .foregroundStyle(Color.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .disabled(!writingPolishEnabled)
+                .onAppear(perform: refreshCleanupKey)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Ollama base URL")

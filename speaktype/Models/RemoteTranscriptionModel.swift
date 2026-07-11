@@ -35,6 +35,14 @@ enum RemoteProvider: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    /// Env var checked before the Keychain (dev convenience).
+    var envVar: String {
+        switch self {
+        case .openAI: return "OPENAI_API_KEY"
+        case .groq: return "GROQ_API_KEY"
+        }
+    }
+
     var providerKind: TranscriptionProviderKind {
         switch self {
         case .openAI: return .openAI

@@ -15,34 +15,76 @@ enum WritingPolishService {
         return guardrails + "\n\n" + style
     }
 
-    /// `true` when we will attempt an Ollama call (shows “Polishing…” in the UI).
+    /// `true` when we will attempt a cleanup call (shows “Polishing…” in the UI).
     static func willPolish(configuration: WritingPolishConfiguration) -> Bool {
         guard configuration.isEnabled else { return false }
+        let provider = effectiveProvider(configuration)
+        if provider.isRemote { return provider.hasKey() }
         return !configuration.ollamaModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Resolve the cleanup provider, applying the RAM-low fallback: a **local** cleanup switches
+    /// to a configured cloud provider when free RAM drops below the threshold.
+    static func effectiveProvider(_ configuration: WritingPolishConfiguration) -> CleanupProvider {
+        var provider = configuration.cleanupProvider
+        if provider == .ollama,
+           SystemMemory.availableMemoryGB() < configuration.cleanupRAMThresholdGB {
+            if CleanupProvider.openRouter.hasKey() {
+                provider = .openRouter
+            } else if CleanupProvider.openAI.hasKey() {
+                provider = .openAI
+            }
+        }
+        return provider
     }
 
     /// Static help text for Settings / Onboarding (no network).
     static func configurationSummary(config: WritingPolishConfiguration) -> String {
-        let base = OllamaPolishClient.normalizeBaseURL(config.ollamaBaseURL)
-        let model = config.ollamaModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        if model.isEmpty {
-            return "Set an Ollama model name (e.g. llama3.2:3b)."
+        let provider = effectiveProvider(config)
+        switch provider {
+        case .openRouter, .openAI:
+            let model = CleanupModel.model(id: config.cleanupModelID)?.label ?? config.cleanupModelID
+            if provider.hasKey() {
+                return "Cleans up via \(provider.displayName) · \(model), temperature 0."
+            }
+            return "Add a \(provider.displayName) API key below to enable cloud cleanup."
+        case .ollama:
+            let base = OllamaPolishClient.normalizeBaseURL(config.ollamaBaseURL)
+            let model = config.ollamaModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            if model.isEmpty {
+                return "Set an Ollama model name (e.g. llama3.2:3b)."
+            }
+            return "Uses local Ollama at \(base) with model “\(model)”."
         }
-        return "Uses Ollama at \(base) with model “\(model)”. Run `ollama serve` and `ollama pull \(model)`."
     }
 
-    /// Best-effort polish; falls back to `rawTranscript` on failure.
+    /// Best-effort cleanup; falls back to `rawTranscript` on failure.
     static func polish(rawTranscript: String, configuration: WritingPolishConfiguration) async -> String {
         let trimmed = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return rawTranscript }
         guard configuration.isEnabled else { return rawTranscript }
 
-        let model = configuration.ollamaModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !model.isEmpty else {
-            print("WritingPolishService: empty Ollama model name — skipping polish")
-            return rawTranscript
+        let provider = effectiveProvider(configuration)
+
+        // Remote cleanup (OpenRouter / OpenAI) uses the verbatim cleanup prompt + temp 0.
+        if provider.isRemote, provider.hasKey() {
+            do {
+                let out = try await RemoteCleanupClient.cleanup(
+                    provider: provider,
+                    modelID: configuration.cleanupModelID,
+                    transcript: trimmed
+                )
+                let clean = sanitizeModelOutput(out).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !clean.isEmpty { return clean }
+            } catch {
+                print("WritingPolishService: remote cleanup (\(provider.rawValue)) failed — \(error.localizedDescription); falling back")
+                // fall through to local / raw
+            }
         }
 
+        // Local Ollama path (existing behavior + presets).
+        let model = configuration.ollamaModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty else { return rawTranscript }
         do {
             let system = buildSystemPrompt(configuration: configuration)
             let polished = try await OllamaPolishClient.polish(
