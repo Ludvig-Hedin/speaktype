@@ -355,6 +355,8 @@ struct GeneralSettingsTab: View {
                         .padding(.top, 4)
                 }
 
+                RemoteTranscriptionSettingsSection()
+
                 WritingPolishSettingsSection()
 
                 // Updates

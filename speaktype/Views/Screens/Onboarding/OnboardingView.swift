@@ -34,6 +34,11 @@ struct OnboardingView: View {
                             withAnimation(.easeInOut(duration: 0.5)) { currentPage = 4 }
                         })
                         .transition(.opacity)
+                    } else if currentPage == 4 {
+                        OnboardingTranscriptionEnginePage(onContinue: {
+                            withAnimation(.easeInOut(duration: 0.5)) { currentPage = 5 }
+                        })
+                        .transition(.opacity)
                     } else {
                         OnboardingModelDownloadPage(finishAction: {
                             completeOnboarding()
@@ -721,6 +726,95 @@ struct OnboardingPolishModelPage: View {
             .toggleStyle(.switch)
             .frame(maxWidth: 520, alignment: .leading)
             .padding(.top, 8)
+
+            Spacer()
+
+            ContinueButton(isEnabled: true, action: onContinue)
+                .padding(.bottom, 48)
+        }
+        .padding(.horizontal, 60)
+        .padding(.vertical, 40)
+    }
+}
+
+// MARK: - Transcription engine (onboarding)
+
+/// Lets new users choose on-device vs cloud transcription. Defaults to on-device (privacy-safe);
+/// cloud API keys are entered later in Settings so onboarding stays short.
+struct OnboardingTranscriptionEnginePage: View {
+    let onContinue: () -> Void
+
+    @AppStorage(TranscriptionModeUserDefaults.modeKey) private var modeRaw = TranscriptionMode.localOnly.rawValue
+
+    private var mode: TranscriptionMode { TranscriptionMode(rawValue: modeRaw) ?? .localOnly }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            VStack(spacing: 16) {
+                Text("TRANSCRIPTION ENGINE")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .textCase(.uppercase)
+                    .tracking(2)
+
+                Text("On-device or cloud?")
+                    .font(.system(size: 40, weight: .regular, design: .serif))
+                    .foregroundStyle(Color.textPrimary)
+                    .multilineTextAlignment(.center)
+
+                Text(
+                    "On-device keeps every recording on your Mac. Cloud (OpenAI or Groq) can be faster and lighter on resources, but uploads your audio. Automatic balances both based on your Mac's load. You can change this anytime in Settings."
+                )
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(Color.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 480)
+            }
+
+            VStack(spacing: 10) {
+                ForEach(TranscriptionMode.allCases) { option in
+                    Button(action: { modeRaw = option.rawValue }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: mode == option ? "largecircle.fill.circle" : "circle")
+                                .foregroundStyle(mode == option ? Color.textPrimary : Color.textMuted)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(option.displayName)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Color.textPrimary)
+                                Text(option.explanation)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.textSecondary)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                        }
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(mode == option ? Color.bgSelected.opacity(0.6) : Color.bgCard)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(Color.border.opacity(mode == option ? 0.5 : 0.25), lineWidth: 1)
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if mode.canUseRemote {
+                    Text("You'll add your \(TranscriptionModeUserDefaults.selectedRemoteProvider?.displayName ?? "provider") API key in Settings → Transcription engine.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.textMuted)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 4)
+                }
+            }
+            .frame(maxWidth: 520)
+            .padding(.top, 28)
 
             Spacer()
 
