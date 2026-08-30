@@ -316,6 +316,35 @@ class UpdateService: ObservableObject {
         guard let appURL = contents.first(where: { $0.pathExtension == "app" }) else {
             throw UpdateError.appNotFoundInDMG
         }
+        guard Bundle(url: appURL)?.bundleIdentifier == "com.ludvighedin.speaktype" else {
+            throw UpdateError.invalidAppSignature
+        }
+
+        let verify = Process()
+        verify.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        verify.arguments = ["--verify", "--deep", "--strict", appURL.path]
+        verify.standardOutput = FileHandle.nullDevice
+        verify.standardError = FileHandle.nullDevice
+        try verify.run()
+        verify.waitUntilExit()
+        guard verify.terminationStatus == 0 else { throw UpdateError.invalidAppSignature }
+
+        let details = Process()
+        details.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        details.arguments = ["-dv", "--verbose=4", appURL.path]
+        let detailsPipe = Pipe()
+        details.standardOutput = FileHandle.nullDevice
+        details.standardError = detailsPipe
+        try details.run()
+        details.waitUntilExit()
+        let signingText = String(
+            data: detailsPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
+        guard details.terminationStatus == 0,
+              signingText.contains("TeamIdentifier=XDBG7P4V96") else {
+            throw UpdateError.invalidAppSignature
+        }
         return appURL
     }
 
@@ -325,12 +354,19 @@ class UpdateService: ObservableObject {
         let destURL = URL(fileURLWithPath: runningPath)
         let fm = FileManager.default
 
-        // Remove old app
-        if fm.fileExists(atPath: destURL.path) {
-            try fm.removeItem(at: destURL)
+        let stagingURL = destURL.deletingLastPathComponent()
+            .appendingPathComponent(".SpeakType-update-\(UUID().uuidString).app")
+        try fm.copyItem(at: sourceApp, to: stagingURL)
+        do {
+            _ = try fm.replaceItemAt(
+                destURL,
+                withItemAt: stagingURL,
+                backupItemName: ".SpeakType-update-backup.app"
+            )
+        } catch {
+            try? fm.removeItem(at: stagingURL)
+            throw error
         }
-        // Copy new app
-        try fm.copyItem(at: sourceApp, to: destURL)
     }
 
     nonisolated private static func detachDMG(mountPoint: URL) {
@@ -392,6 +428,7 @@ enum UpdateError: LocalizedError {
     case appNotFoundInDMG
     case copyFailed(String)
     case verificationFailed
+    case invalidAppSignature
 
     var errorDescription: String? {
         switch self {
@@ -399,6 +436,7 @@ enum UpdateError: LocalizedError {
         case .appNotFoundInDMG: return "Could not find the app inside the downloaded update."
         case .copyFailed(let msg): return "Failed to install: \(msg)"
         case .verificationFailed: return "The downloaded update failed verification."
+        case .invalidAppSignature: return "The update is not a valid SpeakType app."
         }
     }
 }

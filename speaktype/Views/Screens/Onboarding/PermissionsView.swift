@@ -3,9 +3,7 @@ import AVFoundation
 
 
 struct PermissionsView: View {
-    @State private var micStatus: AVAuthorizationStatus = .notDetermined
-    @State private var accessibilityStatus: Bool = false
-    @State private var timer: Timer?
+    @ObservedObject private var permissions = PermissionService.shared
 
     var body: some View {
         ScrollView {
@@ -34,8 +32,8 @@ struct PermissionsView: View {
                         color: .green,
                         title: "Microphone Access",
                         desc: "Allow SpeakType to record your voice for transcription",
-                        isGranted: micStatus == .authorized,
-                        action: { openSettings(for: "Privacy_Microphone") }
+                        isGranted: permissions.isMicGranted,
+                        action: { permissions.openSystemSettings(pane: "Privacy_Microphone") }
                     )
                     
                     // Accessibility
@@ -44,11 +42,8 @@ struct PermissionsView: View {
                         color: .green,
                         title: "Accessibility Access",
                         desc: "Allow SpeakType to paste transcribed text directly",
-                        isGranted: accessibilityStatus,
-                        action: { 
-                            ClipboardService.shared.requestAccessibilityPermission()
-                            // System dialog handles opening Settings when user clicks "Open System Settings"
-                        }
+                        isGranted: permissions.isAccessibilityGranted,
+                        action: { permissions.requestAccessibilityPermission() }
                     )
                     
 
@@ -58,30 +53,8 @@ struct PermissionsView: View {
             .padding(.bottom, 40)
         }
         .background(Color.clear)
-        .onAppear {
-            checkPermissions()
-            startPolling()
-        }
-        .onDisappear {
-            timer?.invalidate()
-        }
-    }
-    
-    func startPolling() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            checkPermissions()
-        }
-    }
-    
-    func checkPermissions() {
-        micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-        accessibilityStatus = AXIsProcessTrusted()
-    }
-    
-    func openSettings(for pane: String) {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") {
-            NSWorkspace.shared.open(url)
-        }
+        .onAppear { permissions.startObserving() }
+        .onDisappear { permissions.stopObserving() }
     }
 }
 

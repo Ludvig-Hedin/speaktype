@@ -11,6 +11,7 @@ import Security
 ///   might echo request context.
 enum RemoteAPIKeyStore {
     private static let service = "sh.polar.speaktype.apikeys"
+    static let didChangeNotification = Notification.Name("RemoteAPIKeyStore.didChange")
 
     // MARK: - Account-string core (works for any provider: STT or cleanup)
 
@@ -26,7 +27,9 @@ enum RemoteAPIKeyStore {
             kSecValueData: data,
             kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock
         ]
-        return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
+        let didSave = SecItemAdd(query as CFDictionary, nil) == errSecSuccess
+        if didSave { NotificationCenter.default.post(name: didChangeNotification, object: nil) }
+        return didSave
     }
 
     /// Resolve a key. Precedence: process **env var** (dev convenience when launched from a
@@ -62,6 +65,7 @@ enum RemoteAPIKeyStore {
             kSecAttrAccount: account
         ]
         let status = SecItemDelete(query as CFDictionary)
+        if status == errSecSuccess { NotificationCenter.default.post(name: didChangeNotification, object: nil) }
         return status == errSecSuccess || status == errSecItemNotFound
     }
 

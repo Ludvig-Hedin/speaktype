@@ -34,7 +34,7 @@ enum AppLogger {
     /// Permissions and system access
     static let permissions = Logger(subsystem: subsystem, category: "Permissions")
     
-    private static let subsystem = "com.2048labs.speaktype"
+    private static let subsystem = "com.ludvighedin.speaktype"
 }
 
 // MARK: - Convenience Methods
@@ -64,4 +64,3 @@ extension AppLogger {
         category.info("✅ \(message)")
     }
 }
-

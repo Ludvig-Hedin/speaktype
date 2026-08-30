@@ -19,10 +19,14 @@ struct MainView: View {
             ZStack {
                 Color.bgContent
                     .ignoresSafeArea()
-                
+
+                // Subtle cross-fade between sections (System Settings-style), not a hard cut.
                 contentView
+                    .id(selection)
+                    .transition(.opacity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(.easeInOut(duration: 0.22), value: selection)
         }
         .background(Color.bgSidebar)
         .onAppear {

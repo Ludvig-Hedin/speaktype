@@ -41,6 +41,28 @@ enum RemoteCleanupClient {
     }
 
     static func cleanup(provider: CleanupProvider, modelID: String, transcript: String) async throws -> String {
+        try await process(provider: provider, modelID: modelID, transcript: transcript, instruction: systemPrompt)
+    }
+
+    static func summarize(provider: CleanupProvider, modelID: String, transcript: String) async throws -> String {
+        let instruction = """
+            Summarize the transcript in the same language. Keep names, decisions, dates, and action items.
+            Return only the summary. Do not add facts that are not present in the transcript.
+            """
+        return try await process(
+            provider: provider,
+            modelID: modelID,
+            transcript: transcript,
+            instruction: instruction
+        )
+    }
+
+    private static func process(
+        provider: CleanupProvider,
+        modelID: String,
+        transcript: String,
+        instruction: String
+    ) async throws -> String {
         guard let url = provider.chatCompletionsURL else { throw CleanupError.badURL }
         guard let key = RemoteAPIKeyStore.read(account: provider.keychainAccount, envVar: provider.envVar) else {
             throw CleanupError.missingKey
@@ -61,7 +83,7 @@ enum RemoteCleanupClient {
             "model": modelID,
             "temperature": 0,
             "messages": [
-                ["role": "system", "content": systemPrompt],
+                ["role": "system", "content": instruction],
                 ["role": "user", "content": transcript],
             ],
         ]

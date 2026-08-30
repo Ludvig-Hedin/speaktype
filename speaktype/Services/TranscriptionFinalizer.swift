@@ -15,4 +15,26 @@ enum TranscriptionFinalizer {
         let configuration = WritingPolishConfiguration.loadFromUserDefaults()
         return WritingPolishService.willPolish(configuration: configuration)
     }
+
+    static func summarizeTranscript(_ transcript: String) async throws -> String {
+        let configuration = WritingPolishConfiguration.loadFromUserDefaults()
+        let provider = WritingPolishService.effectiveProvider(configuration)
+        guard provider.isRemote, provider.hasKey() else {
+            throw RemoteCleanupClient.CleanupError.missingKey
+        }
+        return try await RemoteCleanupClient.summarize(
+            provider: provider,
+            modelID: configuration.cleanupModelID,
+            transcript: transcript
+        )
+    }
+
+    static func polishTranscriptOnDemand(_ transcript: String) async -> String {
+        var configuration = WritingPolishConfiguration.loadFromUserDefaults()
+        configuration.isEnabled = true
+        return await WritingPolishService.polish(
+            rawTranscript: transcript,
+            configuration: configuration
+        )
+    }
 }

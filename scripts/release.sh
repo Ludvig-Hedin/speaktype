@@ -103,7 +103,7 @@ if ! xcrun notarytool history --keychain-profile "AC_PASSWORD" &>/dev/null; then
   echo ""
   echo "How to get it:"
   echo "  1. Go to: https://appleid.apple.com"
-  echo "  2. Sign in with: mail2048labs@gmail.com"
+  echo "  2. Sign in with the Apple ID for Team XDBG7P4V96"
   echo "  3. Security → App-Specific Passwords"
   echo "  4. Generate password (or use existing one)"
   echo ""
@@ -117,7 +117,7 @@ if ! xcrun notarytool history --keychain-profile "AC_PASSWORD" &>/dev/null; then
   
   echo "Storing credentials in Keychain..."
   xcrun notarytool store-credentials "AC_PASSWORD" \
-    --apple-id "mail2048labs@gmail.com" \
+    --apple-id "ludvig@ludvighedin.com" \
     --team-id "XDBG7P4V96" \
     --password "$APP_PASSWORD"
   

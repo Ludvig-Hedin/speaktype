@@ -80,14 +80,19 @@ class ClipboardService {
     }
 
     // Check if we have permission to send keystrokes
-    var isAccessibilityTrusted: Bool {
+    /// Blocking `tccd` round-trip — never call this from the main thread.
+    /// Prefer `PermissionService.shared.isAccessibilityGranted` for UI and hot paths.
+    nonisolated var isAccessibilityTrusted: Bool {
         return AXIsProcessTrusted()
     }
 
-    // Request permission via system prompt
+    /// Request permission via the system prompt.
+    /// Delegates to `PermissionService` so the blocking `tccd` call stays off the main
+    /// thread and the dialog is brought to the front — calling
+    /// `AXIsProcessTrustedWithOptions` directly here used to freeze the UI.
     func requestAccessibilityPermission() {
-        let options =
-            [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
+        Task { @MainActor in
+            PermissionService.shared.requestAccessibilityPermission()
+        }
     }
 }

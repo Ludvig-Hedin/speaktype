@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
 ## [Unreleased]
+- **Reliability:** Recording now starts only after microphone permission, capture, and the WAV writer are ready. Cloud-only ignores stale offline hints, shows the real provider error, and treats an empty successful STT response as no speech. Cancellation cannot save or paste late output. Ollama controls stay hidden for cloud cleanup. History cleanup removes audio files but keeps usage statistics.
 - **macOS, release:** Release scripts use Apple Team `XDBG7P4V96` consistently.
 - **macOS, recorder:** Duplicate stop signals are coalesced so only one audio finalization and transcription can run for a recording.
 - **macOS, cloud transcription:** Cloud only no longer starts or falls back to a local Whisper model. The recorder closes immediately when cancelled, including during warm-up and transcription.

@@ -17,17 +17,40 @@ enum Constants {
     }
     
     // MARK: - UI Constants
-    /// 4/8-pt rhythm: base unit4; cards and sheets use multiples for calmer grouping.
+    /// One honored radius + spacing rhythm. Route every corner/gap through these —
+    /// no inline literals (they had drifted to 6/10/14/22/24/26 across the app).
     enum UI {
-        /// Default control rounding (buttons, chips). Prefer `Capsule()` for primary actions.
-        static let cornerRadius: CGFloat = 12.0
-        /// Large surfaces (cards, panels) — Apple-style continuous corners.
-        static let cardCornerRadius: CGFloat = 18.0
-        /// Sidebar rows and nested groups.
-        static let sidebarItemCornerRadius: CGFloat = 12.0
-        static let padding: CGFloat = 16.0
-        static let smallPadding: CGFloat = 8.0
-        static let largePadding: CGFloat = 24.0
+        // Radius scale — three steps only.
+        /// Nested chips, inline panels, small pills.
+        static let radiusSmall: CGFloat = 8.0
+        /// Controls: buttons, menus, rows, permission items.
+        static let radiusControl: CGFloat = 10.0
+        /// Large surfaces: cards, panels, sheets — continuous corners.
+        static let radiusCard: CGFloat = 16.0
+
+        /// Legacy aliases (kept so existing call sites compile) — map onto the scale above.
+        static let cornerRadius: CGFloat = radiusControl
+        static let cardCornerRadius: CGFloat = radiusCard
+        static let sidebarItemCornerRadius: CGFloat = radiusControl
+
+        // Spacing scale — strict 4/8 grid.
+        static let space1: CGFloat = 4.0
+        static let space2: CGFloat = 8.0
+        static let space3: CGFloat = 12.0
+        static let space4: CGFloat = 16.0
+        static let space5: CGFloat = 20.0
+        static let space6: CGFloat = 24.0
+
+        /// Standard rhythm: page edge 24, card interior 20, inter-card gap 16, intra-section rows 12.
+        static let pagePadding: CGFloat = space6
+        static let cardPadding: CGFloat = space5
+        static let sectionGap: CGFloat = space4
+        static let rowGap: CGFloat = space3
+
+        // Legacy padding aliases.
+        static let padding: CGFloat = space4
+        static let smallPadding: CGFloat = space2
+        static let largePadding: CGFloat = space6
     }
     
     // MARK: - Animation

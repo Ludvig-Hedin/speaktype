@@ -1,16 +1,22 @@
 import SwiftUI
+import AppKit
 import AVFoundation
 import CoreMedia
 import UniformTypeIdentifiers
 
 struct TranscribeAudioView: View {
-    @StateObject private var audioRecorder = AudioRecordingService()
+    @StateObject private var audioRecorder = AudioRecordingService.shared
+    @StateObject private var historyService = HistoryService.shared
     private var whisperService: WhisperService { WhisperService.shared }
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
     @State private var transcribedText: String = ""
     @State private var isTranscribing = false
     @State private var transcribingStatusText = "Transcribing..."
     @State private var showFileImporter = false
+    @State private var polishNewTranscripts = false
+    @State private var workingItemID: UUID?
+    @State private var displayedVersion: [UUID: TranscriptVersion] = [:]
+    @State private var actionError: String?
     
     var body: some View {
         VStack(spacing: 24) {
@@ -28,8 +34,8 @@ struct TranscribeAudioView: View {
             
             // Main Drop Zone / Action Area
             ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(style: StrokeStyle(lineWidth: 2, dash: [8]))
+                RoundedRectangle(cornerRadius: Constants.UI.radiusCard, style: .continuous)
+                    .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [8]))
                     .foregroundStyle(Color.border)
                     .frame(maxWidth: .infinity, maxHeight: 360)
                     .contentShape(Rectangle())
@@ -69,7 +75,7 @@ struct TranscribeAudioView: View {
                         Button(action: {
                             Task {
                                 if let url = await audioRecorder.stopRecording() {
-                                    startTranscription(url: url)
+                                    startTranscription(url: url, ownsFile: true)
                                 }
                             }
                         }) {
@@ -85,9 +91,10 @@ struct TranscribeAudioView: View {
                             .padding(.vertical, 12)
                             .background(Color.accentError)
                             .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous))
                         }
                         .buttonStyle(.stPlain)
+                        .frame(width: 170, height: 42)
                     } else if isTranscribing {
                         VStack(spacing: 8) {
                             ProgressView()
@@ -97,62 +104,42 @@ struct TranscribeAudioView: View {
                         }
                     } else {
                         Button(action: {
-                            audioRecorder.startRecording()
+                            Task { _ = await audioRecorder.startRecording() }
                         }) {
                             HStack(spacing: 8) {
                                 Image(systemName: "mic.fill")
                                 Text("Start Recording")
                             }
                         }
-                        .buttonStyle(.stPrimary)
+                        .buttonStyle(.stAction)
+                        .frame(width: 170, height: 42)
                     }
                 }
             }
             .padding(.horizontal, 24)
+
+            Toggle("Polish new transcripts", isOn: $polishNewTranscripts)
+                .font(Typography.bodyMedium)
+                .toggleStyle(.checkbox)
+                .padding(.horizontal, 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
             
             // Transcription Result
-            if !transcribedText.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Transcription")
-                        .font(Typography.headlineSmall)
-                        .foregroundStyle(Color.textPrimary)
-                    
-                    ScrollView {
-                        Text(transcribedText)
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
-                    }
-                    .frame(height: 120)
-                    .background(Color.bgHover)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    
-                    HStack(spacing: 12) {
-                        Button(action: {
-                            ClipboardService.shared.copy(text: transcribedText)
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "doc.on.doc")
-                                Text("Copy")
-                            }
+            if !historyService.items.isEmpty {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(historyService.items) { item in
+                            transcriptCard(item)
                         }
-                        .buttonStyle(.stSecondary)
-                        
-                        Button(action: {
-                            ClipboardService.shared.paste()
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "doc.on.clipboard")
-                                Text("Paste")
-                            }
-                        }
-                        .buttonStyle(.stSecondary)
                     }
+                    .padding(.horizontal, 24)
                 }
-                .themedCard()
-                .padding(.horizontal, 24)
+            }
+
+            if let actionError {
+                Text(actionError)
+                    .font(Typography.captionSmall)
+                    .foregroundStyle(Color.accentError)
             }
             
             Spacer()
@@ -173,9 +160,11 @@ struct TranscribeAudioView: View {
             }
         }
         .onAppear {
-            Task {
+            if TranscriptionModeUserDefaults.mode != .remoteOnly {
+                Task {
                 if !whisperService.isInitialized {
                     try? await whisperService.initialize()
+                }
                 }
             }
         }
@@ -200,14 +189,14 @@ struct TranscribeAudioView: View {
                 url.stopAccessingSecurityScopedResource()
             }
             
-            startTranscription(url: tempURL)
+            startTranscription(url: tempURL, ownsFile: true)
         } catch {
             print("Error copying file: \(error)")
             if didStartAccessing {
                 url.stopAccessingSecurityScopedResource()
             }
             // Fallback: try original URL if copy fails
-            startTranscription(url: url)
+            startTranscription(url: url, ownsFile: false)
         }
     }
     
@@ -226,7 +215,7 @@ struct TranscribeAudioView: View {
                             try FileManager.default.copyItem(at: url, to: tempURL)
                             
                             DispatchQueue.main.async {
-                                startTranscription(url: tempURL)
+                                startTranscription(url: tempURL, ownsFile: true)
                             }
                         } catch {
                             print("Error copying dropped file: \(error)")
@@ -238,23 +227,33 @@ struct TranscribeAudioView: View {
         }
     }
     
-    private func startTranscription(url: URL) {
+    private func startTranscription(url: URL, ownsFile: Bool) {
         Task {
             isTranscribing = true
             transcribingStatusText = "Transcribing..."
             do {
                 let outcome = try await TranscriptionCoordinator.transcribe(audioFile: url, language: transcriptionLanguage)
-                if TranscriptionFinalizer.willPolishNextTranscript() {
+                if polishNewTranscripts {
                     await MainActor.run { transcribingStatusText = "Polishing..." }
                 }
-                transcribedText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: outcome.text)
+                let rawTranscript = outcome.text
+                guard !rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    throw RemoteTranscriptionClient.ClientError.emptyResponse
+                }
+                transcribedText = polishNewTranscripts
+                    ? await TranscriptionFinalizer.polishTranscriptOnDemand(rawTranscript)
+                    : rawTranscript
                 // Save to History
                 let duration = try await getAudioDuration(url: url)
                 HistoryService.shared.addItem(
                     transcript: transcribedText, duration: duration, audioFileURL: url,
                     modelUsed: outcome.modelLabel, transcriptionTime: outcome.transcriptionTime,
-                    provider: outcome.provider.rawValue, estimatedCostUSD: outcome.estimatedCostUSD)
+                    provider: outcome.provider.rawValue,
+                    estimatedCostUSD: outcome.estimatedCostUSD,
+                    rawTranscript: rawTranscript,
+                    polishedTranscript: polishNewTranscripts ? transcribedText : nil)
             } catch {
+                if ownsFile { try? FileManager.default.removeItem(at: url) }
                 transcribedText = "Error: \(error.localizedDescription)"
             }
             isTranscribing = false
@@ -267,4 +266,98 @@ struct TranscribeAudioView: View {
         let duration = try await asset.load(.duration)
         return CMTimeGetSeconds(duration)
     }
+
+    @ViewBuilder
+    private func transcriptCard(_ item: HistoryItem) -> some View {
+        let version = displayedVersion[item.id] ?? (item.polishedTranscript == nil ? .raw : .polished)
+        let text = text(for: item, version: version)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(item.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(Typography.captionSmall)
+                    .foregroundStyle(Color.textMuted)
+                Spacer()
+                if workingItemID == item.id { ProgressView().controlSize(.small) }
+            }
+
+            Text(text)
+                .font(Typography.bodyMedium)
+                .foregroundStyle(Color.textPrimary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 8) {
+                actionButton("Raw", icon: "text.alignleft") { displayedVersion[item.id] = .raw }
+                actionButton("Polish", icon: "wand.and.stars") { polish(item) }
+                actionButton("Summary", icon: "list.bullet.rectangle") { summarize(item) }
+                actionButton("Markdown", icon: "square.and.arrow.down") { exportMarkdown(item) }
+                Spacer()
+            }
+            .disabled(workingItemID != nil)
+        }
+        .themedCard()
+    }
+
+    private func actionButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Label(title, systemImage: icon).frame(minWidth: 92) }
+            .buttonStyle(.stSecondary)
+            .frame(height: 36)
+    }
+
+    private func text(for item: HistoryItem, version: TranscriptVersion) -> String {
+        switch version {
+        case .raw: return item.rawTranscript ?? item.transcript
+        case .polished: return item.polishedTranscript ?? item.transcript
+        case .summary: return item.summary ?? item.transcript
+        }
+    }
+
+    private func polish(_ item: HistoryItem) {
+        workingItemID = item.id
+        actionError = nil
+        Task {
+            let source = item.rawTranscript ?? item.transcript
+            let result = await TranscriptionFinalizer.polishTranscriptOnDemand(source)
+            await MainActor.run {
+                historyService.setPolishedTranscript(result, for: item.id)
+                displayedVersion[item.id] = .polished
+                workingItemID = nil
+            }
+        }
+    }
+
+    private func summarize(_ item: HistoryItem) {
+        workingItemID = item.id
+        actionError = nil
+        Task {
+            do {
+                let result = try await TranscriptionFinalizer.summarizeTranscript(item.rawTranscript ?? item.transcript)
+                await MainActor.run {
+                    historyService.setSummary(result, for: item.id)
+                    displayedVersion[item.id] = .summary
+                    workingItemID = nil
+                }
+            } catch {
+                await MainActor.run {
+                    actionError = error.localizedDescription
+                    workingItemID = nil
+                }
+            }
+        }
+    }
+
+    private func exportMarkdown(_ item: HistoryItem) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        panel.nameFieldStringValue = "SpeakType-Transcript.md"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let raw = item.rawTranscript ?? item.transcript
+        var markdown = "# Transcript\n\nRecorded: \(item.date.formatted(date: .long, time: .shortened))\n\n## Raw\n\n\(raw)\n"
+        if let polished = item.polishedTranscript { markdown += "\n## Polished\n\n\(polished)\n" }
+        if let summary = item.summary { markdown += "\n## Summary\n\n\(summary)\n" }
+        do { try markdown.write(to: url, atomically: true, encoding: .utf8) }
+        catch { actionError = error.localizedDescription }
+    }
 }
+
+private enum TranscriptVersion { case raw, polished, summary }

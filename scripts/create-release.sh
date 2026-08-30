@@ -85,7 +85,7 @@ if ! xcrun notarytool history --keychain-profile "AC_PASSWORD" &>/dev/null; then
   echo ""
   echo "You need an app-specific password for notarization."
   echo "  1. Go to: https://appleid.apple.com"
-  echo "  2. Sign in with: mail2048labs@gmail.com"
+  echo "  2. Sign in with the Apple ID for Team XDBG7P4V96"
   echo "  3. Security → App-Specific Passwords → Generate"
   echo ""
   read -p "Enter app-specific password: " -s APP_PASSWORD
@@ -93,7 +93,7 @@ if ! xcrun notarytool history --keychain-profile "AC_PASSWORD" &>/dev/null; then
   [ -z "$APP_PASSWORD" ] && { echo "❌ Password required"; exit 1; }
 
   xcrun notarytool store-credentials "AC_PASSWORD" \
-    --apple-id "mail2048labs@gmail.com" \
+    --apple-id "ludvig@ludvighedin.com" \
     --team-id "XDBG7P4V96" \
     --password "$APP_PASSWORD"
   echo ""
@@ -125,7 +125,7 @@ APP_PATH="build/Build/Products/Release/speaktype.app"
 [ -d "$APP_PATH" ] || { echo "❌ Release app not found at $APP_PATH"; exit 1; }
 
 APP_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Contents/Info.plist")
-if [ "$APP_BUNDLE_ID" != "com.2048labs.speaktype" ]; then
+if [ "$APP_BUNDLE_ID" != "com.ludvighedin.speaktype" ]; then
   echo "❌ Refusing to package unexpected app bundle: $APP_BUNDLE_ID"
   exit 1
 fi

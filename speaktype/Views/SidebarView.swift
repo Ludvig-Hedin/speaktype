@@ -32,18 +32,6 @@ struct SidebarView: View {
 
             Spacer()
 
-            // 2048 Labs branding link
-            Button(action: {
-                NSWorkspace.shared.open(URL(string: "https://2048labs.com")!)
-            }) {
-                Text("2048 LABS")
-                    .font(.system(size: 16, weight: .medium, design: .monospaced))
-                    .tracking(3)
-                    .foregroundStyle(Color.textMuted.opacity(0.25))
-            }
-            .buttonStyle(.stPlain)
-            .padding(.bottom, 6)
-
             // Build version indicator — debug only, never shown in production
             #if DEBUG
                 Text(buildVersionString)
@@ -82,11 +70,12 @@ private enum SidebarConstants {
 
 private struct SidebarHeader: View {
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             Image("AppLogo")
                 .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 48, height: 48)
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 26, height: 26)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             Text("SpeakType")
                 .font(Typography.sidebarLogo)
@@ -123,10 +112,11 @@ struct SidebarButton: View {
                 RoundedRectangle(cornerRadius: SidebarConstants.itemCornerRadius, style: .continuous)
                     .fill(isSelected ? Color.bgSelected : (isHovered ? Color.bgHover : Color.clear))
             )
+            // Active row gets a whisper-of-blue hairline — the "you are here" cue.
             .overlay(
                 RoundedRectangle(cornerRadius: SidebarConstants.itemCornerRadius, style: .continuous)
                     .strokeBorder(
-                        Color.textPrimary.opacity(isSelected ? 0.12 : 0),
+                        Color.accentBlue.opacity(isSelected ? 0.4 : 0),
                         lineWidth: 1
                     )
             )

@@ -25,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.register(defaults: [
             "showDockIcon": false,
             "launchAtLogin": true,
+            "autoUpdate": true,
         ])
 
         // Reachability invariant: never leave the app with no Dock icon AND no menu bar icon,
@@ -67,6 +68,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup dynamic hotkey monitoring based on user selection
         setupHotkeyMonitoring()
 
+        // Seed permission state once (off-main), then keep it fresh whenever the app comes
+        // forward. Cheaper than a permanent poll, and the values are read on the hotkey
+        // hot path, so they must never be stale.
+        Task { await PermissionService.shared.refresh() }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in await PermissionService.shared.refresh() }
+        }
+
         checkForUpdatesOnLaunch()
 
         UpdateService.shared.showUpdateWindowPublisher
@@ -81,6 +94,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await ModelDownloadService.shared.refreshDownloadedModels()
             await SelectedModelPreference.preloadSelectedModelIfDownloaded()
         }
+
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

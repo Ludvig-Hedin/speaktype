@@ -45,6 +45,9 @@ struct RemoteTranscriptionSettingsSection: View {
             }
         }
         .onAppear(perform: refreshKeyState)
+        .onReceive(NotificationCenter.default.publisher(for: RemoteAPIKeyStore.didChangeNotification)) { _ in
+            refreshKeyState()
+        }
     }
 
     // MARK: - Mode
@@ -88,18 +91,27 @@ struct RemoteTranscriptionSettingsSection: View {
                 .font(Typography.bodyMedium)
                 .foregroundStyle(Color.textPrimary)
             Spacer()
-            Picker("", selection: Binding(
-                get: { resolvedModelId },
-                set: { modelId = $0 }
-            )) {
+            Menu {
                 if let provider {
                     ForEach(RemoteTranscriptionModel.models(for: provider)) { m in
-                        Text(m.name).tag(m.id)
+                        Button(m.name) { modelId = m.id }
                     }
                 }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(currentModelName)
+                        .font(Typography.bodySmall)
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.textMuted)
+                }
+                .menuCapsule()
             }
-            .labelsHidden()
-            .frame(maxWidth: 220)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .clickActionPointerCursor()
         }
     }
 
@@ -107,6 +119,12 @@ struct RemoteTranscriptionSettingsSection: View {
         guard let provider else { return "" }
         if let m = RemoteTranscriptionModel.model(id: modelId), m.provider == provider { return m.id }
         return RemoteTranscriptionModel.defaultModel(for: provider)?.id ?? ""
+    }
+
+    private var currentModelName: String {
+        guard let provider else { return "Not selected" }
+        return RemoteTranscriptionModel.models(for: provider)
+            .first(where: { $0.id == resolvedModelId })?.name ?? "Select…"
     }
 
     // MARK: - API key
@@ -122,8 +140,9 @@ struct RemoteTranscriptionSettingsSection: View {
                     Button("Get a key ↗") {
                         if let url = URL(string: provider.apiKeyURL) { NSWorkspace.shared.open(url) }
                     }
-                    .buttonStyle(.link)
+                    .buttonStyle(.stPlain)
                     .font(Typography.captionSmall)
+                    .foregroundStyle(Color.accentBlue)
                 }
             }
 
@@ -131,20 +150,23 @@ struct RemoteTranscriptionSettingsSection: View {
                 HStack(spacing: 10) {
                     Label("Key saved", systemImage: "checkmark.seal.fill")
                         .font(Typography.captionSmall)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.accentSuccess)
                     Spacer()
                     Button("Replace") { keySaved = false; apiKeyInput = "" }
-                        .buttonStyle(.link)
+                        .buttonStyle(.stPlain)
                         .font(Typography.captionSmall)
+                        .foregroundStyle(Color.textSecondary)
                     Button("Remove", role: .destructive) { removeKey() }
-                        .buttonStyle(.link)
+                        .buttonStyle(.stPlain)
                         .font(Typography.captionSmall)
+                        .foregroundStyle(Color.accentError)
                 }
             } else {
                 HStack(spacing: 8) {
                     SecureField("sk-…", text: $apiKeyInput)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.app)
                     Button("Save") { saveKey() }
+                        .buttonStyle(.stAction)
                         .disabled(apiKeyInput.trimmingCharacters(in: .whitespaces).isEmpty || provider == nil)
                 }
             }

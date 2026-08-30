@@ -5,6 +5,7 @@ class MiniRecorderWindowController: NSObject {
     private var panel: NSPanel?
     private var hostingController: NSHostingController<AnyView>?
     private var lastActiveApp: NSRunningApplication?
+    private var pendingPasteTarget: NSRunningApplication?
 
     // Start recording - show panel and begin recording
     func startRecording() {
@@ -49,6 +50,7 @@ class MiniRecorderWindowController: NSObject {
 
         // Keep focus unchanged while the hotkey is still being released.
         // Re-activation happens later during commit, right before auto-paste.
+        pendingPasteTarget = lastActiveApp
         NotificationCenter.default.post(name: .recordingStopRequested, object: nil)
     }
 
@@ -107,6 +109,8 @@ class MiniRecorderWindowController: NSObject {
     }
 
     private func handleCommit(text: String) {
+        let pasteTarget = pendingPasteTarget ?? lastActiveApp
+        pendingPasteTarget = nil
         Task {
             // 1. Copy to clipboard
             ClipboardService.shared.copy(text: text)
@@ -116,8 +120,12 @@ class MiniRecorderWindowController: NSObject {
                 self.panel?.orderOut(nil)
             }
 
-            // 3. Check accessibility - if not granted, just copy to clipboard silently
-            let accessibilityTrusted = ClipboardService.shared.isAccessibilityTrusted
+            // 3. Check accessibility - if not granted, just copy to clipboard silently.
+            // Off the main thread: `AXIsProcessTrusted()` blocks on `tccd`, and this runs
+            // immediately after a transcription lands.
+            let accessibilityTrusted = await Task.detached(priority: .userInitiated) {
+                ClipboardService.shared.isAccessibilityTrusted
+            }.value
 
             if !accessibilityTrusted {
                 // Text is already copied to clipboard, just return
@@ -129,7 +137,7 @@ class MiniRecorderWindowController: NSObject {
             }
 
             // 4. Re-activate the target app
-            if let app = self.lastActiveApp {
+            if let app = pasteTarget {
                 _ = await MainActor.run {
                     app.activate()
                 }

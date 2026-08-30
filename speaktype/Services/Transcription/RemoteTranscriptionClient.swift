@@ -80,8 +80,7 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
         default: throw ClientError.httpStatus(http.statusCode)
         }
 
-        let text = Self.parseText(from: data)
-        guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard let text = Self.parseText(from: data) else {
             throw ClientError.emptyResponse
         }
 

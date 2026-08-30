@@ -15,7 +15,7 @@ struct HistoryStatsEntry: Identifiable, Codable, Hashable {
 struct HistoryItem: Identifiable, Codable, Hashable {
     let id: UUID
     let date: Date
-    let transcript: String
+    var transcript: String
     let duration: TimeInterval
     let audioFileURL: URL?
     let modelUsed: String?
@@ -23,6 +23,9 @@ struct HistoryItem: Identifiable, Codable, Hashable {
     // Optional so existing persisted JSON decodes unchanged; carry provenance + cost for stats.
     var provider: String? = nil
     var estimatedCostUSD: Double? = nil
+    var rawTranscript: String? = nil
+    var polishedTranscript: String? = nil
+    var summary: String? = nil
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
@@ -47,7 +50,7 @@ class HistoryService: ObservableObject {
         loadHistory()
     }
     
-    func addItem(transcript: String, duration: TimeInterval, audioFileURL: URL? = nil, modelUsed: String? = nil, transcriptionTime: TimeInterval? = nil, provider: String? = nil, estimatedCostUSD: Double? = nil) {
+    func addItem(transcript: String, duration: TimeInterval, audioFileURL: URL? = nil, modelUsed: String? = nil, transcriptionTime: TimeInterval? = nil, provider: String? = nil, estimatedCostUSD: Double? = nil, rawTranscript: String? = nil, polishedTranscript: String? = nil) {
         let normalizedTranscript = WhisperService.normalizedTranscription(from: transcript)
         guard !normalizedTranscript.isEmpty else { return }
 
@@ -65,7 +68,9 @@ class HistoryService: ObservableObject {
             modelUsed: modelUsed,
             transcriptionTime: transcriptionTime,
             provider: provider,
-            estimatedCostUSD: estimatedCostUSD
+            estimatedCostUSD: estimatedCostUSD,
+            rawTranscript: rawTranscript,
+            polishedTranscript: polishedTranscript
         )
         let statsEntry = HistoryStatsEntry(
             id: newItem.id,
@@ -79,6 +84,19 @@ class HistoryService: ObservableObject {
         statsEntries.insert(statsEntry, at: 0)
         saveHistory()
         saveStats()
+    }
+
+    func setPolishedTranscript(_ text: String, for id: UUID) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].polishedTranscript = text
+        items[index].transcript = text
+        saveHistory()
+    }
+
+    func setSummary(_ text: String, for id: UUID) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].summary = text
+        saveHistory()
     }
     
     func deleteItem(at offsets: IndexSet, deleteAudioFile: Bool = true) {
@@ -108,10 +126,9 @@ class HistoryService: ObservableObject {
     }
 
     func clearAll() {
+        items.forEach(removeAudioFileIfNeeded(for:))
         items.removeAll()
-        statsEntries.removeAll()
         saveHistory()
-        saveStats()
     }
 
     func totalWordCount() -> Int {
@@ -168,7 +185,10 @@ class HistoryService: ObservableObject {
                     modelUsed: item.modelUsed,
                     transcriptionTime: item.transcriptionTime,
                     provider: item.provider,
-                    estimatedCostUSD: item.estimatedCostUSD
+                    estimatedCostUSD: item.estimatedCostUSD,
+                    rawTranscript: item.rawTranscript,
+                    polishedTranscript: item.polishedTranscript,
+                    summary: item.summary
                 )
             }
 

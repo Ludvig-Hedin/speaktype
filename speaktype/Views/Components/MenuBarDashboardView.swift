@@ -180,7 +180,7 @@ struct MenuBarDashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay {
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.border, lineWidth: 1)
+                .stroke(Color.border.opacity(0.6), lineWidth: 0.5)
         }
     }
 
@@ -197,29 +197,30 @@ struct MenuBarDashboardView: View {
 
     private var statsGrid: some View {
         LazyVGrid(columns: statsColumns, spacing: 10) {
+            // Monochrome tints — no four-color "dashboard rainbow". Blue is reserved for the CTA.
             MenuBarStatCard(
                 title: "Today",
                 value: "\(todayCount)",
                 icon: "calendar",
-                tint: Color.accentBlue
+                tint: Color.textSecondary
             )
             MenuBarStatCard(
                 title: "Total",
                 value: "\(totalCount)",
                 icon: "waveform",
-                tint: Color.accentPrimary
+                tint: Color.textSecondary
             )
             MenuBarStatCard(
                 title: "Words",
                 value: abbreviatedCount(totalWords),
                 icon: "text.word.spacing",
-                tint: Color.accentSuccess
+                tint: Color.textSecondary
             )
             MenuBarStatCard(
                 title: "Saved",
                 value: formatTimeSaved(timeSavedMinutes),
                 icon: "timer",
-                tint: Color.accentWarning
+                tint: Color.textSecondary
             )
         }
     }
@@ -256,7 +257,7 @@ struct MenuBarDashboardView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay {
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.border, lineWidth: 1)
+                        .stroke(Color.border.opacity(0.6), lineWidth: 0.5)
                 }
             } else {
                 VStack(spacing: 8) {
@@ -410,16 +411,16 @@ private struct MenuBarStatCard: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(tint)
                     .frame(width: 24, height: 24)
-                    .background(tint.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .background(Color.bgHover)
+                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
 
                 Spacer(minLength: 0)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 22, weight: .medium, design: .serif))
-                    .monospacedDigit()
+                    .font(Typography.statValueM)
+                    .tracking(-0.3)
                     .foregroundStyle(Color.textPrimary)
 
                 Text(title)
@@ -433,7 +434,7 @@ private struct MenuBarStatCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay {
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.border, lineWidth: 1)
+                .stroke(Color.border.opacity(0.6), lineWidth: 0.5)
         }
     }
 }
@@ -485,7 +486,7 @@ private struct MenuBarTranscriptRow: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay {
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.border, lineWidth: 1)
+                    .stroke(Color.border.opacity(0.6), lineWidth: 0.5)
             }
         }
         .buttonStyle(.stPlain)

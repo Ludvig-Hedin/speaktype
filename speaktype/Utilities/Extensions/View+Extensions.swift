@@ -43,8 +43,8 @@ struct ClickActionPointerCursorModifier: ViewModifier {
 extension View {
     /// Tighter tracking + slightly denser line rhythm for UI copy (not marketing display).
     func stCompactUI() -> some View {
-        self.kerning(-0.18)
-            .lineSpacing(1)
+        self.kerning(-0.2)
+            .lineSpacing(0.5)
     }
 
     /// Use on tappable controls (buttons, menus, links) for consistent macOS pointer feedback.

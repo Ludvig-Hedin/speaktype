@@ -154,27 +154,9 @@ struct DashboardView: View {
                         }
                     }
                 }
-                .padding(22)
-                .background {
-                    ZStack {
-                        RoundedRectangle(
-                            cornerRadius: Constants.UI.cardCornerRadius, style: .continuous
-                        )
-                        .fill(.ultraThinMaterial)
-                        RoundedRectangle(
-                            cornerRadius: Constants.UI.cardCornerRadius, style: .continuous
-                        )
-                        .fill(Color.bgCard.opacity(0.5))
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
-                        .strokeBorder(Color.border.opacity(0.5), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 4)
+                .themedCard()
             }
-            .padding(20)
+            .padding(Constants.UI.pagePadding)
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -233,11 +215,11 @@ struct DashboardView: View {
         if audioRecorder.isRecording {
             Task {
                 if let url = await audioRecorder.stopRecording() {
-                    startTranscription(url: url)
+                    startTranscription(url: url, ownsFile: true)
                 }
             }
         } else {
-            audioRecorder.startRecording()
+            Task { _ = await audioRecorder.startRecording() }
         }
     }
 
@@ -250,14 +232,14 @@ struct DashboardView: View {
                 url.lastPathComponent)
             try? FileManager.default.removeItem(at: tempURL)
             try FileManager.default.copyItem(at: url, to: tempURL)
-            startTranscription(url: tempURL)
+            startTranscription(url: tempURL, ownsFile: true)
         } catch {
             print("Error copying file: \(error)")
-            startTranscription(url: url)
+            startTranscription(url: url, ownsFile: false)
         }
     }
 
-    private func startTranscription(url: URL) {
+    private func startTranscription(url: URL, ownsFile: Bool) {
         Task {
             isTranscribing = true
             transcriptionStatus = "Transcribing..."
@@ -280,7 +262,9 @@ struct DashboardView: View {
                         modelUsed: outcome.modelLabel,
                         transcriptionTime: outcome.transcriptionTime,
                         provider: outcome.provider.rawValue,
-                        estimatedCostUSD: outcome.estimatedCostUSD
+                        estimatedCostUSD: outcome.estimatedCostUSD,
+                        rawTranscript: outcome.text,
+                        polishedTranscript: finalText == outcome.text ? nil : finalText
                     )
                     transcriptionStatus = "Done!"
                     isTranscribing = false
@@ -289,6 +273,7 @@ struct DashboardView: View {
                     }
                 }
             } catch {
+                if ownsFile { try? FileManager.default.removeItem(at: url) }
                 DispatchQueue.main.async {
                     transcriptionStatus = "Error"
                     isTranscribing = false
@@ -327,14 +312,14 @@ struct StatsCard: View {
 
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text("\(wordCount)")
-                        .font(.system(size: 64, weight: .light, design: .serif))
-                        .monospacedDigit()
+                        .font(Typography.statValueXL)
+                        .tracking(-0.5)
                         .foregroundStyle(Color.textPrimary)
 
                     Text("words transcribed")
                         .font(Typography.bodyLarge)
                         .foregroundStyle(Color.textSecondary)
-                        .padding(.bottom, 10)
+                        .padding(.bottom, 6)
                 }
 
                 // Insight text
@@ -434,7 +419,7 @@ struct ActivityChartCard: View {
                             .frame(height: 14)
 
                         // Bar
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous)
                             .fill(data.count > 0 ? Color.textPrimary : Color.border.opacity(0.3))
                             .frame(height: max(CGFloat(data.count) / CGFloat(maxCount) * 120, 8))
 
@@ -468,8 +453,8 @@ struct StatBlock: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 24, weight: .medium, design: .serif))
-                    .monospacedDigit()
+                    .font(Typography.statValueM)
+                    .tracking(-0.3)
                     .foregroundStyle(Color.textPrimary)
 
                 Text(label)
@@ -592,18 +577,14 @@ struct RecentTranscriptionRow: View {
             }
         }
         .padding(14)
-        .background {
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isHovered ? Color.bgHover.opacity(0.55) : Color.bgCard.opacity(0.42))
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        // Flat fill (no nested material) — the row sits inside the themed card already.
+        .background(
+            (isHovered ? Color.bgHover.opacity(0.7) : Color.bgHover.opacity(0.35)),
+            in: RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.border.opacity(0.45), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
+                .strokeBorder(Color.border.opacity(0.4), lineWidth: 0.5)
         )
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {

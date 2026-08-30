@@ -17,19 +17,22 @@ enum TranscriptionRouter {
 
     static func resolveChain(_ i: Inputs) -> [TranscriptionProviderKind] {
         let local: [TranscriptionProviderKind] = i.localAvailable ? [.localWhisper] : []
-        let remote: [TranscriptionProviderKind]
-        if let provider = i.remoteProvider, i.remoteConfigured, i.networkAvailable {
-            remote = [provider]
+        let configuredRemote: [TranscriptionProviderKind]
+        if let provider = i.remoteProvider, i.remoteConfigured {
+            configuredRemote = [provider]
         } else {
-            remote = []
+            configuredRemote = []
         }
+        let reachableRemote = i.networkAvailable ? configuredRemote : []
 
         switch i.mode {
         case .localOnly:
             return local
 
         case .remoteOnly:
-            return remote
+            // Reachability can briefly report offline while the network is usable. In an
+            // explicit cloud-only mode, attempt the request and surface its real error.
+            return configuredRemote
 
         case .auto:
             // Keep it local when the Mac can comfortably do it; otherwise offload.
@@ -38,7 +41,7 @@ enum TranscriptionRouter {
                 i.localAvailable &&
                 i.availableRAMGB >= i.localFootprintGB * 2.0 + 1.5 &&
                 i.cpuLoadPerCore < 0.85
-            return localComfortable ? local + remote : remote + local
+            return localComfortable ? local + reachableRemote : reachableRemote + local
         }
     }
 }

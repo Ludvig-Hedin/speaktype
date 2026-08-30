@@ -3,36 +3,256 @@ import AVFoundation
 import KeyboardShortcuts
 import SwiftUI
 
+// MARK: - Settings (responsive 2-column)
+
 struct SettingsView: View {
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Settings")
-                    .font(Typography.displayLarge)
-                    .foregroundStyle(Color.textPrimary)
-                    .stCompactUI()
+        GeometryReader { geo in
+            // Two columns once the content pane is wide enough; single column when narrow.
+            let twoColumn = geo.size.width > 880
 
-                GeneralSettingsTab()
-                AudioSettingsTab()
-                PermissionsSettingsTab()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Settings")
+                        .font(Typography.displayLarge)
+                        .appleTitleTracking()
+                        .foregroundStyle(Color.textPrimary)
+
+                    if twoColumn {
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(spacing: 16) {
+                                ShortcutsSection()
+                                SpokenLanguageSection()
+                                InputDeviceSection()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
+
+                            VStack(spacing: 16) {
+                                GeneralBehaviorSection()
+                                AppearanceSection()
+                                UpdatesSection()
+                                PermissionsSection()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
+                        }
+                    } else {
+                        VStack(spacing: 16) {
+                            ShortcutsSection()
+                            GeneralBehaviorSection()
+                            SpokenLanguageSection()
+                            InputDeviceSection()
+                            AppearanceSection()
+                            UpdatesSection()
+                            PermissionsSection()
+                        }
+                    }
+
+                    // Advanced / optional configuration — full width, at the bottom.
+                    RemoteTranscriptionSettingsSection()
+                    WritingPolishSettingsSection()
+                }
+                // Cap the reading width so sections never stretch too wide, and center it.
+                .frame(maxWidth: 1040, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                .padding(24)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color.clear)
     }
 }
 
-// MARK: - General settings
+// MARK: - Shortcuts
 
-struct GeneralSettingsTab: View {
-    @AppStorage("appTheme") private var appTheme: AppTheme = .system
-    @AppStorage("autoUpdate") private var autoUpdate = true
+private struct ShortcutsSection: View {
     @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
-    @AppStorage("recordingMode") private var recordingMode: Int = 0  // 0: Hold to record, 1: Toggle
+    @AppStorage("recordingMode") private var recordingMode: Int = 0
+    @State private var customShortcutDisplay = CustomShortcutStorage.displayString
+
+    var body: some View {
+        SettingsSection {
+            SettingsSectionHeader(
+                icon: "command", title: "Shortcuts", subtitle: "Recording hotkey")
+
+            VStack(spacing: 14) {
+                HStack {
+                    Text("Primary hotkey")
+                        .font(Typography.bodyMedium)
+                        .foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    Menu {
+                        Group {
+                            Button(HotkeyOption.fn.displayName) { selectedHotkey = .fn }
+                            Button(HotkeyOption.capsLock.displayName) { selectedHotkey = .capsLock }
+                            Divider()
+                            Button(HotkeyOption.leftCommand.displayName) { selectedHotkey = .leftCommand }
+                            Button(HotkeyOption.rightCommand.displayName) { selectedHotkey = .rightCommand }
+                            Divider()
+                            Button(HotkeyOption.leftControl.displayName) { selectedHotkey = .leftControl }
+                            Button(HotkeyOption.rightControl.displayName) { selectedHotkey = .rightControl }
+                            Divider()
+                            Button(HotkeyOption.leftOption.displayName) { selectedHotkey = .leftOption }
+                            Button(HotkeyOption.rightOption.displayName) { selectedHotkey = .rightOption }
+                            Divider()
+                            Button(HotkeyOption.leftShift.displayName) { selectedHotkey = .leftShift }
+                            Button(HotkeyOption.rightShift.displayName) { selectedHotkey = .rightShift }
+                        }
+                        Divider()
+                        Group {
+                            Button(HotkeyOption.f13.displayName) { selectedHotkey = .f13 }
+                            Button(HotkeyOption.f14.displayName) { selectedHotkey = .f14 }
+                            Button(HotkeyOption.f15.displayName) { selectedHotkey = .f15 }
+                            Button(HotkeyOption.f16.displayName) { selectedHotkey = .f16 }
+                            Button(HotkeyOption.f17.displayName) { selectedHotkey = .f17 }
+                            Button(HotkeyOption.f18.displayName) { selectedHotkey = .f18 }
+                            Button(HotkeyOption.f19.displayName) { selectedHotkey = .f19 }
+                        }
+                        Divider()
+                        Button(HotkeyOption.custom.displayName) { selectedHotkey = .custom }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(selectedHotkey == .custom && !customShortcutDisplay.isEmpty
+                                ? customShortcutDisplay
+                                : selectedHotkey.displayName)
+                                .font(Typography.bodySmall)
+                                .foregroundStyle(Color.textPrimary)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 9))
+                                .foregroundStyle(Color.textMuted)
+                        }
+                        .menuCapsule()
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .clickActionPointerCursor()
+                }
+
+                if selectedHotkey == .custom {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .center) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Custom shortcut")
+                                    .font(Typography.bodyMedium)
+                                    .foregroundStyle(Color.textPrimary)
+                                Text("Click the badge to record")
+                                    .font(Typography.captionSmall)
+                                    .foregroundStyle(Color.textMuted)
+                            }
+                            Spacer()
+                            ShortcutRecorderView(onChange: {
+                                customShortcutDisplay = CustomShortcutStorage.displayString
+                            })
+                            .frame(width: 160, height: 32)
+                        }
+
+                        Text("Needs at least one modifier (⌃ ⌥ ⇧ ⌘) unless using F13–F19.")
+                            .font(Typography.captionSmall)
+                            .foregroundStyle(Color.textMuted)
+                    }
+                    .padding(14)
+                    .background(Color.bgHover.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous)
+                            .strokeBorder(Color.border.opacity(0.5), lineWidth: 0.5)
+                    )
+                    .onAppear { customShortcutDisplay = CustomShortcutStorage.displayString }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Recording mode")
+                            .font(Typography.bodyMedium)
+                            .foregroundStyle(Color.textPrimary)
+                        Spacer()
+                        RecordingModePicker(recordingMode: $recordingMode)
+                            .frame(maxWidth: 240)
+                    }
+                    Text(recordingMode == 0
+                        ? "Hold the hotkey to record; release when done."
+                        : "Press once to start, again to stop.")
+                        .font(Typography.captionSmall)
+                        .foregroundStyle(Color.textMuted)
+                        .stCompactUI()
+                }
+            }
+        }
+    }
+}
+
+// MARK: - General behavior
+
+private struct GeneralBehaviorSection: View {
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     @AppStorage("showDockIcon") private var showDockIcon: Bool = false
     @AppStorage("launchAtLogin") private var launchAtLogin: Bool = true
+
+    var body: some View {
+        SettingsSection {
+            SettingsSectionHeader(icon: "macwindow", title: "General", subtitle: "App behavior")
+
+            VStack(spacing: 14) {
+                settingToggle(
+                    "Launch at login",
+                    help: "Start in the background at login so the hotkey is always ready.",
+                    isOn: $launchAtLogin
+                )
+                .onChange(of: launchAtLogin) { _, newValue in
+                    LaunchAtLoginService.setEnabled(newValue)
+                }
+
+                settingToggle(
+                    "Run in background",
+                    help: "Hide the Dock icon and run menu-bar-only. Reopen from the menu bar icon.",
+                    isOn: Binding(get: { !showDockIcon }, set: { showDockIcon = !$0 })
+                )
+                .onChange(of: showDockIcon) { _, newValue in
+                    if !newValue { showMenuBarIcon = true }
+                    (NSApp.delegate as? AppDelegate)?.applyActivationPolicy()
+                }
+
+                VStack(spacing: 6) {
+                    HStack {
+                        Text("Show menu bar icon")
+                            .font(Typography.bodyMedium)
+                            .foregroundStyle(Color.textPrimary)
+                        Spacer()
+                        Toggle("", isOn: $showMenuBarIcon)
+                            .labelsHidden()
+                            .disabled(!showDockIcon)
+                    }
+                    .clickActionPointerCursor()
+
+                    if !showDockIcon {
+                        Text("Required while the Dock icon is hidden — the only way back in.")
+                            .font(Typography.captionSmall)
+                            .foregroundStyle(Color.textMuted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+    }
+
+    private func settingToggle(_ title: String, help: String, isOn: Binding<Bool>) -> some View {
+        VStack(spacing: 6) {
+            HStack {
+                Text(title)
+                    .font(Typography.bodyMedium)
+                    .foregroundStyle(Color.textPrimary)
+                Spacer()
+                Toggle("", isOn: isOn).labelsHidden()
+            }
+            .clickActionPointerCursor()
+            Text(help)
+                .font(Typography.captionSmall)
+                .foregroundStyle(Color.textMuted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+// MARK: - Spoken language
+
+struct SpokenLanguageSection: View {
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
     @AppStorage("recentTranscriptionLanguages") private var recentLanguagesString: String = ""
 
@@ -47,429 +267,57 @@ struct GeneralSettingsTab: View {
         recentLanguagesString = recents.prefix(5).joined(separator: ",")
     }
 
-    @StateObject private var updateService = UpdateService.shared
-    @EnvironmentObject var licenseManager: LicenseManager
-
-    @State private var showLicenseSheet = false
-    @State private var showDeactivateAlert = false
-    // Mirrors CustomShortcutStorage so the picker label updates live after recording.
-    @State private var customShortcutDisplay = CustomShortcutStorage.displayString
-
     var body: some View {
-        VStack(spacing: 16) {
-                // Shortcuts — the app's primary control, so it leads.
-                SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "command", title: "Shortcuts", subtitle: "Configure recording hotkeys"
-                    )
+        SettingsSection {
+            SettingsSectionHeader(icon: "globe", title: "Spoken language", subtitle: "Dictation hint")
 
-                    VStack(spacing: 16) {
-                        // Primary hotkey picker
-                        HStack {
-                            Text("Primary Hotkey")
-                                .font(Typography.bodyMedium)
-                                .foregroundStyle(Color.textPrimary)
-                            Spacer()
-                            Menu {
-                                // Modifier-only keys
-                                Group {
-                                    Button(HotkeyOption.fn.displayName)          { selectedHotkey = .fn }
-                                    Button(HotkeyOption.capsLock.displayName)     { selectedHotkey = .capsLock }
-                                    Divider()
-                                    Button(HotkeyOption.leftCommand.displayName)  { selectedHotkey = .leftCommand }
-                                    Button(HotkeyOption.rightCommand.displayName) { selectedHotkey = .rightCommand }
-                                    Divider()
-                                    Button(HotkeyOption.leftControl.displayName)  { selectedHotkey = .leftControl }
-                                    Button(HotkeyOption.rightControl.displayName) { selectedHotkey = .rightControl }
-                                    Divider()
-                                    Button(HotkeyOption.leftOption.displayName)   { selectedHotkey = .leftOption }
-                                    Button(HotkeyOption.rightOption.displayName)  { selectedHotkey = .rightOption }
-                                    Divider()
-                                    Button(HotkeyOption.leftShift.displayName)    { selectedHotkey = .leftShift }
-                                    Button(HotkeyOption.rightShift.displayName)   { selectedHotkey = .rightShift }
-                                }
-                                // Function keys
-                                Divider()
-                                Group {
-                                    Button(HotkeyOption.f13.displayName) { selectedHotkey = .f13 }
-                                    Button(HotkeyOption.f14.displayName) { selectedHotkey = .f14 }
-                                    Button(HotkeyOption.f15.displayName) { selectedHotkey = .f15 }
-                                    Button(HotkeyOption.f16.displayName) { selectedHotkey = .f16 }
-                                    Button(HotkeyOption.f17.displayName) { selectedHotkey = .f17 }
-                                    Button(HotkeyOption.f18.displayName) { selectedHotkey = .f18 }
-                                    Button(HotkeyOption.f19.displayName) { selectedHotkey = .f19 }
-                                }
-                                // Custom combo
-                                Divider()
-                                Button(HotkeyOption.custom.displayName) { selectedHotkey = .custom }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Text(selectedHotkey == .custom && !customShortcutDisplay.isEmpty
-                                         ? customShortcutDisplay
-                                         : selectedHotkey.displayName)
-                                        .font(Typography.bodySmall)
-                                        .foregroundStyle(Color.textPrimary)
-                                    Image(systemName: "chevron.up.chevron.down")
-                                        .font(.system(size: 9))
-                                        .foregroundStyle(Color.textMuted)
-                                }
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(.thinMaterial, in: Capsule(style: .continuous))
-                                .overlay(
-                                    Capsule(style: .continuous)
-                                        .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
-                                )
-                            }
-                            .menuStyle(.borderlessButton)
-                            .clickActionPointerCursor()
-                        }
-
-                        // Custom shortcut recorder — only visible when .custom is selected
-                        if selectedHotkey == .custom {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(alignment: .center) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Custom Shortcut")
-                                            .font(Typography.bodyMedium)
-                                            .foregroundStyle(Color.textPrimary)
-                                        Text("Click the badge to record a new shortcut")
-                                            .font(Typography.captionSmall)
-                                            .foregroundStyle(Color.textMuted)
-                                    }
-                                    Spacer()
-                                    ShortcutRecorderView(onChange: {
-                                        customShortcutDisplay = CustomShortcutStorage.displayString
-                                    })
-                                    .frame(width: 160, height: 32)
-                                }
-
-                                if customShortcutDisplay.isEmpty {
-                                    Label(
-                                        "No shortcut recorded yet. Click the badge above to record one.",
-                                        systemImage: "info.circle"
-                                    )
-                                    .font(Typography.captionSmall)
-                                    .foregroundStyle(Color.accentBlue)
-                                }
-
-                                Text("Requires at least one modifier key (⌃ ⌥ ⇧ ⌘) unless using F13–F19.")
-                                    .font(Typography.captionSmall)
-                                    .foregroundStyle(Color.textMuted)
-                            }
-                            .padding(14)
-                            .background(Color.bgCard.opacity(0.6))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .strokeBorder(Color.border.opacity(0.5), lineWidth: 0.5)
-                            )
-                            .onAppear { customShortcutDisplay = CustomShortcutStorage.displayString }
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Recording Mode")
-                                    .font(Typography.bodyMedium)
-                                    .foregroundStyle(Color.textPrimary)
-                                Spacer()
-                                RecordingModePicker(recordingMode: $recordingMode)
-                                    .frame(maxWidth: 280)
-                            }
-
-                            Text(
-                                recordingMode == 0
-                                    ? "Hold the hotkey down to record, release when done."
-                                    : "Press the hotkey to start recording, press again to stop."
-                            )
-                            .font(Typography.captionSmall)
-                            .foregroundStyle(Color.textMuted)
-                            .stCompactUI()
-                            .padding(.top, 2)
-                        }
-                    }
-                }
-
-                // General Behavior
-                SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "macwindow", title: "General", subtitle: "App behavior settings"
-                    )
-
-                    VStack(spacing: 16) {
-                        VStack(spacing: 6) {
-                            HStack {
-                                Text("Launch at login")
-                                    .font(Typography.bodyMedium)
-                                    .foregroundStyle(Color.textPrimary)
-                                Spacer()
-                                Toggle("", isOn: $launchAtLogin)
-                                    .labelsHidden()
-                            }
-                            .clickActionPointerCursor()
-
-                            Text("Start SpeakType automatically in the background when you log in, so the hotkey is always ready.")
-                                .font(Typography.captionSmall)
-                                .foregroundStyle(Color.textMuted)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .onChange(of: launchAtLogin) { _, newValue in
-                            LaunchAtLoginService.setEnabled(newValue)
-                        }
-
-                        VStack(spacing: 6) {
-                            HStack {
-                                Text("Run in background (hide Dock icon)")
-                                    .font(Typography.bodyMedium)
-                                    .foregroundStyle(Color.textPrimary)
-                                Spacer()
-                                Toggle("", isOn: Binding(
-                                    get: { !showDockIcon },
-                                    set: { showDockIcon = !$0 }
-                                ))
-                                .labelsHidden()
-                            }
-                            .clickActionPointerCursor()
-
-                            Text("Removes the Dock icon and runs SpeakType as a menu-bar-only background app. Open this window anytime from the menu bar icon.")
-                                .font(Typography.captionSmall)
-                                .foregroundStyle(Color.textMuted)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .onChange(of: showDockIcon) { _, newValue in
-                            // In background mode the menu bar is the only way back in — never
-                            // allow both the Dock icon and the menu bar icon to be hidden.
-                            if !newValue { showMenuBarIcon = true }
-                            (NSApp.delegate as? AppDelegate)?.applyActivationPolicy()
-                        }
-
-                        VStack(spacing: 6) {
-                            HStack {
-                                Text("Show menu bar icon")
-                                    .font(Typography.bodyMedium)
-                                    .foregroundStyle(Color.textPrimary)
-                                Spacer()
-                                Toggle("", isOn: $showMenuBarIcon)
-                                    .labelsHidden()
-                                    .disabled(!showDockIcon)
-                            }
-                            .clickActionPointerCursor()
-
-                            if !showDockIcon {
-                                Text("Required while the Dock icon is hidden — it's the only way to open SpeakType.")
-                                    .font(Typography.captionSmall)
-                                    .foregroundStyle(Color.textMuted)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                    }
-                }
-
-                // Spoken Language
-                SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "globe", title: "Spoken Language",
-                        subtitle: "Hint for the language you are speaking")
-
-                    HStack {
-                        Text("Speech language")
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                        Spacer()
-                        Menu {
-                            Button("Auto-detect spoken language") { transcriptionLanguage = "auto" }
-                            if !recentLanguageCodes.isEmpty {
-                                Divider()
-                                ForEach(recentLanguageCodes, id: \.self) { code in
-                                    if let lang = Self.whisperLanguages.first(where: { $0.code == code }) {
-                                        Button(lang.name) {
-                                            transcriptionLanguage = code
-                                            updateRecentLanguages(code: code)
-                                        }
-                                    }
-                                }
-                            }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Language")
+                        .font(Typography.bodyMedium)
+                        .foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    Menu {
+                        Button("Auto-detect") { transcriptionLanguage = "auto" }
+                        if !recentLanguageCodes.isEmpty {
                             Divider()
-                            ForEach(Self.whisperLanguages, id: \.code) { lang in
-                                Button(lang.name) {
-                                    transcriptionLanguage = lang.code
-                                    updateRecentLanguages(code: lang.code)
+                            ForEach(recentLanguageCodes, id: \.self) { code in
+                                if let lang = Self.whisperLanguages.first(where: { $0.code == code }) {
+                                    Button(lang.name) {
+                                        transcriptionLanguage = code
+                                        updateRecentLanguages(code: code)
+                                    }
                                 }
                             }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text(displayName(for: transcriptionLanguage))
-                                    .font(Typography.bodySmall)
-                                    .foregroundStyle(Color.textPrimary)
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(Color.textMuted)
+                        }
+                        Divider()
+                        ForEach(Self.whisperLanguages, id: \.code) { lang in
+                            Button(lang.name) {
+                                transcriptionLanguage = lang.code
+                                updateRecentLanguages(code: lang.code)
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(.thinMaterial, in: Capsule(style: .continuous))
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
-                            )
                         }
-                        .menuStyle(.borderlessButton)
-                        .clickActionPointerCursor()
-                    }
-
-                    Text("This is a hint for transcription. It does not choose an output language and it does not translate the result.")
-                        .font(Typography.captionSmall)
-                        .foregroundStyle(Color.textMuted)
-                        .padding(.top, 4)
-
-                    Text("If this does not match the language you actually speak, the result can be inaccurate or even come back in the wrong language. Auto-detect is the safest default.")
-                        .font(Typography.captionSmall)
-                        .foregroundStyle(Color.textMuted)
-                        .padding(.top, 4)
-
-                    Text("Use a multilingual model for non-English dictation. Accuracy for languages like Hindi depends heavily on the model you selected.")
-                        .font(Typography.captionSmall)
-                        .foregroundStyle(Color.textMuted)
-                        .padding(.top, 4)
-
-                    Text("English-only models (.en) can only output English.")
-                        .font(Typography.captionSmall)
-                        .foregroundStyle(Color.textMuted)
-                        .padding(.top, 4)
-                }
-
-                RemoteTranscriptionSettingsSection()
-
-                WritingPolishSettingsSection()
-
-                // Appearance — cosmetic, kept near the bottom.
-                SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "paintpalette", title: "Appearance",
-                        subtitle: "Choose your preferred theme")
-
-                    HStack(spacing: 20) {
-                        ForEach(AppTheme.allCases) { theme in
-                            RadioButton(
-                                title: theme.rawValue,
-                                isSelected: appTheme == theme,
-                                action: { appTheme = theme }
-                            )
-                        }
-                    }
-                }
-
-                // Updates
-                SettingsSection {
-                    SettingsSectionHeader(
-                        icon: "arrow.down.circle", title: "Updates",
-                        subtitle: "SpeakType \(AppVersion.currentVersion)")
-
-                    VStack(spacing: 16) {
-                        HStack {
-                            Text("Automatically check for updates")
-                                .font(Typography.bodyMedium)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(displayName(for: transcriptionLanguage))
+                                .font(Typography.bodySmall)
                                 .foregroundStyle(Color.textPrimary)
-                            Spacer()
-                            Toggle("", isOn: $autoUpdate)
-                                .labelsHidden()
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 9))
+                                .foregroundStyle(Color.textMuted)
                         }
-                        .clickActionPointerCursor()
-
-                        Button(action: {
-                            Task {
-                                await updateService.checkForUpdates()
-                            }
-                        }) {
-                            HStack(spacing: 6) {
-                                if updateService.isCheckingForUpdates {
-                                    ProgressView()
-                                        .scaleEffect(0.7)
-                                        .frame(width: 14, height: 14)
-                                } else {
-                                    Image(systemName: "arrow.clockwise")
-                                        .font(.system(size: 12))
-                                }
-                                Text(
-                                    updateService.isCheckingForUpdates
-                                        ? "Checking..." : "Check for Updates"
-                                )
-                                .font(Typography.labelMedium)
-                            }
-                            .foregroundStyle(Color.textPrimary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(.thinMaterial, in: Capsule(style: .continuous))
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
-                            )
-                        }
-                        .buttonStyle(.stPlain)
-                        .disabled(updateService.isCheckingForUpdates)
-
-                        Button(action: {
-                            NSWorkspace.shared.open(UpdateConfiguration.releasesPageURL)
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.down.circle")
-                                    .font(.system(size: 12))
-                                Text("Browse all releases…")
-                                    .font(Typography.labelMedium)
-                            }
-                            .foregroundStyle(Color.textSecondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                        }
-                        .buttonStyle(.stPlain)
-                        .clickActionPointerCursor()
-
-                        Text(
-                            "Install the latest from “Check for Updates”, or download any published build (DMG) from GitHub."
-                        )
-                        .font(Typography.captionSmall)
-                        .foregroundStyle(Color.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .menuCapsule()
                     }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .clickActionPointerCursor()
                 }
 
-                // License - Hidden (logic kept for future use)
-                // SettingsSection {
-                //     SettingsSectionHeader(
-                //         icon: "key",
-                //         title: "License",
-                //         subtitle: licenseManager.isPro ? "Pro Active" : "Free Plan"
-                //     )
-                //
-                //     if licenseManager.isPro {
-                //         Button(action: { showDeactivateAlert = true }) {
-                //             Text("Deactivate License")
-                //                 .font(Typography.labelMedium)
-                //                 .frame(maxWidth: .infinity)
-                //         }
-                //         .buttonStyle(.stSecondary)
-                //     } else {
-                //         Button(action: { showLicenseSheet = true }) {
-                //             Text("Activate License")
-                //                 .font(Typography.labelMedium)
-                //                 .frame(maxWidth: .infinity)
-                //         }
-                //         .buttonStyle(.stPrimary)
-                //     }
-                // }
-        }
-
-        .sheet(isPresented: $showLicenseSheet) {
-            LicenseView()
-                .environmentObject(licenseManager)
-        }
-        .alert("Deactivate License", isPresented: $showDeactivateAlert) {
-            Button("Cancel", role: .cancel) {}
-            Button("Deactivate", role: .destructive) {
-                Task { try? await licenseManager.deactivateLicense() }
+                Text("Auto-detect is safest. Only set a language if you always dictate in it — a mismatch can garble the result. Use a multilingual model for non-English.")
+                    .font(Typography.captionSmall)
+                    .foregroundStyle(Color.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-        } message: {
-            Text("Are you sure you want to deactivate your Pro license?")
         }
     }
 
@@ -478,7 +326,6 @@ struct GeneralSettingsTab: View {
         return Self.whisperLanguages.first(where: { $0.code == code })?.name ?? code
     }
 
-    // All languages supported by Whisper, sorted alphabetically
     static let whisperLanguages: [(code: String, name: String)] = [
         ("af", "Afrikaans"), ("sq", "Albanian"), ("am", "Amharic"), ("ar", "Arabic"),
         ("hy", "Armenian"), ("as", "Assamese"), ("az", "Azerbaijani"), ("ba", "Bashkir"),
@@ -508,127 +355,147 @@ struct GeneralSettingsTab: View {
     ]
 }
 
-// MARK: - Audio
+// MARK: - Appearance
 
-struct AudioSettingsTab: View {
+private struct AppearanceSection: View {
+    @AppStorage("appTheme") private var appTheme: AppTheme = .system
+
+    var body: some View {
+        SettingsSection {
+            SettingsSectionHeader(icon: "paintpalette", title: "Appearance", subtitle: "Theme")
+
+            HStack(spacing: 12) {
+                ForEach(AppTheme.allCases) { theme in
+                    RadioButton(
+                        title: theme.rawValue,
+                        isSelected: appTheme == theme,
+                        action: { appTheme = theme }
+                    )
+                }
+                Spacer()
+            }
+        }
+    }
+}
+
+// MARK: - Updates
+
+private struct UpdatesSection: View {
+    @AppStorage("autoUpdate") private var autoUpdate = true
+    @StateObject private var updateService = UpdateService.shared
+
+    var body: some View {
+        SettingsSection {
+            SettingsSectionHeader(
+                icon: "arrow.down.circle", title: "Updates",
+                subtitle: "SpeakType \(AppVersion.currentVersion)")
+
+            VStack(spacing: 14) {
+                HStack {
+                    Text("Check automatically")
+                        .font(Typography.bodyMedium)
+                        .foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $autoUpdate).labelsHidden()
+                }
+                .clickActionPointerCursor()
+
+                Button(action: { Task { await updateService.checkForUpdates() } }) {
+                    HStack(spacing: 6) {
+                        if updateService.isCheckingForUpdates {
+                            ProgressView().scaleEffect(0.7).frame(width: 14, height: 14)
+                        } else {
+                            Image(systemName: "arrow.clockwise").font(.system(size: 12))
+                        }
+                        Text(updateService.isCheckingForUpdates ? "Checking…" : "Check for updates")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.stSecondary)
+                .disabled(updateService.isCheckingForUpdates)
+
+                Button(action: { NSWorkspace.shared.open(UpdateConfiguration.releasesPageURL) }) {
+                    Text("Browse all releases…")
+                        .font(Typography.labelMedium)
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.stPlain)
+                .clickActionPointerCursor()
+            }
+        }
+    }
+}
+
+// MARK: - Input device
+
+private struct InputDeviceSection: View {
     @StateObject private var audioRecorder = AudioRecordingService.shared
 
     var body: some View {
-        VStack(spacing: 16) {
-            SettingsSection {
-                SettingsSectionHeader(
-                    icon: "mic", title: "Input Device", subtitle: "Select your microphone")
+        SettingsSection {
+            SettingsSectionHeader(icon: "mic", title: "Microphone", subtitle: "Input device")
 
-                VStack(spacing: 12) {
-                    if audioRecorder.availableDevices.isEmpty {
-                        Text("No input devices found")
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textMuted)
-                            .padding(.vertical, 20)
-                    } else {
-                        ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
-                            DeviceRow(
-                                name: device.localizedName,
-                                isActive: audioRecorder.isRecording
-                                    && audioRecorder.selectedDeviceId == device.uniqueID,
-                                isSelected: audioRecorder.selectedDeviceId == device.uniqueID
-                            )
-                            .onTapGesture {
-                                audioRecorder.selectedDeviceId = device.uniqueID
-                            }
-                        }
+            VStack(spacing: 10) {
+                if audioRecorder.availableDevices.isEmpty {
+                    Text("No input devices found")
+                        .font(Typography.bodyMedium)
+                        .foregroundStyle(Color.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 12)
+                } else {
+                    ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
+                        DeviceRow(
+                            name: device.localizedName,
+                            isActive: audioRecorder.isRecording
+                                && audioRecorder.selectedDeviceId == device.uniqueID,
+                            isSelected: audioRecorder.selectedDeviceId == device.uniqueID
+                        )
+                        .onTapGesture { audioRecorder.selectedDeviceId = device.uniqueID }
                     }
                 }
 
                 Button(action: { audioRecorder.fetchAvailableDevices() }) {
                     HStack(spacing: 6) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12))
-                        Text("Refresh Devices")
-                            .font(Typography.labelMedium)
+                        Image(systemName: "arrow.clockwise").font(.system(size: 12))
+                        Text("Refresh")
                     }
-                    .foregroundStyle(Color.textPrimary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(.thinMaterial, in: Capsule(style: .continuous))
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
-                    )
                 }
-                .buttonStyle(.stPlain)
-                .padding(.top, 8)
+                .buttonStyle(.stSecondary)
+                .padding(.top, 4)
             }
         }
-        .onAppear {
-            audioRecorder.fetchAvailableDevices()
-        }
+        .onAppear { audioRecorder.fetchAvailableDevices() }
     }
 }
 
 // MARK: - Permissions
 
-struct PermissionsSettingsTab: View {
-    @State private var micStatus: AVAuthorizationStatus = .notDetermined
-    @State private var accessibilityStatus: Bool = false
-    @State private var timer: Timer?
+private struct PermissionsSection: View {
+    @ObservedObject private var permissions = PermissionService.shared
 
     var body: some View {
-        VStack(spacing: 16) {
-            SettingsSection {
-                SettingsSectionHeader(
-                    icon: "shield", title: "App Permissions",
-                    subtitle: "Required for full functionality")
+        SettingsSection {
+            SettingsSectionHeader(icon: "shield", title: "Permissions", subtitle: "Required access")
 
-                VStack(spacing: 10) {
-                    SettingsPermissionItem(
-                        icon: "mic.fill",
-                        color: Color.textSecondary,
-                        title: "Microphone Access",
-                        desc: "Record your voice for transcription",
-                        isGranted: micStatus == .authorized,
-                        action: { openSettings(for: "Privacy_Microphone") }
-                    )
-
-                    SettingsPermissionItem(
-                        icon: "hand.raised.fill",
-                        color: Color.textSecondary,
-                        title: "Accessibility Access",
-                        desc: "Paste transcribed text directly",
-                        isGranted: accessibilityStatus,
-                        action: {
-                            ClipboardService.shared.requestAccessibilityPermission()
-                            // System dialog handles opening Settings when user clicks "Open System Settings"
-                        }
-                    )
-                }
+            VStack(spacing: 10) {
+                SettingsPermissionItem(
+                    icon: "mic.fill", color: Color.textSecondary,
+                    title: "Microphone", desc: "Record your voice",
+                    isGranted: permissions.isMicGranted,
+                    action: { permissions.requestMicPermission() }
+                )
+                SettingsPermissionItem(
+                    icon: "hand.raised.fill", color: Color.textSecondary,
+                    title: "Accessibility", desc: "Paste text into any app",
+                    isGranted: permissions.isAccessibilityGranted,
+                    action: { permissions.requestAccessibilityPermission() }
+                )
             }
         }
-        .onAppear {
-            checkPermissions()
-            startPolling()
-        }
-        .onDisappear {
-            timer?.invalidate()
-        }
-    }
-
-    private func startPolling() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            checkPermissions()
-        }
-    }
-
-    private func checkPermissions() {
-        micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-        accessibilityStatus = AXIsProcessTrusted()
-    }
-
-    private func openSettings(for pane: String) {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")
-        {
-            NSWorkspace.shared.open(url)
-        }
+        .onAppear { permissions.startObserving() }
+        .onDisappear { permissions.stopObserving() }
     }
 }
 
@@ -640,12 +507,13 @@ struct SettingsSectionHeader: View {
     let subtitle: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 14))
+                .font(.system(size: 13))
                 .foregroundStyle(Color.textMuted)
+                .frame(width: 18)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(Typography.labelLarge)
                     .foregroundStyle(Color.textPrimary)
@@ -657,7 +525,7 @@ struct SettingsSectionHeader: View {
 
             Spacer()
         }
-        .padding(.bottom, 16)
+        .padding(.bottom, Constants.UI.rowGap)
     }
 }
 
@@ -672,23 +540,7 @@ struct SettingsSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             content
         }
-        .themedCard(padding: 24)
-    }
-}
-
-struct ToggleRow: View {
-    let title: String
-    @Binding var isOn: Bool
-
-    var body: some View {
-        HStack {
-            Text(title)
-                .font(Typography.bodyMedium)
-                .foregroundStyle(Color.textPrimary)
-            Spacer()
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-        }
+        .themedCard(padding: Constants.UI.cardPadding)
     }
 }
 
@@ -699,19 +551,16 @@ struct RadioButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 ZStack {
                     Circle()
                         .strokeBorder(
-                            isSelected ? Color.textPrimary : Color.textMuted.opacity(0.55),
-                            lineWidth: isSelected ? 2 : 1.25
+                            isSelected ? Color.accentBlue : Color.textMuted.opacity(0.55),
+                            lineWidth: isSelected ? 1.5 : 1.25
                         )
-                        .frame(width: 20, height: 20)
-
+                        .frame(width: 18, height: 18)
                     if isSelected {
-                        Circle()
-                            .fill(Color.textPrimary)
-                            .frame(width: 8, height: 8)
+                        Circle().fill(Color.accentBlue).frame(width: 9, height: 9)
                     }
                 }
 
@@ -726,10 +575,6 @@ struct RadioButton: View {
                 Capsule(style: .continuous)
                     .fill(isSelected ? Color.bgSelected.opacity(0.85) : Color.clear)
             }
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(Color.border.opacity(isSelected ? 0.4 : 0), lineWidth: 0.5)
-            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.stPlain)
@@ -745,15 +590,15 @@ struct SettingsPermissionItem: View {
     let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             Image(systemName: icon)
-                .foregroundStyle(Color.textMuted)
-                .font(.system(size: 16))
-                .frame(width: 32, height: 32)
-                .background(Color.bgHover)
+                .foregroundStyle(Color.textSecondary)
+                .font(.system(size: 15))
+                .frame(width: 30, height: 30)
+                .background(Color.bgSelected.opacity(0.7))
                 .clipShape(Circle())
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(Typography.bodyMedium)
                     .foregroundStyle(Color.textPrimary)
@@ -766,34 +611,22 @@ struct SettingsPermissionItem: View {
 
             if isGranted {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.textSecondary)
-                    .font(.system(size: 20))
+                    .foregroundStyle(Color.accentSuccess)
+                    .font(.system(size: 18))
             } else {
-                Button("Enable") {
-                    action()
-                }
-                .font(Typography.labelSmall)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.textPrimary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(.thinMaterial, in: Capsule(style: .continuous))
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
-                )
-                .buttonStyle(.stPlain)
+                Button("Enable") { action() }
+                    .buttonStyle(.stAction)
             }
         }
-        .padding(16)
+        .padding(12)
         .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
+                .fill(Color.bgHover.opacity(0.5))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.border.opacity(0.45), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
+                .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
         )
     }
 }
@@ -805,14 +638,11 @@ private struct RecordingModePicker: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            modeSegment(tag: 0, title: "Hold to record")
+            modeSegment(tag: 0, title: "Hold")
             modeSegment(tag: 1, title: "Toggle")
         }
         .padding(4)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Color.bgHover.opacity(0.55))
-        )
+        .background(Capsule(style: .continuous).fill(Color.bgHover.opacity(0.55)))
         .overlay(
             Capsule(style: .continuous)
                 .strokeBorder(Color.border.opacity(0.35), lineWidth: 0.5)
@@ -828,18 +658,17 @@ private struct RecordingModePicker: View {
                 .font(Typography.labelMedium)
                 .fontWeight(selected ? .semibold : .regular)
                 .foregroundStyle(selected ? Color.textPrimary : Color.textMuted)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
                 .frame(maxWidth: .infinity)
                 .background {
                     if selected {
-                        Capsule(style: .continuous)
-                            .fill(.ultraThinMaterial)
+                        Capsule(style: .continuous).fill(.ultraThinMaterial)
                     }
                 }
                 .overlay(
                     Capsule(style: .continuous)
-                        .strokeBorder(Color.textPrimary.opacity(selected ? 0.12 : 0), lineWidth: 1)
+                        .strokeBorder(Color.textPrimary.opacity(selected ? 0.1 : 0), lineWidth: 0.5)
                 )
         }
         .buttonStyle(.stPlain)
@@ -852,4 +681,26 @@ enum AppTheme: String, CaseIterable, Identifiable {
     case system = "System"
 
     var id: String { rawValue }
+}
+
+// MARK: - Shared control chrome
+
+/// Capsule chrome for `Menu` labels — matches the `.stSecondary` button so pickers and
+/// buttons share one vocabulary. (Menu labels can't take a ButtonStyle, hence the modifier.)
+struct MenuCapsule: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.thinMaterial, in: Capsule(style: .continuous))
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.border.opacity(0.5), lineWidth: 0.5)
+            )
+    }
+}
+
+extension View {
+    /// Menu-label chrome matching `.stSecondary`. Shared across settings sections.
+    func menuCapsule() -> some View { modifier(MenuCapsule()) }
 }

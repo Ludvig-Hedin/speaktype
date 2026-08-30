@@ -36,7 +36,11 @@ struct OnboardingView: View {
                         .transition(.opacity)
                     } else if currentPage == 4 {
                         OnboardingTranscriptionEnginePage(onContinue: {
-                            withAnimation(.easeInOut(duration: 0.5)) { currentPage = 5 }
+                            if TranscriptionModeUserDefaults.mode == .remoteOnly {
+                                completeOnboarding()
+                            } else {
+                                withAnimation(.easeInOut(duration: 0.5)) { currentPage = 5 }
+                            }
                         })
                         .transition(.opacity)
                     } else {
@@ -83,11 +87,9 @@ struct WelcomePage: View {
                 Text("Welcome to")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Color.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(2.5)
 
                 Text("SpeakType")
-                    .font(.system(size: 48, weight: .regular, design: .serif))
+                    .font(.system(size: 48, weight: .semibold))
                     .foregroundStyle(Color.textPrimary)
                     .tracking(-0.5)
 
@@ -97,7 +99,7 @@ struct WelcomePage: View {
                         .foregroundStyle(Color.textSecondary)
 
                     Text(" Private. Fast. Offline.")
-                        .font(.system(size: 16, weight: .regular, design: .serif))
+                        .font(.system(size: 16, weight: .regular))
                         .italic()
                         .foregroundStyle(Color.textSecondary)
                 }
@@ -140,15 +142,15 @@ struct GetStartedButton: View {
                     .font(.system(size: 12, weight: .medium))
                     .offset(x: isHovered ? 3 : 0)
             }
-            .foregroundStyle(Color.bgApp)
+            .foregroundStyle(.white)
             .padding(.horizontal, 28)
             .padding(.vertical, 14)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.textPrimary)
+                    .fill(Color.accentBlue)
             )
             .shadow(
-                color: Color.black.opacity(isHovered ? 0.18 : 0.08), radius: isHovered ? 14 : 8, x: 0,
+                color: Color.accentBlue.opacity(isHovered ? 0.28 : 0.16), radius: isHovered ? 14 : 8, x: 0,
                 y: isHovered ? 6 : 3
             )
             .scaleEffect(isPressed ? 0.97 : 1.0)
@@ -180,27 +182,22 @@ struct GetStartedButton: View {
 
 struct PermissionsPage: View {
     var onContinue: () -> Void
-    @State private var micStatus: AVAuthorizationStatus = .notDetermined
-    @State private var accessibilityStatus: Bool = false
-    @State private var documentsAccessGranted: Bool = false
-    @State private var timer: Timer?
+    @ObservedObject private var permissions = PermissionService.shared
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
 
             VStack(spacing: 16) {
-                Text("QUICK SETUP")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(2)
+                Text("Quick setup")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.accentBlue)
 
                 Text("Permissions")
-                    .font(.system(size: 40, weight: .regular, design: .serif))
+                    .font(.system(size: 40, weight: .semibold)).tracking(-0.6)
                     .foregroundStyle(Color.textPrimary)
 
-                Text("Three quick permissions and you're ready to dictate.")
+                Text("Two quick permissions and you're ready to dictate.")
                     .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
@@ -213,17 +210,8 @@ struct PermissionsPage: View {
                     icon: "mic.fill",
                     title: "Microphone",
                     description: "To hear and transcribe your voice",
-                    isGranted: micStatus == .authorized,
-                    action: requestMicPermission
-                )
-
-                // Documents Folder
-                OnboardingPermissionRow(
-                    icon: "folder.fill",
-                    title: "Documents Folder",
-                    description: "To store AI models locally on your Mac",
-                    isGranted: documentsAccessGranted,
-                    action: requestDocumentsAccess
+                    isGranted: permissions.isMicGranted,
+                    action: permissions.requestMicPermission
                 )
 
                 // Accessibility
@@ -231,8 +219,8 @@ struct PermissionsPage: View {
                     icon: "hand.raised.fill",
                     title: "Accessibility",
                     description: "To type transcribed text into any app",
-                    isGranted: accessibilityStatus,
-                    action: requestAccessibilityPermission
+                    isGranted: permissions.isAccessibilityGranted,
+                    action: permissions.requestAccessibilityPermission
                 )
             }
             .frame(maxWidth: 520)
@@ -241,144 +229,20 @@ struct PermissionsPage: View {
             Spacer()
 
             ContinueButton(
-                isEnabled: micStatus == .authorized && accessibilityStatus
-                    && documentsAccessGranted,
+                isEnabled: permissions.arePermissionsGranted,
                 action: onContinue
             )
             .padding(.bottom, 48)
         }
         .padding(.horizontal, 60)
         .padding(.vertical, 40)
-        .onAppear {
-            checkPermissions()
-            startPolling()
-        }
+        .onAppear { permissions.startObserving() }
+        .onDisappear { permissions.stopObserving() }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
-            print("App became active, checking permissions...")
-            checkPermissions()
+            Task { await permissions.refresh() }
         }
-        .onDisappear {
-            timer?.invalidate()
-        }
-    }
-
-    // ... Copy-paste existing helpers (checkPermissions, request, polling) ...
-    // Note: Re-implementing them inline for the tool call
-
-    func startPolling() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-            DispatchQueue.main.async {
-                self.checkPermissions()
-            }
-        }
-        RunLoop.current.add(timer!, forMode: .common)
-    }
-
-    func checkPermissions() {
-        micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-        let newAccessStatus = AXIsProcessTrusted()
-        if newAccessStatus != accessibilityStatus {
-            print("🔐 Accessibility status changed: \(accessibilityStatus) → \(newAccessStatus)")
-        }
-        accessibilityStatus = newAccessStatus
-
-        // Check documents access by verifying the huggingface folder exists or can be created
-        checkDocumentsAccess()
-    }
-
-    func checkDocumentsAccess() {
-        guard
-            let documentsDir = FileManager.default.urls(
-                for: .documentDirectory, in: .userDomainMask
-            ).first
-        else {
-            documentsAccessGranted = false
-            return
-        }
-
-        let huggingfacePath = documentsDir.appendingPathComponent("huggingface")
-        // If the folder exists or we can access it, permission was granted
-        documentsAccessGranted =
-            FileManager.default.fileExists(atPath: huggingfacePath.path)
-            || FileManager.default.isReadableFile(atPath: documentsDir.path)
-    }
-
-    func requestDocumentsAccess() {
-        guard
-            let documentsDir = FileManager.default.urls(
-                for: .documentDirectory, in: .userDomainMask
-            ).first
-        else {
-            return
-        }
-
-        let huggingfacePath = documentsDir.appendingPathComponent("huggingface")
-
-        // Creating a directory in Documents triggers the permission prompt
-        do {
-            try FileManager.default.createDirectory(
-                at: huggingfacePath, withIntermediateDirectories: true)
-            print("✅ Documents folder access granted - created huggingface directory")
-            documentsAccessGranted = true
-        } catch {
-            print("⚠️ Documents folder access error: \(error)")
-            // Permission may have been denied, or there was another error
-            documentsAccessGranted = false
-        }
-    }
-
-    func requestMicPermission() {
-        // Check current status
-        let currentStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-
-        switch currentStatus {
-        case .authorized:
-            // Already granted
-            micStatus = .authorized
-            return
-
-        case .notDetermined:
-            // Show native permission prompt
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
-                DispatchQueue.main.async {
-                    self.checkPermissions()
-                }
-            }
-
-        case .denied, .restricted:
-            // User previously denied - open System Settings
-            openSettings(for: "Privacy_Microphone")
-
-        @unknown default:
-            break
-        }
-    }
-
-    func requestAccessibilityPermission() {
-        print("DEBUG: Requesting Accessibility Permission")
-
-        // First check current status
-        let currentStatus = AXIsProcessTrusted()
-
-        if currentStatus {
-            // Already granted
-            accessibilityStatus = true
-            return
-        }
-
-        // Show the native macOS prompt (will appear automatically)
-        let options: NSDictionary = [
-            kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
-        ]
-        let accessEnabled = AXIsProcessTrustedWithOptions(options)
-        accessibilityStatus = accessEnabled
-
-        // Note: We don't manually open System Settings here because
-        // the native prompt will show. Only open manually if user
-        // needs to re-enable after denying (handled by polling)
     }
 
     func openSettings(for pane: String) {
@@ -413,9 +277,8 @@ struct FeatureCard: View {
             Spacer()
                 .frame(height: 20)
 
-            // Title in serif
             Text(title)
-                .font(.system(size: 16, weight: .medium, design: .serif))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.textPrimary)
 
             Spacer()
@@ -434,32 +297,18 @@ struct FeatureCard: View {
         .frame(width: 160, height: 165)
         .padding(.horizontal, 16)
         .background(
-            ZStack {
-                // Base fill - always light for "floating card" effect
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.bgCard)
-
-                // Subtle inner border for depth
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.bgCard.opacity(0.8),
-                                Color.textSecondary.opacity(0.03),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1
-                    )
-            }
+            RoundedRectangle(cornerRadius: Constants.UI.radiusCard, style: .continuous)
+                .fill(Color.bgCard)
         )
-        .shadow(color: Color.black.opacity(0.03), radius: 1, x: 0, y: 1)
+        .overlay(
+            RoundedRectangle(cornerRadius: Constants.UI.radiusCard, style: .continuous)
+                .strokeBorder(Color.border.opacity(0.5), lineWidth: 0.5)
+        )
         .shadow(
-            color: Color.black.opacity(isHovered ? 0.12 : 0.06), radius: isHovered ? 20 : 12, x: 0,
-            y: isHovered ? 10 : 6
+            color: Color.black.opacity(isHovered ? 0.10 : 0.05), radius: isHovered ? 16 : 10, x: 0,
+            y: isHovered ? 8 : 4
         )
-        .scaleEffect(isHovered ? 1.03 : 1.0)
+        .scaleEffect(isHovered ? 1.02 : 1.0)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
@@ -548,14 +397,14 @@ struct ContinueButton: View {
                     .font(.system(size: isEnabled ? 12 : 10, weight: .medium))
                     .offset(x: (isHovered && isEnabled) ? 3 : 0)
             }
-            .foregroundStyle(Color.bgApp)
+            .foregroundStyle(isEnabled ? Color.white : Color.textMuted)
             .frame(width: 160, height: 44)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isEnabled ? Color.textPrimary : Color.textSecondary.opacity(0.3))
+                RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
+                    .fill(isEnabled ? Color.accentBlue : Color.bgHover)
             )
             .shadow(
-                color: isEnabled ? Color.black.opacity(isHovered ? 0.2 : 0.1) : Color.clear,
+                color: isEnabled ? Color.accentBlue.opacity(isHovered ? 0.28 : 0.14) : Color.clear,
                 radius: isHovered ? 12 : 6, x: 0, y: isHovered ? 6 : 3
             )
             .scaleEffect(isPressed ? 0.97 : 1.0)
@@ -605,14 +454,12 @@ struct GlobeKeyOptimizationPage: View {
             Spacer()
 
             VStack(spacing: 16) {
-                Text("OPTIMIZE WORKFLOW")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(2)
+                Text("Optimize your workflow")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.accentBlue)
 
                 Text("The Globe Key")
-                    .font(.system(size: 40, weight: .regular, design: .serif))
+                    .font(.system(size: 40, weight: .semibold)).tracking(-0.6)
                     .foregroundStyle(Color.textPrimary)
 
                 Text(
@@ -679,14 +526,12 @@ struct OnboardingPolishModelPage: View {
             Spacer()
 
             VStack(spacing: 16) {
-                Text("WRITING POLISH")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(2)
+                Text("Writing polish")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.accentBlue)
 
                 Text("Pick a polish model")
-                    .font(.system(size: 40, weight: .regular, design: .serif))
+                    .font(.system(size: 40, weight: .semibold)).tracking(-0.6)
                     .foregroundStyle(Color.textPrimary)
                     .multilineTextAlignment(.center)
 
@@ -704,8 +549,7 @@ struct OnboardingPolishModelPage: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.textPrimary)
                 TextField("http://127.0.0.1:11434", text: $ollamaBaseURL)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 13))
+                    .textFieldStyle(.app)
             }
             .frame(maxWidth: 520)
             .padding(.top, 28)
@@ -753,14 +597,12 @@ struct OnboardingTranscriptionEnginePage: View {
             Spacer()
 
             VStack(spacing: 16) {
-                Text("TRANSCRIPTION ENGINE")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(2)
+                Text("Transcription engine")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.accentBlue)
 
                 Text("On-device or cloud?")
-                    .font(.system(size: 40, weight: .regular, design: .serif))
+                    .font(.system(size: 40, weight: .semibold)).tracking(-0.6)
                     .foregroundStyle(Color.textPrimary)
                     .multilineTextAlignment(.center)
 
@@ -855,14 +697,12 @@ struct OnboardingModelDownloadPage: View {
             Spacer()
 
             VStack(spacing: 16) {
-                Text("VOICE MODEL")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(2)
+                Text("Voice model")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.accentBlue)
 
                 Text("Download transcription model")
-                    .font(.system(size: 40, weight: .regular, design: .serif))
+                    .font(.system(size: 40, weight: .semibold)).tracking(-0.6)
                     .foregroundStyle(Color.textPrimary)
                     .multilineTextAlignment(.center)
 

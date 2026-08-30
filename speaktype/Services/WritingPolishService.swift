@@ -76,6 +76,8 @@ enum WritingPolishService {
                 )
                 let clean = sanitizeModelOutput(out).trimmingCharacters(in: .whitespacesAndNewlines)
                 if !clean.isEmpty { return clean }
+            } catch is CancellationError {
+                return rawTranscript
             } catch {
                 print("WritingPolishService: remote cleanup (\(provider.rawValue)) failed — \(error.localizedDescription); falling back")
                 // fall through to local / raw
@@ -96,6 +98,8 @@ enum WritingPolishService {
             )
             let out = sanitizeModelOutput(polished).trimmingCharacters(in: .whitespacesAndNewlines)
             return out.isEmpty ? rawTranscript : out
+        } catch is CancellationError {
+            return rawTranscript
         } catch {
             print("WritingPolishService: Ollama polish failed — \(error.localizedDescription)")
             return rawTranscript

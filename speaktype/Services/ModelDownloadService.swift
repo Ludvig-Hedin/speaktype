@@ -12,26 +12,9 @@ class ModelDownloadService: ObservableObject {
     private var activeTasks: [String: Task<Void, Never>] = [:] // Track running download tasks
     
     private init() {
-        // Force a custom cache directory to avoid "Multiple models found" conflicts
-        setupCustomCache()
+        // Directory creation only — no Documents access, so nothing triggers a TCC prompt.
         // Launch-time `refreshDownloadedModels()` runs from AppDelegate to avoid racing duplicate Tasks.
-    }
-    
-    private func setupCustomCache() {
-        // Use the standard Documents/huggingface location that WhisperKit expects
-        guard let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-        
-        let huggingfaceCache = documentsDir.appendingPathComponent("huggingface")
-        
-        do {
-            try FileManager.default.createDirectory(at: huggingfaceCache, withIntermediateDirectories: true)
-            print("✅ Using standard HuggingFace cache at: \(huggingfaceCache.path)")
-        } catch {
-            print("⚠️ Failed to create huggingface directory: \(error)")
-        }
-        
-        // Don't override HF_HUB_CACHE - let WhisperKit use its default behavior
-        // This ensures compatibility with the standard HuggingFace cache structure
+        ModelStorage.ensureDirectoryExists()
     }
     
     // Check which models are already downloaded and update progress dictionary
@@ -79,23 +62,24 @@ class ModelDownloadService: ObservableObject {
         // NOTE: WhisperKit.fetchAvailableModels() returns ALL remote models, not local ones.
         // We ONLY rely on disk-based verification to check what's actually downloaded.
         let fileManager = FileManager.default
-        guard let documentsDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            return foundModels
+        // Application Support first, then the legacy Documents location (only while it
+        // still exists) so upgrading users keep the models they already downloaded.
+        let searchDirectories = ModelStorage.modelSearchDirectories()
+
+        var contents: [URL] = []
+        for whisperKitPath in searchDirectories {
+            guard let entries = try? fileManager.contentsOfDirectory(at: whisperKitPath, includingPropertiesForKeys: [.isDirectoryKey]) else {
+                continue
+            }
+            print("📁 Found \(entries.count) items in WhisperKit cache at \(whisperKitPath.path)")
+            contents.append(contentsOf: entries)
         }
 
-        let whisperKitPath = documentsDir.appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml")
-
-        guard fileManager.fileExists(atPath: whisperKitPath.path) else {
-            print("ℹ️ WhisperKit cache directory doesn't exist yet: \(whisperKitPath.path)")
+        guard !contents.isEmpty else {
+            print("ℹ️ No WhisperKit cache contents found in \(searchDirectories.map(\.path))")
             print("   Models will be downloaded on first use.")
             return foundModels
         }
-
-        guard let contents = try? fileManager.contentsOfDirectory(at: whisperKitPath, includingPropertiesForKeys: [.isDirectoryKey]) else {
-            return foundModels
-        }
-
-        print("📁 Found \(contents.count) items in WhisperKit cache at \(whisperKitPath.path)")
 
         for item in contents {
             let modelName = item.lastPathComponent
@@ -165,7 +149,7 @@ class ModelDownloadService: ObservableObject {
                 // try await WhisperKit.download(variant: variant) { progress in ... }
                 
                 // likely: download(variant:progressCallback:) - 'from' usually has a default
-                let _ = try await WhisperKit.download(variant: variant, progressCallback: { progress in
+                let _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.downloadBase, progressCallback: { progress in
                     DispatchQueue.main.async {
                         self.downloadProgress[variant] = progress.fractionCompleted
                     }
@@ -211,7 +195,7 @@ class ModelDownloadService: ObservableObject {
                      
                      // Retry download once
                      do {
-                         let _ = try await WhisperKit.download(variant: variant, progressCallback: { progress in
+                         let _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.downloadBase, progressCallback: { progress in
                              DispatchQueue.main.async {
                                  self.downloadProgress[variant] = progress.fractionCompleted
                              }
@@ -271,7 +255,10 @@ class ModelDownloadService: ObservableObject {
     /// `nonisolated` so the blocking FileManager traversal runs off the main actor.
     nonisolated static func purgeModelCaches(variant: String) -> String {
         let fileManager = FileManager.default
-        let searchDirs: [FileManager.SearchPathDirectory] = [.documentDirectory, .applicationSupportDirectory, .cachesDirectory]
+        // Documents is intentionally excluded: models no longer live there, and enumerating
+        // it would raise a TCC prompt. `ModelStorage.migrateFromDocumentsIfNeeded()` is the
+        // only code that ever touches the legacy Documents location, and only once.
+        let searchDirs: [FileManager.SearchPathDirectory] = [.applicationSupportDirectory, .cachesDirectory]
 
         // Parse variant: "openai/whisper-medium" or "openai_whisper-medium"
         let variantParts = variant.split(separator: "/")
@@ -322,12 +309,10 @@ class ModelDownloadService: ObservableObject {
         deletedCount += cleanupDirectory(tempHf, matchAny: [String(modelName), underscoreVariant])
         deletedCount += cleanupDirectory(tempDir, matchAny: [String(modelName), underscoreVariant])
 
-        // 4. Check Documents/huggingface/models/argmaxinc/whisperkit-coreml (standard location)
-        if let documentsDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first {
-            let whisperKitModels = documentsDir.appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml")
-            checkedPaths.append(whisperKitModels.path)
-            deletedCount += cleanupDirectory(whisperKitModels, matchAny: [String(modelName), underscoreVariant])
-        }
+        // 4. Check the canonical model directory in Application Support
+        let whisperKitModels = ModelStorage.whisperKitModelsDirectory
+        checkedPaths.append(whisperKitModels.path)
+        deletedCount += cleanupDirectory(whisperKitModels, matchAny: [String(modelName), underscoreVariant])
 
         print("🗑️ Cleanup complete. Deleted \(deletedCount) items from \(checkedPaths.count) locations")
 

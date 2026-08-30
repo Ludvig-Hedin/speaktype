@@ -64,7 +64,7 @@ struct OllamaRecommendedModelsView: View {
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
                         .fill(Color.textPrimary.opacity(0.06))
                 )
             }
@@ -125,7 +125,7 @@ struct OllamaRecommendedModelsView: View {
                             .foregroundStyle(Color.textPrimary)
                         if let badge = entry.badge {
                             Text(badge.uppercased())
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(Color.textSecondary)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
@@ -204,12 +204,12 @@ struct OllamaRecommendedModelsView: View {
         }
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
                 .fill(Color.bgCard)
                 .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
                 .strokeBorder(
                     isSelected ? Color.textPrimary.opacity(0.22) : Color.textPrimary.opacity(0.08),
                     lineWidth: 1

@@ -13,6 +13,7 @@ struct MiniRecorderView: View {
     @State private var statusMessage = "Transcribing..."
     @State private var isWarmingUp = false
     @State private var transcriptionTask: Task<Void, Never>?
+    @State private var recordingStartTask: Task<Void, Never>?
     var onCommit: ((String) -> Void)?
     var onCancel: (() -> Void)?
 
@@ -32,7 +33,7 @@ struct MiniRecorderView: View {
 
         for code in candidateCodes where code != "auto" {
             guard !orderedCodes.contains(code) else { continue }
-            guard GeneralSettingsTab.whisperLanguages.contains(where: { $0.code == code }) else {
+            guard SpokenLanguageSection.whisperLanguages.contains(where: { $0.code == code }) else {
                 continue
             }
             orderedCodes.append(code)
@@ -137,7 +138,7 @@ struct MiniRecorderView: View {
                             if !quickLanguageCodes.isEmpty {
                                 Divider()
                                 ForEach(quickLanguageCodes, id: \.self) { code in
-                                    if let lang = GeneralSettingsTab.whisperLanguages.first(where: {
+                                    if let lang = SpokenLanguageSection.whisperLanguages.first(where: {
                                         $0.code == code
                                     }) {
                                         Button(lang.name) { setLanguage(code) }
@@ -147,7 +148,7 @@ struct MiniRecorderView: View {
 
                             Divider()
                             Menu("More languages") {
-                                ForEach(GeneralSettingsTab.whisperLanguages, id: \.code) { lang in
+                                ForEach(SpokenLanguageSection.whisperLanguages, id: \.code) { lang in
                                     Button(lang.name) { setLanguage(lang.code) }
                                 }
                             }
@@ -373,6 +374,8 @@ struct MiniRecorderView: View {
 
     private func cancelRecording() {
         cancelCommit = true
+        recordingStartTask?.cancel()
+        recordingStartTask = nil
         transcriptionTask?.cancel()
         transcriptionTask = nil
 
@@ -416,7 +419,7 @@ struct MiniRecorderView: View {
 
         let route = TranscriptionCoordinator.willUseRemoteNextTranscript()
         if TranscriptionModeUserDefaults.mode == .remoteOnly && !route.isRemote {
-            showStartError("Cloud transcription is not configured")
+            showStartError("Enable audio upload in Settings to use cloud transcription")
             return
         }
 
@@ -434,24 +437,33 @@ struct MiniRecorderView: View {
         }
 
         cancelCommit = false
-
+        isProcessing = true
+        statusMessage = "Starting microphone…"
         debugLog("Starting recording...")
-        guard audioRecorder.startRecording() else {
-            debugLog("Audio recorder rejected start request")
-            onCancel?()
-            return
-        }
-        isListening = true
+        recordingStartTask?.cancel()
+        recordingStartTask = Task {
+            guard await audioRecorder.startRecording() else {
+                guard !Task.isCancelled else { return }
+                await MainActor.run { showStartError("Could not start the microphone") }
+                return
+            }
+            guard !Task.isCancelled else {
+                _ = await audioRecorder.stopRecording(discardOutput: true)
+                return
+            }
+            await MainActor.run {
+                recordingStartTask = nil
+                isProcessing = false
+                isListening = true
+            }
 
-        // Warm the model in parallel with the user speaking. On low-RAM Macs the model is
-        // released when idle, so loading it now (not at Stop) hides the reload latency under
-        // the time spent dictating. Coalesced with the safety load in processRecording().
-        if shouldUseLocalRoute {
-            whisperService.cancelIdleUnload()
-            if !whisperService.isInitialized || whisperService.currentModelVariant != selectedModel {
-                let variant = selectedModel
-                Task.detached(priority: .userInitiated) {
-                    try? await WhisperService.shared.loadModel(variant: variant)
+            if shouldUseLocalRoute {
+                whisperService.cancelIdleUnload()
+                if !whisperService.isInitialized || whisperService.currentModelVariant != selectedModel {
+                    let variant = selectedModel
+                    Task.detached(priority: .userInitiated) {
+                        try? await WhisperService.shared.loadModel(variant: variant)
+                    }
                 }
             }
         }
@@ -535,6 +547,8 @@ struct MiniRecorderView: View {
 
         debugLog("Escape pressed - cancelling immediate commit")
         cancelCommit = true
+        recordingStartTask?.cancel()
+        recordingStartTask = nil
 
         if isListening {
             cancelRecording()
@@ -596,11 +610,17 @@ struct MiniRecorderView: View {
                 await MainActor.run { statusMessage = status }
             }
             let outcome = try await TranscriptionCoordinator.transcribe(audioFile: url, language: transcriptionLanguage)
+            try Task.checkCancellation()
+            guard !cancelCommit else {
+                try? FileManager.default.removeItem(at: url)
+                return
+            }
             let text = outcome.text
             debugLog("Transcription result: \(text.prefix(50))...")
 
             guard !text.isEmpty else {
                 debugLog("Empty text, cancelling")
+                try? FileManager.default.removeItem(at: url)
                 await MainActor.run {
                     statusMessage = "No speech detected"
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
@@ -616,6 +636,11 @@ struct MiniRecorderView: View {
                 await MainActor.run { statusMessage = "Polishing..." }
             }
             let finalText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: text)
+            try Task.checkCancellation()
+            guard !cancelCommit else {
+                try? FileManager.default.removeItem(at: url)
+                return
+            }
             debugLog("Final text (after optional polish): \(finalText.prefix(50))...")
 
             let duration = await getAudioDuration(url: url)
@@ -626,7 +651,9 @@ struct MiniRecorderView: View {
                 modelUsed: outcome.modelLabel,
                 transcriptionTime: outcome.transcriptionTime,
                 provider: outcome.provider.rawValue,
-                estimatedCostUSD: outcome.estimatedCostUSD
+                estimatedCostUSD: outcome.estimatedCostUSD,
+                rawTranscript: text,
+                polishedTranscript: finalText == text ? nil : finalText
             )
 
             debugLog("Calling onCommit...")
@@ -645,11 +672,13 @@ struct MiniRecorderView: View {
             debugLog("onCommit called successfully")
         } catch is CancellationError {
             debugLog("Transcription cancelled")
+            try? FileManager.default.removeItem(at: url)
             await MainActor.run { isProcessing = false }
         } catch {
             debugLog("Error: \(error.localizedDescription)")
+            try? FileManager.default.removeItem(at: url)
             await MainActor.run {
-                statusMessage = "Transcription failed"
+                statusMessage = error.localizedDescription
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                     self.isProcessing = false
                     self.onCancel?()
@@ -670,7 +699,7 @@ struct MiniRecorderView: View {
 
     private func spokenLanguageDisplayName(for code: String) -> String {
         if code == "auto" { return "Auto-detect" }
-        return GeneralSettingsTab.whisperLanguages.first(where: { $0.code == code })?.name ?? code
+        return SpokenLanguageSection.whisperLanguages.first(where: { $0.code == code })?.name ?? code
     }
 }
 

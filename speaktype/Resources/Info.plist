@@ -39,6 +39,12 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<false/>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>SpeakType only needs this if you transcribe an audio file stored on your Desktop.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>SpeakType only needs this if you transcribe an audio file stored in your Documents folder. AI models are stored in the app's own Application Support folder.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>SpeakType only needs this if you transcribe an audio file stored in your Downloads folder.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>SpeakType needs permission to send keystrokes to paste transcribed text into the active application.</string>
 	<key>NSMicrophoneUsageDescription</key>

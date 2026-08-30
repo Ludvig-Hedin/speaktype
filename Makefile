@@ -224,14 +224,14 @@ uninstall:
 	@echo "🗑️  Uninstalling SpeakType completely..."
 	@pkill -9 speaktype 2>/dev/null || true
 	@echo "   Killed running app"
-	@tccutil reset Accessibility com.2048labs.speaktype 2>/dev/null || true
-	@tccutil reset Microphone com.2048labs.speaktype 2>/dev/null || true
+	@tccutil reset Accessibility com.ludvighedin.speaktype 2>/dev/null || true
+	@tccutil reset Microphone com.ludvighedin.speaktype 2>/dev/null || true
 	@echo "   Reset accessibility & microphone permissions"
-	@defaults delete com.2048labs.speaktype 2>/dev/null || true
+	@defaults delete com.ludvighedin.speaktype 2>/dev/null || true
 	@rm -rf ~/Library/Application\ Support/SpeakType 2>/dev/null || true
-	@rm -rf ~/Library/Preferences/com.2048labs.speaktype.plist 2>/dev/null || true
-	@rm -rf ~/Library/Caches/com.2048labs.speaktype 2>/dev/null || true
-	@rm -rf ~/Library/Saved\ Application\ State/com.2048labs.speaktype.savedState 2>/dev/null || true
+	@rm -rf ~/Library/Preferences/com.ludvighedin.speaktype.plist 2>/dev/null || true
+	@rm -rf ~/Library/Caches/com.ludvighedin.speaktype 2>/dev/null || true
+	@rm -rf ~/Library/Saved\ Application\ State/com.ludvighedin.speaktype.savedState 2>/dev/null || true
 	@echo "   Removed app data and preferences"
 	@rm -rf ~/Library/Developer/Xcode/DerivedData/speaktype-* 2>/dev/null || true
 	@echo "   Cleared Xcode build cache"

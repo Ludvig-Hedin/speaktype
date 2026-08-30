@@ -165,14 +165,7 @@ struct StatisticsView: View {
                 chartView
             }
         }
-        .padding(24)
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.border.opacity(0.5), lineWidth: 1)
-        )
-        .cardShadow()
+        .themedCard(padding: 24)
     }
 
     private var emptyChartView: some View {
@@ -203,7 +196,7 @@ struct StatisticsView: View {
                     y: .value("Words", data.wordCount)
                 )
                 .foregroundStyle(Color.textSecondary.opacity(0.3))
-                .cornerRadius(8)
+                .cornerRadius(Constants.UI.radiusSmall)
             }
         }
         .chartXAxis {
@@ -492,8 +485,8 @@ struct StatCard: View {
                 .foregroundStyle(Color.textMuted)
 
             Text(value)
-                .font(.system(size: 32, weight: .light, design: .serif))
-                .monospacedDigit()
+                .font(Typography.statValueL)
+                .tracking(-0.3)
                 .foregroundStyle(Color.textPrimary)
 
             Text(label)
@@ -503,13 +496,7 @@ struct StatCard: View {
                 .tracking(0.5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.border.opacity(0.5), lineWidth: 1)
-        )
+        .themedCard()
     }
 }
 
@@ -537,13 +524,7 @@ struct DetailCard: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.border.opacity(0.5), lineWidth: 1)
-        )
+        .themedCard(padding: 16)
     }
 }
 
@@ -560,7 +541,7 @@ struct PeriodButton: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
                 .background(isSelected ? Color.bgHover : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
         }
         .buttonStyle(.stPlain)
     }

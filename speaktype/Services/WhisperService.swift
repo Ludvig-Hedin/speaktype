@@ -111,7 +111,7 @@ class WhisperService {
 
     /// The variant to (re)load: the one already loaded, else the user's persisted selection.
     private func resolvedVariant() -> String {
-        if !currentModelVariant.isEmpty { return currentModelVariant }
+        if pipe != nil, isInitialized, !currentModelVariant.isEmpty { return currentModelVariant }
         return UserDefaults.standard.string(forKey: SelectedModelPreference.storageKey) ?? ""
     }
 
@@ -187,12 +187,9 @@ class WhisperService {
         }
 
         do {
-            let documentDirectory = FileManager.default.urls(
-                for: .documentDirectory, in: .userDomainMask
-            ).first!
-            let modelFolderPath = documentDirectory.appendingPathComponent(
-                "huggingface/models/argmaxinc/whisperkit-coreml/\(variant)"
-            ).path
+            // Resolves to Application Support, or the legacy Documents location for users
+            // who downloaded models before the move (so an upgrade never orphans a model).
+            let modelFolderPath = ModelStorage.modelDirectory(for: variant).path
 
             // Use WhisperKitConfig with optimized settings
             let config = WhisperKitConfig(

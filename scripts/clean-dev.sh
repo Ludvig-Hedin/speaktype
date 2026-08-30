@@ -16,21 +16,21 @@ sleep 1
 echo "✅ Killed all running instances"
 
 # Reset ALL permissions
-tccutil reset Microphone com.2048labs.speaktype 2>/dev/null || true
-tccutil reset Accessibility com.2048labs.speaktype 2>/dev/null || true
-tccutil reset Microphone com.2048labs.speaktype.dev 2>/dev/null || true
-tccutil reset Accessibility com.2048labs.speaktype.dev 2>/dev/null || true
+tccutil reset Microphone com.ludvighedin.speaktype 2>/dev/null || true
+tccutil reset Accessibility com.ludvighedin.speaktype 2>/dev/null || true
+tccutil reset Microphone com.ludvighedin.speaktype.dev 2>/dev/null || true
+tccutil reset Accessibility com.ludvighedin.speaktype.dev 2>/dev/null || true
 echo "✅ Reset microphone & accessibility permissions"
 
 # Remove app preferences and data
-defaults delete com.2048labs.speaktype 2>/dev/null || true
-defaults delete com.2048labs.speaktype.dev 2>/dev/null || true
-rm -rf ~/Library/Caches/com.2048labs.speaktype 2>/dev/null || true
-rm -rf ~/Library/Caches/com.2048labs.speaktype.dev 2>/dev/null || true
-rm -rf ~/Library/Saved\ Application\ State/com.2048labs.speaktype.savedState 2>/dev/null || true
-rm -rf ~/Library/Saved\ Application\ State/com.2048labs.speaktype.dev.savedState 2>/dev/null || true
-rm -rf ~/Library/Preferences/com.2048labs.speaktype.plist 2>/dev/null || true
-rm -rf ~/Library/Preferences/com.2048labs.speaktype.dev.plist 2>/dev/null || true
+defaults delete com.ludvighedin.speaktype 2>/dev/null || true
+defaults delete com.ludvighedin.speaktype.dev 2>/dev/null || true
+rm -rf ~/Library/Caches/com.ludvighedin.speaktype 2>/dev/null || true
+rm -rf ~/Library/Caches/com.ludvighedin.speaktype.dev 2>/dev/null || true
+rm -rf ~/Library/Saved\ Application\ State/com.ludvighedin.speaktype.savedState 2>/dev/null || true
+rm -rf ~/Library/Saved\ Application\ State/com.ludvighedin.speaktype.dev.savedState 2>/dev/null || true
+rm -rf ~/Library/Preferences/com.ludvighedin.speaktype.plist 2>/dev/null || true
+rm -rf ~/Library/Preferences/com.ludvighedin.speaktype.dev.plist 2>/dev/null || true
 rm -rf ~/Library/Application\ Support/SpeakType 2>/dev/null || true
 rm -rf ~/Library/Application\ Support/SpeakType-Dev 2>/dev/null || true
 echo "✅ Removed app preferences & data"

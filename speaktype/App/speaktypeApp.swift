@@ -40,7 +40,12 @@ struct speaktypeApp: App {
             .environmentObject(licenseManager)
             .environmentObject(trialManager)
             .preferredColorScheme(appTheme.colorScheme)
-            .tint(Color(nsColor: .controlAccentColor))
+            // Tint native controls (menu arrows, toggles, sliders, checkmarks) with our one
+            // accent instead of the user's system accent — keeps the palette monochrome + blue.
+            .tint(Color.accentBlue)
+            // No keyboard focus rings anywhere — this is a pointer-first utility, and the
+            // accent-colored ring on launch/tab reads as a glitch.
+            .focusEffectDisabled()
         }
         .defaultSize(width: 1200, height: 800)
         .windowStyle(.hiddenTitleBar)
@@ -59,6 +64,8 @@ struct speaktypeApp: App {
                 )
             }
             .preferredColorScheme(appTheme.colorScheme)
+            .tint(Color.accentBlue)
+            .focusEffectDisabled()
         } label: {
             // Icon changes when the hotkey is disabled so the user has a persistent visual cue
             Label(

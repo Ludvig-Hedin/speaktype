@@ -27,13 +27,15 @@ extension Color {
 
     // MARK: - Semantic Colors
 
+    // Apple neutral system grays (iOS/macOS): cool, not warm. Dark uses secondary/tertiary
+    // system-background steps so cards read as elevated over the window.
     static let bgApp = Color(
         nsColor: NSColor(
             name: "bgApp",
             dynamicProvider: { appearance in
                 appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(hex: "1A1A1A")
-                    : NSColor(hex: "FAF9F7")
+                    ? NSColor(hex: "1C1C1E")  // iOS systemBackground (dark)
+                    : NSColor(hex: "F5F5F7")  // apple.com section gray
             }))
 
     static let bgContent = Color(
@@ -41,8 +43,8 @@ extension Color {
             name: "bgContent",
             dynamicProvider: { appearance in
                 appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(hex: "1A1A1A")
-                    : NSColor(hex: "FFFFFF")  // White content area like Flow
+                    ? NSColor(hex: "1C1C1E")
+                    : NSColor(hex: "FFFFFF")
             }))
 
     static let bgSidebar = Color(
@@ -50,8 +52,8 @@ extension Color {
             name: "bgSidebar",
             dynamicProvider: { appearance in
                 appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(hex: "1A1A1A")
-                    : NSColor(hex: "F5F4F2")  // Slightly warmer than content
+                    ? NSColor(hex: "1C1C1E")
+                    : NSColor(hex: "F5F5F7")  // cool gray, distinct from white content
             }))
 
     static let bgSurface = Color(
@@ -59,7 +61,7 @@ extension Color {
             name: "bgSurface",
             dynamicProvider: { appearance in
                 appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(hex: "252525")
+                    ? NSColor(hex: "2C2C2E")
                     : NSColor(hex: "FFFFFF")
             }))
 
@@ -68,7 +70,7 @@ extension Color {
             name: "bgCard",
             dynamicProvider: { appearance in
                 appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(hex: "252525")
+                    ? NSColor(hex: "2C2C2E")  // iOS secondarySystemBackground (dark)
                     : NSColor(hex: "FFFFFF")
             }))
 
@@ -77,8 +79,8 @@ extension Color {
             name: "bgHover",
             dynamicProvider: { appearance in
                 appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(hex: "2F2F2F")
-                    : NSColor(hex: "F5F4F2")
+                    ? NSColor(hex: "2C2C2E")
+                    : NSColor(hex: "EFEFF1")
             }))
 
     static let bgSelected = Color(
@@ -86,8 +88,8 @@ extension Color {
             name: "bgSelected",
             dynamicProvider: { appearance in
                 appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(hex: "3A3A3C")  // Elevated neutral (sidebar / lists)
-                    : NSColor(hex: "E8E8ED")  // Soft gray selection, not tinted
+                    ? NSColor(hex: "3A3A3C")  // systemGray4 (dark)
+                    : NSColor(hex: "E5E5EA")  // systemGray5 (light)
             }))
 
     // MARK: - Borders
@@ -97,8 +99,8 @@ extension Color {
             name: "border",
             dynamicProvider: { appearance in
                 appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(hex: "3A3A3A")
-                    : NSColor(hex: "E8E6E3")
+                    ? NSColor(hex: "38383A")  // iOS opaqueSeparator (dark)
+                    : NSColor(hex: "D2D2D7")  // apple.com hairline
             }))
 
     static let borderSubtle = Color(
@@ -130,7 +132,7 @@ extension Color {
             dynamicProvider: { appearance in
                 appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
                     ? NSColor(hex: "FFFFFF")
-                    : NSColor(hex: "1A1A1A")
+                    : NSColor(hex: "1D1D1F")  // Apple warm near-black (not pure black)
             }))
 
     static let textSecondary = Color(
@@ -193,7 +195,15 @@ extension Color {
     static let accentSuccess = Color(hex: "22C55E")
     static let accentWarning = Color(hex: "F59E0B")
     static let accentError = Color(hex: "EF4444")
-    static let accentBlue = Color(hex: "3B82F6")
+    /// The one accent — Apple systemBlue (adapts light/dark like the OS).
+    static let accentBlue = Color(
+        nsColor: NSColor(
+            name: "accentBlue",
+            dynamicProvider: { appearance in
+                appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                    ? NSColor(hex: "0A84FF")  // systemBlue (dark)
+                    : NSColor(hex: "007AFF")  // systemBlue (light)
+            }))
 
     // Chart colors
     static let chartRed = Color(hex: "A62D35")
@@ -279,8 +289,8 @@ extension View {
 // MARK: - Reusable Card Modifier
 
 struct ThemedCardModifier: ViewModifier {
-    var padding: CGFloat = 20
-    var cornerRadius: CGFloat = Constants.UI.cardCornerRadius
+    var padding: CGFloat = Constants.UI.cardPadding
+    var cornerRadius: CGFloat = Constants.UI.radiusCard
     @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
@@ -292,40 +302,30 @@ struct ThemedCardModifier: ViewModifier {
                     shape.fill(.ultraThinMaterial)
                     shape.fill(
                         colorScheme == .dark
-                            ? Color.white.opacity(0.05)
+                            ? Color.white.opacity(0.04)
                             : Color.white.opacity(0.72)
                     )
                 }
             }
             .clipShape(shape)
+            // Single hairline — no gradient rim. Reads "system chrome", not "AI card".
             .overlay(
                 shape.strokeBorder(
-                    Color.border.opacity(colorScheme == .dark ? 0.45 : 0.55),
-                    lineWidth: 1
-                )
-            )
-            .overlay(
-                shape.strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(colorScheme == .dark ? 0.14 : 0.55),
-                            Color.white.opacity(0.04),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
+                    Color.border.opacity(colorScheme == .dark ? 0.5 : 0.6),
                     lineWidth: 0.5
                 )
             )
-            .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.05), radius: 14, x: 0, y: 6)
+            // One soft shadow.
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.06), radius: 10, x: 0, y: 4)
     }
 }
 
 extension View {
     /// Glass-tinted card: material + neutral tint + hairline — reads “system chrome”, not flat dashboard.
-    func themedCard(padding: CGFloat = 20, cornerRadius: CGFloat = Constants.UI.cardCornerRadius)
-        -> some View
-    {
+    func themedCard(
+        padding: CGFloat = Constants.UI.cardPadding,
+        cornerRadius: CGFloat = Constants.UI.radiusCard
+    ) -> some View {
         modifier(ThemedCardModifier(padding: padding, cornerRadius: cornerRadius))
     }
 }
@@ -350,16 +350,33 @@ struct STButtonPrimary: ButtonStyle {
 struct STButtonSecondary: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(Typography.bodyMedium)
+            .font(Typography.labelMedium)
             .foregroundStyle(Color.textPrimary)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
             .background(.thinMaterial, in: Capsule(style: .continuous))
             .overlay(
                 Capsule(style: .continuous)
-                    .strokeBorder(Color.border.opacity(0.55), lineWidth: 1)
+                    .strokeBorder(Color.border.opacity(0.5), lineWidth: 0.5)
             )
             .opacity(configuration.isPressed ? 0.85 : 1)
+            .modifier(ClickActionPointerCursorModifier())
+    }
+}
+
+/// The one blue CTA. Use ONCE per screen for the primary action; everything else stays neutral.
+struct STButtonAction: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Typography.labelMedium.weight(.semibold))
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                Color.accentBlue,
+                in: RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
+            )
+            .opacity(configuration.isPressed ? 0.86 : 1)
             .modifier(ClickActionPointerCursorModifier())
     }
 }
@@ -399,8 +416,38 @@ extension ButtonStyle where Self == STButtonSecondary {
     static var stSecondary: STButtonSecondary { STButtonSecondary() }
 }
 
+extension ButtonStyle where Self == STButtonAction {
+    static var stAction: STButtonAction { STButtonAction() }
+}
+
 extension ButtonStyle where Self == STButtonGhost {
     static var stGhost: STButtonGhost { STButtonGhost() }
+}
+
+// MARK: - Text Field Style
+
+/// Neutral inset field — replaces `.roundedBorder` so text inputs match the app's chrome
+/// (soft fill + hairline + small radius) instead of the system default look.
+struct AppTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .font(Typography.bodySmall)
+            .foregroundStyle(Color.textPrimary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                Color.bgHover.opacity(0.6),
+                in: RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous)
+                    .strokeBorder(Color.border.opacity(0.5), lineWidth: 0.5)
+            )
+    }
+}
+
+extension TextFieldStyle where Self == AppTextFieldStyle {
+    static var app: AppTextFieldStyle { AppTextFieldStyle() }
 }
 
 // MARK: - Selection State Helper

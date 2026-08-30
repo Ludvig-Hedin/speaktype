@@ -37,6 +37,7 @@ class AudioRecordingService: NSObject, ObservableObject {
     private var isSessionStarted = false
     private var setupTask: Task<Void, Never>?
     private var isStopping = false  // Flag to prevent appending during stop
+    private var isStarting = false
 
     // MARK: - Chunking state
     private var chunkAssetWriter: AVAssetWriter?
@@ -242,86 +243,93 @@ class AudioRecordingService: NSObject, ObservableObject {
     }
 
     @discardableResult
-    func startRecording() -> Bool {
-        requestPermission()
+    func startRecording() async -> Bool {
+        guard !isStarting, !isRecording, !isStopping else { return false }
+        isStarting = true
+        defer { isStarting = false }
 
-        guard !isRecording, !isStopping else { return false }
-        if captureSession == nil { setupSession() }
+        let permissionGranted: Bool
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            permissionGranted = true
+        case .notDetermined:
+            permissionGranted = await AVCaptureDevice.requestAccess(for: .audio)
+        default:
+            permissionGranted = false
+        }
+        guard !Task.isCancelled else { return false }
+        guard permissionGranted else { return false }
 
-        // 1. Reset flags and stale writer state before any new samples arrive.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            audioQueue.async {
+                if self.captureSession == nil {
+                    self.configureSession(deviceId: self.selectedDeviceId)
+                }
+                if self.captureSession?.isRunning != true {
+                    self.captureSession?.startRunning()
+                    Thread.sleep(forTimeInterval: 0.3)
+                }
+                continuation.resume()
+            }
+        }
+        guard !Task.isCancelled else {
+            audioQueue.async { self.captureSession?.stopRunning() }
+            return false
+        }
+        guard captureSession?.isRunning == true else { return false }
+
         isStopping = false
         shouldDiscardCurrentRecordingOutput = false
         resetMainWriterState()
         resetChunkWriterState()
-        isRecording = true
+        let url = getRecordingsDirectory().appendingPathComponent(
+            "recording-\(Date().timeIntervalSince1970).wav")
+        currentFileURL = url
 
-        // 2. Wrap setup in a Task so stopRecording can wait for it
-        setupTask = Task { @MainActor in
-            // Ensure capture session is running before setting up the writer
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                audioQueue.async {
-                    if self.captureSession?.isRunning != true {
-                        print("🎤 Starting capture session...")
-                        self.captureSession?.startRunning()
-                        // Wait for session to be ready
-                        Thread.sleep(forTimeInterval: 0.3)
-                        print("🎤 Capture session started")
-                    }
-                    continuation.resume()
-                }
+        do {
+            assetWriter = try AVAssetWriter(outputURL: url, fileType: .wav)
+
+            let settings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVSampleRateKey: 16000.0,
+                AVNumberOfChannelsKey: 1,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsNonInterleaved: false,
+            ]
+
+            let writerInput = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
+            writerInput.expectsMediaDataInRealTime = true
+            guard assetWriter?.canAdd(writerInput) == true else { throw CocoaError(.fileWriteUnknown) }
+            assetWriter?.add(writerInput)
+            assetWriterInput = writerInput
+
+            guard assetWriter?.startWriting() == true else { throw assetWriter?.error ?? CocoaError(.fileWriteUnknown) }
+            isSessionStarted = false
+            isRecording = true
+            recordingStartTime = Date()
+            await MainActor.run {
+                self.audioLevel = 0.0
+                self.audioFrequency = 0.0
             }
-
-            let url = getRecordingsDirectory().appendingPathComponent(
-                "recording-\(Date().timeIntervalSince1970).wav")
-            currentFileURL = url
-
-            do {
-                assetWriter = try AVAssetWriter(outputURL: url, fileType: .wav)
-
-                // Use standard WAV format compatible with WhisperKit
-                let settings: [String: Any] = [
-                    AVFormatIDKey: kAudioFormatLinearPCM,
-                    AVSampleRateKey: 16000.0,
-                    AVNumberOfChannelsKey: 1,
-                    AVLinearPCMBitDepthKey: 16,
-                    AVLinearPCMIsFloatKey: false,
-                    AVLinearPCMIsBigEndianKey: false,
-                    AVLinearPCMIsNonInterleaved: false,
-                ]
-
-                assetWriterInput = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
-                assetWriterInput?.expectsMediaDataInRealTime = true
-
-                if assetWriter?.canAdd(assetWriterInput!) == true {
-                    assetWriter?.add(assetWriterInput!)
-                }
-
-                assetWriter?.startWriting()
-                isSessionStarted = false
-
-                DispatchQueue.main.async {
-                    self.audioLevel = 0.0
-                    self.audioFrequency = 0.0
-                }
-
-                print("Recording started: \(url.lastPathComponent)")
-
-            } catch {
-                print("Error starting recording: \(error)")
-                isRecording = false  // Revert if failed
-                audioQueue.async {
-                    self.captureSession?.stopRunning()
-                }
-            }
+            print("Recording started: \(url.lastPathComponent)")
+            return true
+        } catch {
+            print("Error starting recording: \(error)")
+            try? FileManager.default.removeItem(at: url)
+            resetMainWriterState()
+            audioQueue.async { self.captureSession?.stopRunning() }
+            return false
         }
-        return true
     }
 
     func stopRecording(discardOutput: Bool = false) async -> URL? {
         // Wait for setup to complete if it's running
         _ = await setupTask?.value
 
-        guard isRecording, let url = currentFileURL else { return nil }
+        guard !isStopping, isRecording, let url = currentFileURL else { return nil }
+        isStopping = true
         shouldDiscardCurrentRecordingOutput = discardOutput
 
         // Ensure minimum recording duration to prevent empty/corrupted WAV files
@@ -335,8 +343,6 @@ class AudioRecordingService: NSObject, ObservableObject {
             }
         }
 
-        // Set stopping flag BEFORE anything else to prevent race conditions
-        isStopping = true
         isRecording = false  // Stop capturing new frames immediately
         DispatchQueue.main.async {
             self.audioLevel = 0.0
@@ -498,8 +504,7 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
             }
         }
 
-        // --- Chunk writer (background segments) ---
-        appendToChunk(sampleBuffer: sampleBuffer, pts: pts)
+        // The full recording is the only persisted output. Chunk streaming has no consumer.
     }
 
     // MARK: - Chunk Writer Helpers (audioQueue)

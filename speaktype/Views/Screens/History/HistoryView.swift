@@ -41,7 +41,7 @@ struct HistoryView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                             .background(Color.bgHover)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
                         }
                         .buttonStyle(.stPlain)
                     }
@@ -116,8 +116,8 @@ struct HistoryView: View {
                 .padding(.vertical, 12)
                 .background(Material.ultraThinMaterial)
                 .background(Color.black.opacity(0.8))
-                .cornerRadius(24)
-                .shadow(radius: 10)
+                .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusCard, style: .continuous))
+                .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
                 .padding(.bottom, 30)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -204,8 +204,7 @@ struct HistoryCard: View {
     let onCopy: () -> Void
     let onDelete: () -> Void
     @ObservedObject var audioPlayer: AudioPlayerService
-    @State private var isHovered = false
-    
+
     private var audioFileExists: Bool {
         guard let audioURL = item.audioFileURL else { return false }
         return FileManager.default.fileExists(atPath: audioURL.path)
@@ -223,7 +222,7 @@ struct HistoryCard: View {
                     // Date badge
                     VStack(alignment: .center, spacing: 2) {
                         Text(item.date.formatted(.dateTime.day()))
-                            .font(.system(size: 18, weight: .semibold, design: .serif))
+                            .font(Typography.statValueM)
                             .foregroundStyle(Color.textPrimary)
                         Text(item.date.formatted(.dateTime.month(.abbreviated)))
                             .font(Typography.captionSmall)
@@ -316,7 +315,7 @@ struct HistoryCard: View {
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
                                 .background(Color.bgHover)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
                             }
                             .buttonStyle(.stPlain)
                             
@@ -331,7 +330,7 @@ struct HistoryCard: View {
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
                                 .background(Color.bgHover)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
                             }
                             .buttonStyle(.stPlain)
                             
@@ -353,7 +352,7 @@ struct HistoryCard: View {
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 8)
                                     .background(Color.bgHover)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
                                 }
                                 .buttonStyle(.stPlain)
                                 
@@ -370,7 +369,7 @@ struct HistoryCard: View {
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 8)
                                     .background(Color.bgHover)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
                                 }
                                 .buttonStyle(.stPlain)
                             } else if item.audioFileURL != nil {
@@ -384,7 +383,7 @@ struct HistoryCard: View {
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
                                 .background(Color.bgHover.opacity(0.8))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
                             }
                         }
                         
@@ -424,16 +423,9 @@ struct HistoryCard: View {
                 }
             }
         }
-        .background(Color.bgCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isHovered || isExpanded ? Color.border : Color.border.opacity(0.5), lineWidth: 1)
-        )
-        .cardShadow()
-        .onHover { hovering in
-            isHovered = hovering
-        }
+        // One card system — same themed glass chrome as everywhere else (no inner padding;
+        // the row/expanded content manage their own).
+        .themedCard(padding: 0)
     }
     
     private func formatDurationShort(_ duration: TimeInterval) -> String {
