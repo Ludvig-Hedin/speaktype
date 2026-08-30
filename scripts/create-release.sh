@@ -94,14 +94,14 @@ if ! xcrun notarytool history --keychain-profile "AC_PASSWORD" &>/dev/null; then
 
   xcrun notarytool store-credentials "AC_PASSWORD" \
     --apple-id "mail2048labs@gmail.com" \
-    --team-id "PCV4UMSRZX" \
+    --team-id "XDBG7P4V96" \
     --password "$APP_PASSWORD"
   echo ""
   echo "✅ Credentials stored. Continuing..."
   echo ""
 fi
 
-APPLE_TEAM_ID="${APPLE_TEAM_ID:-PCV4UMSRZX}"
+APPLE_TEAM_ID="${APPLE_TEAM_ID:-XDBG7P4V96}"
 
 # ── Step 6: Build ─────────────────────────────────────────────────────────────
 echo ""

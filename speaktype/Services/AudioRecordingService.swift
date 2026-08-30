@@ -241,10 +241,11 @@ class AudioRecordingService: NSObject, ObservableObject {
         }
     }
 
-    func startRecording() {
+    @discardableResult
+    func startRecording() -> Bool {
         requestPermission()
 
-        guard !isRecording else { return }
+        guard !isRecording, !isStopping else { return false }
         if captureSession == nil { setupSession() }
 
         // 1. Reset flags and stale writer state before any new samples arrive.
@@ -313,6 +314,7 @@ class AudioRecordingService: NSObject, ObservableObject {
                 }
             }
         }
+        return true
     }
 
     func stopRecording(discardOutput: Bool = false) async -> URL? {

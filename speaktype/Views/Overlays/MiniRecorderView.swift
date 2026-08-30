@@ -9,6 +9,7 @@ struct MiniRecorderView: View {
     @State private var isListening = false
 
     @State private var isProcessing = false
+    @State private var isStoppingRecording = false
     @State private var statusMessage = "Transcribing..."
     @State private var isWarmingUp = false
     @State private var transcriptionTask: Task<Void, Never>?
@@ -382,12 +383,21 @@ struct MiniRecorderView: View {
         onCancel?()
 
         guard shouldStopRecording else { return }
+        guard !isStoppingRecording else { return }
+        isStoppingRecording = true
         Task {
             _ = await audioRecorder.stopRecording(discardOutput: true)
+            await MainActor.run { isStoppingRecording = false }
         }
     }
 
     private func startRecording() {
+        guard !isStoppingRecording else {
+            debugLog("Audio recorder is still stopping, ignoring start request")
+            onCancel?()
+            return
+        }
+
         guard !isProcessing else {
             debugLog("Already processing, ignoring start request")
             return
@@ -395,6 +405,12 @@ struct MiniRecorderView: View {
 
         guard !isListening else {
             debugLog("Already listening, ignoring duplicate start request")
+            return
+        }
+
+        guard !audioRecorder.isRecording else {
+            debugLog("Audio recorder is already active, ignoring start request")
+            onCancel?()
             return
         }
 
@@ -420,7 +436,11 @@ struct MiniRecorderView: View {
         cancelCommit = false
 
         debugLog("Starting recording...")
-        audioRecorder.startRecording()
+        guard audioRecorder.startRecording() else {
+            debugLog("Audio recorder rejected start request")
+            onCancel?()
+            return
+        }
         isListening = true
 
         // Warm the model in parallel with the user speaking. On low-RAM Macs the model is
@@ -460,6 +480,11 @@ struct MiniRecorderView: View {
     private func stopAndTranscribe() {
         debugLog("stopAndTranscribe called")
 
+        guard !isStoppingRecording else {
+            debugLog("Already stopping, ignoring duplicate stop request")
+            return
+        }
+
         guard isListening || audioRecorder.isRecording else {
             debugLog("Not listening, ignoring duplicate stop request")
             return
@@ -481,8 +506,13 @@ struct MiniRecorderView: View {
         }
 
         transcriptionTask?.cancel()
+        isStoppingRecording = true
+        isListening = false
+        isProcessing = true
+        statusMessage = "Transcribing..."
         transcriptionTask = Task {
             let url = await audioRecorder.stopRecording()
+            await MainActor.run { isStoppingRecording = false }
             debugLog("stopRecording returned: \(url?.absoluteString ?? "nil")")
 
             guard let url = url else {
@@ -492,12 +522,6 @@ struct MiniRecorderView: View {
                     onCancel?()
                 }
                 return
-            }
-
-            await MainActor.run {
-                isListening = false
-                isProcessing = true
-                statusMessage = "Transcribing..."
             }
 
             // Always use the final full-recording transcription for committed output.
