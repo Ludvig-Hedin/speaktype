@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
 ## [Unreleased]
+- **macOS, cloud transcription:** Cloud only no longer starts or falls back to a local Whisper model. The recorder closes immediately when cancelled, including during warm-up and transcription.
 - **macOS, transcription:** OpenRouter can now transcribe with the same API key used for writing polish. The recommended model is `openai/gpt-transcribe`. The recorder no longer shows a stale Accessibility warning before every recording; paste still uses a live permission check.
 - **Web (resilience):** `resolveLatestMacDownloadHref` wraps GitHub `releases/latest` fetch + JSON parse in try/catch with `console.error` and falls back to `LATEST_DMG_DOWNLOAD_URL`; non-OK responses log response body. `/downloads` wraps the resolver in try/catch so SSR never fails on API/network errors (`github-releases.ts`, `downloads/page.tsx`).
 - **macOS — Ollama catalog:** Model selection compares whitespace-trimmed tags on both sides; after a successful `pullModel`, selection and pull UI clear immediately, and a separate refresh of `installedModelNames` can fail without undoing the pull (logs + optimistic `installedNames` append) (`OllamaRecommendedModelsView.swift`).

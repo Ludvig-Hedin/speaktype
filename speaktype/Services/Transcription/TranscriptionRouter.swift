@@ -29,8 +29,7 @@ enum TranscriptionRouter {
             return local
 
         case .remoteOnly:
-            // Remote first; local as a safety net (works offline / when key missing).
-            return remote + local
+            return remote
 
         case .auto:
             // Keep it local when the Mac can comfortably do it; otherwise offload.

@@ -21,7 +21,10 @@ enum TranscriptionCoordinator {
             guard let provider = makeProvider(kind) else { continue }
             do {
                 return try await provider.transcribeDetailed(audioFile: audioFile, language: language)
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
+                try Task.checkCancellation()
                 print("Transcription via \(kind.rawValue) failed, trying fallback: \(error.localizedDescription)")
                 lastError = error
                 continue

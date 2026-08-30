@@ -11,6 +11,7 @@ struct MiniRecorderView: View {
     @State private var isProcessing = false
     @State private var statusMessage = "Transcribing..."
     @State private var isWarmingUp = false
+    @State private var transcriptionTask: Task<Void, Never>?
     var onCommit: ((String) -> Void)?
     var onCancel: (() -> Void)?
 
@@ -97,7 +98,7 @@ struct MiniRecorderView: View {
         ZStack {
             backgroundView
 
-            if isWarmingUp || whisperService.isLoading {
+            if shouldShowLocalWarmup {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
@@ -338,6 +339,11 @@ struct MiniRecorderView: View {
         // Pre-warm the audio capture session for instant first recording
         audioRecorder.prewarmSession()
 
+        guard TranscriptionModeUserDefaults.mode != .remoteOnly else {
+            debugLog("Remote transcription selected - skipping local model initialization")
+            return
+        }
+
         guard !selectedModel.isEmpty else {
             debugLog("No model selected - skipping initialization")
             return
@@ -366,22 +372,18 @@ struct MiniRecorderView: View {
 
     private func cancelRecording() {
         cancelCommit = true
+        transcriptionTask?.cancel()
+        transcriptionTask = nil
 
-        guard isListening || audioRecorder.isRecording else {
-            isProcessing = false
-            onCancel?()
-            return
-        }
+        let shouldStopRecording = isListening || audioRecorder.isRecording
+        isListening = false
+        isProcessing = false
+        statusMessage = "Transcribing..."
+        onCancel?()
 
+        guard shouldStopRecording else { return }
         Task {
             _ = await audioRecorder.stopRecording(discardOutput: true)
-
-            await MainActor.run {
-                isListening = false
-                isProcessing = false
-                statusMessage = "Transcribing..."
-                onCancel?()
-            }
         }
     }
 
@@ -396,33 +398,23 @@ struct MiniRecorderView: View {
             return
         }
 
-        // Check if model is selected BEFORE starting recording
-        guard !selectedModel.isEmpty else {
-            debugLog("No model selected - showing error")
-            isProcessing = true
-            statusMessage = "No model selected"
-
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                isProcessing = false
-                onCancel?()
-            }
+        let route = TranscriptionCoordinator.willUseRemoteNextTranscript()
+        if TranscriptionModeUserDefaults.mode == .remoteOnly && !route.isRemote {
+            showStartError("Cloud transcription is not configured")
             return
         }
 
-        // Check if model is downloaded
-        let progress = ModelDownloadService.shared.downloadProgress[selectedModel] ?? 0
-        guard progress >= 1.0 else {
-            debugLog("Model not downloaded - showing error")
-            isProcessing = true
-            statusMessage = "Model not downloaded"
-
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                isProcessing = false
-                onCancel?()
+        if shouldUseLocalRoute {
+            guard !selectedModel.isEmpty else {
+                showStartError("No local model selected")
+                return
             }
-            return
+
+            let progress = ModelDownloadService.shared.downloadProgress[selectedModel] ?? 0
+            guard progress >= 1.0 else {
+                showStartError("Local model not downloaded")
+                return
+            }
         }
 
         cancelCommit = false
@@ -434,12 +426,34 @@ struct MiniRecorderView: View {
         // Warm the model in parallel with the user speaking. On low-RAM Macs the model is
         // released when idle, so loading it now (not at Stop) hides the reload latency under
         // the time spent dictating. Coalesced with the safety load in processRecording().
-        whisperService.cancelIdleUnload()
-        if !whisperService.isInitialized || whisperService.currentModelVariant != selectedModel {
-            let variant = selectedModel
-            Task.detached(priority: .userInitiated) {
-                try? await WhisperService.shared.loadModel(variant: variant)
+        if shouldUseLocalRoute {
+            whisperService.cancelIdleUnload()
+            if !whisperService.isInitialized || whisperService.currentModelVariant != selectedModel {
+                let variant = selectedModel
+                Task.detached(priority: .userInitiated) {
+                    try? await WhisperService.shared.loadModel(variant: variant)
+                }
             }
+        }
+    }
+
+    private var shouldShowLocalWarmup: Bool {
+        shouldUseLocalRoute && (isWarmingUp || whisperService.isLoading)
+    }
+
+    private var shouldUseLocalRoute: Bool {
+        TranscriptionModeUserDefaults.mode != .remoteOnly
+            && !TranscriptionCoordinator.willUseRemoteNextTranscript().isRemote
+    }
+
+    private func showStartError(_ message: String) {
+        debugLog(message)
+        isProcessing = true
+        statusMessage = message
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            isProcessing = false
+            onCancel?()
         }
     }
 
@@ -451,8 +465,8 @@ struct MiniRecorderView: View {
             return
         }
 
-        // Check if model is selected
-        guard !selectedModel.isEmpty else {
+        // A local route needs a local model. Cloud-only does not.
+        guard TranscriptionModeUserDefaults.mode == .remoteOnly || !selectedModel.isEmpty else {
             debugLog("No model selected - cannot transcribe")
             Task { @MainActor in
                 isListening = false
@@ -466,7 +480,8 @@ struct MiniRecorderView: View {
             return
         }
 
-        Task {
+        transcriptionTask?.cancel()
+        transcriptionTask = Task {
             let url = await audioRecorder.stopRecording()
             debugLog("stopRecording returned: \(url?.absoluteString ?? "nil")")
 
@@ -498,30 +513,12 @@ struct MiniRecorderView: View {
         cancelCommit = true
 
         if isListening {
-            Task {
-                let url = await audioRecorder.stopRecording()
-
-                await MainActor.run {
-                    isListening = false
-                    isProcessing = true
-                    statusMessage = "Stopping transcription..."
-                }
-
-                if let url = url {
-                    // Let it process in the background and save to history, but don't commit to UI
-                    await processRecording(url: url)
-                } else {
-                    await MainActor.run {
-                        onCancel?()
-                    }
-                }
-            }
+            cancelRecording()
         } else {
-            // Already processing, just show stopping and quickly dismiss
-            statusMessage = "Stopping transcription..."
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                onCancel?()
-            }
+            transcriptionTask?.cancel()
+            transcriptionTask = nil
+            isProcessing = false
+            onCancel?()
         }
     }
 
@@ -547,11 +544,11 @@ struct MiniRecorderView: View {
             let route = TranscriptionCoordinator.willUseRemoteNextTranscript()
 
             // Only warm up the on-device model when the next transcription will run locally.
-            if !route.isRemote,
+            if shouldUseLocalRoute,
                 !whisperService.isInitialized || whisperService.currentModelVariant != selectedModel
             {
                 debugLog("Loading model: \(selectedModel)")
-                await MainActor.run { statusMessage = "Warming up model — first use is slower..." }
+                await MainActor.run { statusMessage = "Warming up model. First use is slower..." }
                 do {
                     try await whisperService.loadModel(variant: selectedModel)
                     debugLog("Model loaded successfully")
@@ -569,8 +566,7 @@ struct MiniRecorderView: View {
             }
 
             debugLog("Starting transcription...")
-            // If user has already cancelled (pressed Escape), skip transcription UI updates
-            // but still run the transcription in the background to save to history
+            // Do not update visible status after the user cancels.
             if !cancelCommit {
                 let status = route.isRemote ? "Transcribing via \(route.providerLabel ?? "cloud")…" : "Transcribing..."
                 await MainActor.run { statusMessage = status }
@@ -623,6 +619,9 @@ struct MiniRecorderView: View {
                 }
             }
             debugLog("onCommit called successfully")
+        } catch is CancellationError {
+            debugLog("Transcription cancelled")
+            await MainActor.run { isProcessing = false }
         } catch {
             debugLog("Error: \(error.localizedDescription)")
             await MainActor.run {

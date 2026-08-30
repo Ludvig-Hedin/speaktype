@@ -64,7 +64,10 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
         let response: URLResponse
         do {
             (data, response) = try await URLSession.shared.data(for: request)
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
+            try Task.checkCancellation()
             throw ClientError.network(error.localizedDescription)
         }
         let elapsed = Date().timeIntervalSince(start)

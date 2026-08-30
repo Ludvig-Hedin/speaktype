@@ -26,7 +26,7 @@ enum TranscriptionMode: String, CaseIterable, Identifiable {
         case .auto:
             return "Picks on-device when your Mac has resources to spare, and the cloud when it's busy or low on memory. Falls back automatically."
         case .remoteOnly:
-            return "Always uses your chosen cloud provider. Falls back to on-device if the cloud is unreachable."
+            return "Always uses your chosen cloud provider. Requires a saved key, consent, and a network connection."
         }
     }
 
