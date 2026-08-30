@@ -3,6 +3,7 @@ import Foundation
 /// A cloud transcription provider. Both currently expose an OpenAI-compatible
 /// `/v1/audio/transcriptions` endpoint, so one client handles both via a per-provider base URL.
 enum RemoteProvider: String, CaseIterable, Codable, Identifiable {
+    case openRouter
     case openAI
     case groq
 
@@ -10,6 +11,7 @@ enum RemoteProvider: String, CaseIterable, Codable, Identifiable {
 
     var displayName: String {
         switch self {
+        case .openRouter: return "OpenRouter"
         case .openAI: return "OpenAI"
         case .groq: return "Groq"
         }
@@ -18,6 +20,7 @@ enum RemoteProvider: String, CaseIterable, Codable, Identifiable {
     /// Base URL (no trailing slash). Groq's OpenAI-compatible surface lives under `/openai`.
     var baseURLString: String {
         switch self {
+        case .openRouter: return "https://openrouter.ai/api"
         case .openAI: return "https://api.openai.com"
         case .groq: return "https://api.groq.com/openai"
         }
@@ -30,6 +33,7 @@ enum RemoteProvider: String, CaseIterable, Codable, Identifiable {
     /// Keychain account name for this provider's API key (see `RemoteAPIKeyStore`).
     var keychainAccount: String {
         switch self {
+        case .openRouter: return "openrouter_api_key"
         case .openAI: return "openai_api_key"
         case .groq: return "groq_api_key"
         }
@@ -38,6 +42,7 @@ enum RemoteProvider: String, CaseIterable, Codable, Identifiable {
     /// Env var checked before the Keychain (dev convenience).
     var envVar: String {
         switch self {
+        case .openRouter: return "OPENROUTER_API_KEY"
         case .openAI: return "OPENAI_API_KEY"
         case .groq: return "GROQ_API_KEY"
         }
@@ -45,6 +50,7 @@ enum RemoteProvider: String, CaseIterable, Codable, Identifiable {
 
     var providerKind: TranscriptionProviderKind {
         switch self {
+        case .openRouter: return .openRouter
         case .openAI: return .openAI
         case .groq: return .groq
         }
@@ -53,6 +59,7 @@ enum RemoteProvider: String, CaseIterable, Codable, Identifiable {
     /// Where the user creates an API key — shown as a help link in settings.
     var apiKeyURL: String {
         switch self {
+        case .openRouter: return "https://openrouter.ai/keys"
         case .openAI: return "https://platform.openai.com/api-keys"
         case .groq: return "https://console.groq.com/keys"
         }
@@ -77,6 +84,17 @@ struct RemoteTranscriptionModel: Identifiable, Equatable, Hashable {
     }
 
     static let catalog: [RemoteTranscriptionModel] = [
+        // OpenRouter. The same key is used by the writing-polish client.
+        RemoteTranscriptionModel(
+            id: "openai/gpt-transcribe", provider: .openRouter,
+            name: "GPT Transcribe", note: "Recommended · latest high accuracy",
+            pricePerMinuteUSD: 0.0045
+        ),
+        RemoteTranscriptionModel(
+            id: "openai/gpt-4o-mini-transcribe", provider: .openRouter,
+            name: "GPT-4o mini Transcribe", note: "Lower cost",
+            pricePerMinuteUSD: nil
+        ),
         // OpenAI — https://openai.com/api/pricing
         RemoteTranscriptionModel(
             id: "gpt-4o-mini-transcribe", provider: .openAI,

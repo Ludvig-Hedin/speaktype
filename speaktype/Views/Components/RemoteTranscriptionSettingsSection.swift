@@ -149,6 +149,12 @@ struct RemoteTranscriptionSettingsSection: View {
                 }
             }
 
+            if provider == .openRouter {
+                Text("This is the same OpenRouter key used for writing polish.")
+                    .font(Typography.captionSmall)
+                    .foregroundStyle(Color.textMuted)
+            }
+
             if !statusMessage.isEmpty {
                 Text(statusMessage)
                     .font(Typography.captionSmall)

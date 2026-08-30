@@ -61,7 +61,7 @@ enum TranscriptionCoordinator {
         switch kind {
         case .localWhisper:
             return WhisperService.shared
-        case .openAI, .groq:
+        case .openRouter, .openAI, .groq:
             guard let provider = TranscriptionModeUserDefaults.selectedRemoteProvider,
                   provider.providerKind == kind,
                   let model = TranscriptionModeUserDefaults.selectedRemoteModel else {

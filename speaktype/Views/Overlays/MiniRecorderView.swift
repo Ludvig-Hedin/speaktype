@@ -11,7 +11,6 @@ struct MiniRecorderView: View {
     @State private var isProcessing = false
     @State private var statusMessage = "Transcribing..."
     @State private var isWarmingUp = false
-    @State private var showAccessibilityWarning = false
     var onCommit: ((String) -> Void)?
     var onCancel: (() -> Void)?
 
@@ -64,10 +63,6 @@ struct MiniRecorderView: View {
 
         return
             "Spoken language hint: \(spokenLanguageDisplayName(for: transcriptionLanguage)). If this does not match the language you actually speak, the result may be inaccurate or come back in the wrong language."
-    }
-
-    private var isAccessibilityEnabled: Bool {
-        AXIsProcessTrusted()
     }
 
     // MARK: - State for Escape key cancellation
@@ -252,21 +247,6 @@ struct MiniRecorderView: View {
                 handleEscape()
             })
         )
-        .alert("Accessibility Permission Required", isPresented: $showAccessibilityWarning) {
-            Button("Open Settings") {
-                if let url = URL(
-                    string:
-                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                ) {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-            Button("Continue Anyway", role: .cancel) {}
-        } message: {
-            Text(
-                "Accessibility is disabled. Transcribed text will be copied to clipboard but won't auto-paste into apps.\n\nEnable it in System Settings → Privacy & Security → Accessibility."
-            )
-        }
     }
 
     // MARK: - Subviews
@@ -414,11 +394,6 @@ struct MiniRecorderView: View {
         guard !isListening else {
             debugLog("Already listening, ignoring duplicate start request")
             return
-        }
-
-        // Check if accessibility is enabled - warn but don't block
-        if !isAccessibilityEnabled {
-            showAccessibilityWarning = true
         }
 
         // Check if model is selected BEFORE starting recording

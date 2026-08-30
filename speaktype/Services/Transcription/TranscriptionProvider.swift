@@ -3,12 +3,14 @@ import Foundation
 /// Which engine produced a transcript. String-backed so it can be persisted in history JSON.
 enum TranscriptionProviderKind: String, Codable, CaseIterable {
     case localWhisper
+    case openRouter
     case openAI
     case groq
 
     var displayName: String {
         switch self {
         case .localWhisper: return "On-device"
+        case .openRouter: return "OpenRouter"
         case .openAI: return "OpenAI"
         case .groq: return "Groq"
         }

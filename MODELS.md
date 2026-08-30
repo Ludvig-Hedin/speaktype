@@ -8,7 +8,7 @@ the shape (mirrors the Part 3 spec).
 
 | provider   | base_url                          | key (env → Keychain)          | default |
 |------------|-----------------------------------|-------------------------------|---------|
-| openrouter | `https://openrouter.ai/api/v1`    | `OPENROUTER_API_KEY` / `openrouter_api_key` | ✅ cleanup default |
+| openrouter | `https://openrouter.ai/api/v1`    | `OPENROUTER_API_KEY` / `openrouter_api_key` | ✅ cleanup + cloud STT |
 | openai     | `https://api.openai.com/v1`       | `OPENAI_API_KEY` / `openai_api_key`         | secondary |
 | groq       | `https://api.groq.com/openai`     | `GROQ_API_KEY` / `groq_api_key`             | STT cloud |
 | local      | on-device (WhisperKit / Ollama)   | — (no key)                                  | STT + cleanup local |
@@ -34,7 +34,9 @@ Each entry: `id, label, provider, modelID, kind(local|cloud), streaming, languag
 supportsSwedish, swedishFallbackEngineID, implemented, experimental, note`.
 
 **Active now** (`implemented: true`, wired through `TranscriptionProvider`): on-device Whisper,
-OpenAI Transcribe, Groq Whisper Large v3 Turbo.
+OpenRouter GPT Transcribe, direct OpenAI Transcribe, and Groq Whisper Large v3 Turbo. OpenRouter
+uses the same Keychain key for cleanup and transcription. Its recommended model is
+`openai/gpt-transcribe` at about $0.0045 per audio minute.
 
 **Declared, adapters planned** (`implemented: false`, not offered in UI until wired):
 Parakeet-TDT-0.6B-v3 (preferred local default — needs NeMo/CoreML runtime), MAI-Transcribe-1,

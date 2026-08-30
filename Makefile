@@ -70,7 +70,8 @@ build: stamp-build-info
 # Build for release
 build-release:
 	@echo "Building SpeakType (Release)..."
-	@xcodebuild -scheme speaktype -configuration Release build 2>&1 | grep -E "(error:|BUILD)" || true
+	@set -o pipefail; xcodebuild -scheme speaktype -configuration Release \
+		-derivedDataPath build/DerivedData build 2>&1 | grep -E "(error:|BUILD)"
 
 # Run release build
 run-release:
@@ -206,17 +207,16 @@ xcode:
 install:
 	@echo "📦 Installing SpeakType to /Applications..."
 	@make build-release
-	@APP_PATH=$$(find ~/Library/Developer/Xcode/DerivedData/speaktype-*/Build/Products/Release -name "speaktype.app" -type d 2>/dev/null | head -n 1); \
-	if [ -z "$$APP_PATH" ]; then \
-		APP_PATH=$$(find build -name "speaktype.app" -type d 2>/dev/null | head -n 1); \
-	fi; \
-	if [ -z "$$APP_PATH" ]; then \
+	@set -e; APP_PATH="build/DerivedData/Build/Products/Release/speaktype.app"; \
+	if [ ! -d "$$APP_PATH" ]; then \
 		echo "❌ Error: Could not find speaktype.app!"; \
 		exit 1; \
 	fi; \
+	codesign --verify --deep --strict "$$APP_PATH"; \
 	echo "✅ Found App at: $$APP_PATH"; \
 	rm -rf /Applications/SpeakType.app 2>/dev/null || true; \
-	cp -R "$$APP_PATH" /Applications/SpeakType.app; \
+	ditto "$$APP_PATH" /Applications/SpeakType.app; \
+	codesign --verify --deep --strict /Applications/SpeakType.app; \
 	echo "✅ Installed to /Applications/SpeakType.app"
 
 # Full uninstall - removes ALL data and permissions
