@@ -7,6 +7,7 @@ import { Faq } from "@/components/site/faq";
 import { PricingPlans } from "@/components/site/pricing-plans";
 import { Reveal } from "@/components/site/reveal";
 import { AppleIcon, ButtonLink, SectionTitle } from "@/components/site/ui";
+import { PAID_PLANS_OPEN, visibleRows } from "@/lib/pricing";
 
 export function HomePage({ locale, downloadHref }: { locale: Locale; downloadHref: string }) {
   const t = getDictionary(locale);
@@ -134,7 +135,7 @@ export function HomePage({ locale, downloadHref }: { locale: Locale; downloadHre
             </Link>
           </Reveal>
           <Reveal delayMs={80}>
-            <CompareTable t={t.compare} rows={t.compare.rows.slice(0, 6)} />
+            <CompareTable t={t.compare} rows={visibleRows(t.compare.rows).slice(0, 6)} />
           </Reveal>
         </div>
       </section>
@@ -143,8 +144,8 @@ export function HomePage({ locale, downloadHref }: { locale: Locale; downloadHre
       <section className="section" id="pricing">
         <div className="container-page">
           <Reveal className="mx-auto max-w-[40rem] text-center">
-            <SectionTitle className="mx-auto">{t.pricing.title}</SectionTitle>
-            <p className="copy mt-5">{t.pricing.body}</p>
+            <SectionTitle className="mx-auto">{PAID_PLANS_OPEN ? t.pricing.title : t.pricing.free.title}</SectionTitle>
+            <p className="copy mt-5">{PAID_PLANS_OPEN ? t.pricing.body : t.pricing.free.body}</p>
           </Reveal>
           <Reveal delayMs={80} className="mt-12">
             <PricingPlans t={t.pricing} downloadHref={downloadHref} />

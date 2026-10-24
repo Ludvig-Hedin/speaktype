@@ -22,6 +22,7 @@ npm run dev
 ## Environment
 
 - `NEXT_PUBLIC_SITE_URL` — public origin for canonical URLs, sitemap and Open Graph.
+- `NEXT_PUBLIC_PAID_PLANS_OPEN` — set to `1` to show Pro and Lifetime. Unset (default) shows the free-only launch pricing.
 - `NEXT_PUBLIC_CHECKOUT_PRO_MONTHLY`, `NEXT_PUBLIC_CHECKOUT_PRO_YEARLY`, `NEXT_PUBLIC_CHECKOUT_LIFETIME` — Polar checkout links. Without them, paid buttons point to the free download (the app starts a 14-day Pro trial) and the pricing page says checkout opens soon.
 - `NEXT_PUBLIC_GITHUB_REPO_URL` or `NEXT_PUBLIC_GITHUB_REPOSITORY` — repo for downloads.
 - `NEXT_PUBLIC_LATEST_DMG_URL`, `NEXT_PUBLIC_DMG_FILENAME`, `NEXT_PUBLIC_RELEASES_URL` — optional download overrides.

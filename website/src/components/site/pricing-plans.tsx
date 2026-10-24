@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import type { Dictionary } from "@/i18n";
-import { CHECKOUT, PRICES } from "@/lib/pricing";
+import { CHECKOUT, PAID_PLANS_OPEN, PRICES } from "@/lib/pricing";
+import { FreePlan } from "./free-plan";
 import { Check, buttonClass } from "./ui";
 
 /**
@@ -12,6 +13,7 @@ import { Check, buttonClass } from "./ui";
  */
 export function PricingPlans({ t, downloadHref }: { t: Dictionary["pricing"]; downloadHref: string }) {
   const [yearly, setYearly] = useState(true);
+  if (!PAID_PLANS_OPEN) return <FreePlan t={t} downloadHref={downloadHref} />;
   const proCheckout = yearly ? CHECKOUT.proYearly : CHECKOUT.proMonthly;
   const anyCheckout = Boolean(CHECKOUT.proYearly || CHECKOUT.proMonthly || CHECKOUT.lifetime);
 

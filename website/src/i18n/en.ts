@@ -9,6 +9,7 @@ export const en = {
       "Hold a key, talk, and clean text appears wherever you type. Runs on your Mac, works offline, no word limits. A private Wispr Flow alternative.",
     pricingTitle: "Pricing — SpeakType",
     pricingDescription: `Free forever on your Mac. Pro is $${p.proYearly} a year or $${p.lifetime} once.`,
+    pricingDescriptionFree: "SpeakType is free. Every feature, no word limits, no account.",
     compareTitle: "SpeakType vs Wispr Flow — a private alternative",
     compareDescription:
       "Compare SpeakType and Wispr Flow: where your voice goes, offline use, word limits, price and features.",
@@ -180,6 +181,24 @@ export const en = {
       },
     },
     trialNote: "Paid checkout opens soon. Download now and Pro is free for 14 days.",
+    free: {
+      title: "Free. Every feature.",
+      body: "SpeakType is free right now, including AI cleanup and cloud engines. No word limits, no account, no card.",
+      price: "$0",
+      lead: "Everything in the app:",
+      features: [
+        "Unlimited on-device dictation",
+        "No word limits, no account",
+        "99 languages, every local Whisper model",
+        "AI cleanup in five writing styles",
+        "Cloud engines with your own key",
+        "Transcribe audio files to text",
+        "Works offline",
+      ],
+      cta: "Download free",
+      laterTitle: "Pro comes later",
+      laterBody: "A paid Pro plan with extra features will come later, for people who want more. Dictation on your Mac stays free, with no limits.",
+    },
   },
   faq: {
     title: "Questions",
@@ -187,6 +206,7 @@ export const en = {
       {
         q: "Is SpeakType really free?",
         a: "Yes. On-device dictation is free with no word limits and no account. Pro is optional and adds AI cleanup and cloud engines.",
+        aFree: "Yes. Everything in SpeakType is free right now, with no word limits and no account. A paid Pro plan may come later, but dictation on your Mac stays free.",
       },
       {
         q: "Does my voice leave my Mac?",
@@ -195,6 +215,7 @@ export const en = {
       {
         q: "How is it different from Wispr Flow?",
         a: `Wispr Flow always transcribes in the cloud, caps the free plan at ${p.wisprFreeWordsPerWeek.toLocaleString("en")} words a week and costs $${p.wisprYearly} a year. SpeakType runs locally, has no word cap, costs $${p.proYearly} a year for Pro, or $${p.lifetime} once.`,
+        aFree: `Wispr Flow always transcribes in the cloud, caps the free plan at ${p.wisprFreeWordsPerWeek.toLocaleString("en")} words a week and costs $${p.wisprYearly} a year. SpeakType runs locally, has no word cap and is free.`,
       },
       {
         q: "Which Macs does it run on?",
@@ -221,6 +242,7 @@ export const en = {
   compare: {
     title: "A private Wispr Flow alternative.",
     body: "Wispr Flow made voice typing feel natural. SpeakType keeps that feeling and moves it onto your Mac: no cloud, no word cap, and a price you can pay once.",
+    bodyFree: "Wispr Flow made voice typing feel natural. SpeakType keeps that feeling and moves it onto your Mac: no cloud, no word cap, and free.",
     colFeature: "",
     colUs: "SpeakType",
     colThem: "Wispr Flow",
@@ -228,8 +250,9 @@ export const en = {
       { label: "Where transcription runs", us: "On your Mac. Cloud optional", them: "Always in the cloud" },
       { label: "Works offline", us: "Yes", them: "No" },
       { label: "Free plan", us: "Unlimited words", them: `${p.wisprFreeWordsPerWeek.toLocaleString("en")} words a week` },
-      { label: "Pro price", us: `$${p.proYearly} a year`, them: `$${p.wisprYearly} a year` },
-      { label: "Pay once", us: `$${p.lifetime} lifetime`, them: "No" },
+      { label: "Price", us: "Free", them: `$${p.wisprYearly} a year for Pro`, freeOnly: true },
+      { label: "Pro price", us: `$${p.proYearly} a year`, them: `$${p.wisprYearly} a year`, paidOnly: true },
+      { label: "Pay once", us: `$${p.lifetime} lifetime`, them: "No", paidOnly: true },
       { label: "Account required", us: "No", them: "Yes" },
       { label: "Open source", us: "Yes", them: "No" },
       { label: "Writing styles", us: "Any language", them: "English only" },

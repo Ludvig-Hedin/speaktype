@@ -6,6 +6,7 @@ import { Reveal } from "@/components/site/reveal";
 import { AppleIcon, ButtonLink, SectionTitle } from "@/components/site/ui";
 import { fetchGitHubReleases } from "@/lib/github-releases";
 import { ALL_RELEASES_URL } from "@/lib/site";
+import { PAID_PLANS_OPEN, visibleRows } from "@/lib/pricing";
 import { FinalCta } from "./home-page";
 
 function PageHero({ title, body }: { title: string; body: string }) {
@@ -25,7 +26,10 @@ export function PricingPage({ locale, downloadHref }: { locale: Locale; download
   const t = getDictionary(locale);
   return (
     <main>
-      <PageHero title={t.pricing.title} body={t.pricing.body} />
+      <PageHero
+        title={PAID_PLANS_OPEN ? t.pricing.title : t.pricing.free.title}
+        body={PAID_PLANS_OPEN ? t.pricing.body : t.pricing.free.body}
+      />
       <section className="container-page pb-8 pt-10">
         <Reveal trigger="load" delayMs={200}>
           <PricingPlans t={t.pricing} downloadHref={downloadHref} />
@@ -42,7 +46,7 @@ export function ComparePage({ locale, downloadHref }: { locale: Locale; download
   const c = t.compare;
   return (
     <main>
-      <PageHero title={c.title} body={c.body} />
+      <PageHero title={c.title} body={PAID_PLANS_OPEN ? c.body : c.bodyFree} />
       <section className="container-page flex justify-center pt-4">
         <ButtonLink href={downloadHref} size="lg">
           <AppleIcon className="size-[18px]" />
@@ -53,7 +57,7 @@ export function ComparePage({ locale, downloadHref }: { locale: Locale; download
       <section className="section">
         <div className="mx-auto max-w-[var(--container-narrow)] px-6">
           <Reveal>
-            <CompareTable t={c} rows={c.rows} />
+            <CompareTable t={c} rows={visibleRows(c.rows)} />
             <p className="mt-6 text-sm text-muted-foreground">
               {c.sourcesNote}{" "}
               <a href="https://wisprflow.ai/pricing" className="underline underline-offset-2" target="_blank" rel="noopener noreferrer">

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { alternates, getDictionary, type Locale, type PageKey } from "@/i18n";
+import { PAID_PLANS_OPEN } from "./pricing";
 
 const KEYS: Record<PageKey, ["homeTitle" | "pricingTitle" | "compareTitle" | "downloadsTitle", "homeDescription" | "pricingDescription" | "compareDescription" | "downloadsDescription"]> = {
   home: ["homeTitle", "homeDescription"],
@@ -12,7 +13,8 @@ export function pageMetadata(locale: Locale, page: PageKey): Metadata {
   const m = getDictionary(locale).meta;
   const [titleKey, descKey] = KEYS[page];
   const title = m[titleKey];
-  const description = m[descKey];
+  const description =
+    page === "pricing" && !PAID_PLANS_OPEN ? m.pricingDescriptionFree : m[descKey];
   return {
     title,
     description,

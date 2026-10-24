@@ -11,6 +11,7 @@ export const sv: Dictionary = {
       "Håll in en tangent, prata, och färdig text dyker upp där du skriver. Körs på din Mac, funkar offline, ingen ordgräns. Ett privat alternativ till Wispr Flow.",
     pricingTitle: "Priser — SpeakType",
     pricingDescription: `Gratis för alltid på din Mac. Pro kostar $${p.proYearly} per år eller $${p.lifetime} en gång.`,
+    pricingDescriptionFree: "SpeakType är gratis. Alla funktioner, ingen ordgräns, inget konto.",
     compareTitle: "SpeakType vs Wispr Flow — ett privat alternativ",
     compareDescription:
       "Jämför SpeakType och Wispr Flow: vart din röst tar vägen, offline, ordgränser, pris och funktioner.",
@@ -182,6 +183,24 @@ export const sv: Dictionary = {
       },
     },
     trialNote: "Betalningen öppnar snart. Ladda ner nu så är Pro gratis i 14 dagar.",
+    free: {
+      title: "Gratis. Allt ingår.",
+      body: "SpeakType är gratis just nu, även AI-tillsnyggning och molnmotorer. Ingen ordgräns, inget konto, inget kort.",
+      price: "$0",
+      lead: "Allt i appen:",
+      features: [
+        "Obegränsad diktering på enheten",
+        "Ingen ordgräns, inget konto",
+        "99 språk, alla lokala Whisper-modeller",
+        "AI-tillsnyggning i fem skrivstilar",
+        "Molnmotorer med din egen nyckel",
+        "Transkribera ljudfiler till text",
+        "Funkar offline",
+      ],
+      cta: "Ladda ner gratis",
+      laterTitle: "Pro kommer senare",
+      laterBody: "Senare kommer en betald Pro-plan med extra funktioner, för den som vill ha mer. Diktering på din Mac förblir gratis, utan gränser.",
+    },
   },
   faq: {
     title: "Frågor",
@@ -189,6 +208,7 @@ export const sv: Dictionary = {
       {
         q: "Är SpeakType verkligen gratis?",
         a: "Ja. Diktering på enheten är gratis, utan ordgräns och utan konto. Pro är valfritt och lägger till AI-tillsnyggning och molnmotorer.",
+        aFree: "Ja. Allt i SpeakType är gratis just nu, utan ordgräns och utan konto. En betald Pro-plan kan komma senare, men diktering på din Mac förblir gratis.",
       },
       {
         q: "Lämnar min röst min Mac?",
@@ -197,6 +217,7 @@ export const sv: Dictionary = {
       {
         q: "Hur skiljer den sig från Wispr Flow?",
         a: `Wispr Flow transkriberar alltid i molnet, begränsar gratisplanen till ${n(p.wisprFreeWordsPerWeek)} ord i veckan och kostar $${p.wisprYearly} per år. SpeakType körs lokalt, har ingen ordgräns och Pro kostar $${p.proYearly} per år, eller $${p.lifetime} en gång.`,
+        aFree: `Wispr Flow transkriberar alltid i molnet, begränsar gratisplanen till ${n(p.wisprFreeWordsPerWeek)} ord i veckan och kostar $${p.wisprYearly} per år. SpeakType körs lokalt, har ingen ordgräns och är gratis.`,
       },
       {
         q: "Vilka Macar funkar den på?",
@@ -223,6 +244,7 @@ export const sv: Dictionary = {
   compare: {
     title: "Ett privat alternativ till Wispr Flow.",
     body: "Wispr Flow fick röstskrivning att kännas naturligt. SpeakType behåller den känslan och flyttar den till din Mac: inget moln, ingen ordgräns och ett pris du kan betala en gång.",
+    bodyFree: "Wispr Flow fick röstskrivning att kännas naturligt. SpeakType behåller den känslan och flyttar den till din Mac: inget moln, ingen ordgräns, och gratis.",
     colFeature: "",
     colUs: "SpeakType",
     colThem: "Wispr Flow",
@@ -230,8 +252,9 @@ export const sv: Dictionary = {
       { label: "Var transkriberingen körs", us: "På din Mac. Moln valfritt", them: "Alltid i molnet" },
       { label: "Funkar offline", us: "Ja", them: "Nej" },
       { label: "Gratisplan", us: "Obegränsat antal ord", them: `${n(p.wisprFreeWordsPerWeek)} ord i veckan` },
-      { label: "Pris för Pro", us: `$${p.proYearly} per år`, them: `$${p.wisprYearly} per år` },
-      { label: "Betala en gång", us: `$${p.lifetime} livstid`, them: "Nej" },
+      { label: "Pris", us: "Gratis", them: `$${p.wisprYearly} per år för Pro`, freeOnly: true },
+      { label: "Pris för Pro", us: `$${p.proYearly} per år`, them: `$${p.wisprYearly} per år`, paidOnly: true },
+      { label: "Betala en gång", us: `$${p.lifetime} livstid`, them: "Nej", paidOnly: true },
       { label: "Konto krävs", us: "Nej", them: "Ja" },
       { label: "Öppen källkod", us: "Ja", them: "Nej" },
       { label: "Skrivstilar", us: "Alla språk", them: "Bara engelska" },

@@ -1,4 +1,5 @@
 import type { Dictionary } from "@/i18n";
+import { faqAnswer } from "@/lib/pricing";
 import { SectionTitle } from "./ui";
 
 export function Faq({ t }: { t: Dictionary["faq"] }) {
@@ -19,7 +20,7 @@ export function Faq({ t }: { t: Dictionary["faq"] }) {
                   <span className="absolute left-1/2 top-0 h-4 w-px -translate-x-1/2 bg-current" />
                 </span>
               </summary>
-              <p className="copy max-w-[60ch] pb-6 pr-10">{item.a}</p>
+              <p className="copy max-w-[60ch] pb-6 pr-10">{faqAnswer(item)}</p>
             </details>
           ))}
         </div>

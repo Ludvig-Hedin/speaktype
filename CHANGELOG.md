@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
 ## [Unreleased]
+- **Web:** Free-only launch. Pricing shows one free plan with every feature and a note that Pro comes later; price rows and FAQ answers follow. Set `NEXT_PUBLIC_PAID_PLANS_OPEN=1` to show paid plans.
 
 ## [1.0.31] - 2026-10-24
 - **Web:** New marketing site in English and Swedish: home with an interactive dictation demo (pick a writing style), privacy, cleanup and customization sections, pricing (Free, Pro $6/mo or $48/yr, Lifetime $89), a Wispr Flow comparison page, and a restyled downloads page. Warm paper palette and Inter, after the 8pixel marketing site. Paid buttons use Polar checkout links from env and fall back to the free download until those exist. Adds sitemap, robots and hreflang.
