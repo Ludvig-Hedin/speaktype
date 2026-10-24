@@ -1,6 +1,15 @@
 # SpeakType marketing site
 
-Minimal Next.js landing page: hero, download CTA, waveform / typing animation, two feature blocks, footer.
+Next.js site in English and Swedish: home, pricing, Wispr Flow comparison and downloads.
+
+| Page | English | Swedish |
+|---|---|---|
+| Home | `/` | `/sv` |
+| Pricing | `/pricing` | `/sv/priser` |
+| vs Wispr Flow | `/wispr-flow-alternative` | `/sv/wispr-flow-alternativ` |
+| Downloads | `/downloads` | `/sv/nedladdningar` |
+
+Each language has its own root layout (`src/app/(en)`, `src/app/(sv)`) so `<html lang>` is right. All copy lives in `src/i18n/en.ts` and `src/i18n/sv.ts`; prices live in `src/lib/pricing.ts`.
 
 ## Develop
 
@@ -10,27 +19,14 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+## Environment
+
+- `NEXT_PUBLIC_SITE_URL` — public origin for canonical URLs, sitemap and Open Graph.
+- `NEXT_PUBLIC_CHECKOUT_PRO_MONTHLY`, `NEXT_PUBLIC_CHECKOUT_PRO_YEARLY`, `NEXT_PUBLIC_CHECKOUT_LIFETIME` — Polar checkout links. Without them, paid buttons point to the free download (the app starts a 14-day Pro trial) and the pricing page says checkout opens soon.
+- `NEXT_PUBLIC_GITHUB_REPO_URL` or `NEXT_PUBLIC_GITHUB_REPOSITORY` — repo for downloads.
+- `NEXT_PUBLIC_LATEST_DMG_URL`, `NEXT_PUBLIC_DMG_FILENAME`, `NEXT_PUBLIC_RELEASES_URL` — optional download overrides.
+- `GITHUB_TOKEN` — optional, raises the GitHub API rate limit for the release list.
 
 ## Deploy on Vercel
 
-1. Import this repo in Vercel.
-2. Set **Root Directory** to `website`.
-3. Framework preset: **Next.js** (default).
-4. Deploy.
-
-Environment variables (see `.env.example`):
-
-- `NEXT_PUBLIC_GITHUB_REPO_URL` — `https://github.com/owner/repo` (no `.git`)
-- or `NEXT_PUBLIC_GITHUB_REPOSITORY` — `owner/repo`
-- `NEXT_PUBLIC_RELEASES_URL` — optional override for the “latest” button
-- `GITHUB_TOKEN` — optional; GitHub PAT for higher API rate limits when listing releases
-
-The **home** page uses a one-click **DMG** link (`…/releases/latest/download/SpeakType.dmg` by default). Each GitHub release should include an asset with that **exact name** (the repo’s `create-release.sh` / `deploy-release.sh` attach it automatically). The **`/downloads`** page lists every release (fetched server-side, revalidates every 5 minutes).
-
-## Build
-
-```bash
-npm run build
-npm start
-```
+Import the repo, set **Root Directory** to `website`, framework **Next.js**.

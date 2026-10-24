@@ -1,0 +1,274 @@
+import { PRICES } from "@/lib/pricing";
+
+const p = PRICES;
+
+export const en = {
+  meta: {
+    homeTitle: "SpeakType — Private voice typing for Mac",
+    homeDescription:
+      "Hold a key, talk, and clean text appears wherever you type. Runs on your Mac, works offline, no word limits. A private Wispr Flow alternative.",
+    pricingTitle: "Pricing — SpeakType",
+    pricingDescription: `Free forever on your Mac. Pro is $${p.proYearly} a year or $${p.lifetime} once.`,
+    compareTitle: "SpeakType vs Wispr Flow — a private alternative",
+    compareDescription:
+      "Compare SpeakType and Wispr Flow: where your voice goes, offline use, word limits, price and features.",
+    downloadsTitle: "Downloads — SpeakType",
+    downloadsDescription: "Download SpeakType for Mac. Latest version and older releases.",
+  },
+  nav: {
+    pricing: "Pricing",
+    compare: "vs Wispr Flow",
+    downloads: "Downloads",
+    download: "Download",
+    github: "GitHub",
+    language: "Svenska",
+    menu: "Menu",
+  },
+  cta: {
+    download: "Download for Mac",
+    free: "Free",
+    seePricing: "See pricing",
+    requirements: "macOS 14 or later · Apple Silicon recommended",
+  },
+  hero: {
+    title: "Talk. It types. Nothing leaves your Mac.",
+    body: "Hold a key and speak. SpeakType turns it into clean text right where your cursor is, in any app. It runs on your Mac, works offline and never counts your words.",
+  },
+  demo: {
+    windowTitle: "New message",
+    to: "To: Sara",
+    subject: "Thursday",
+    spoken:
+      "um hey Sara so I was thinking we could uh move the design review to Thursday instead because the prototype isn't quite ready yet and also can you send me the latest numbers",
+    listening: "Listening",
+    polishing: "Cleaning up",
+    onDevice: "on this Mac",
+    replay: "Replay",
+    styleLabel: "Style",
+    styles: [
+      {
+        id: "clean",
+        label: "Clean",
+        text: "Hey Sara, I was thinking we could move the design review to Thursday instead, because the prototype isn't quite ready yet. Also, can you send me the latest numbers?",
+      },
+      {
+        id: "professional",
+        label: "Professional",
+        text: "Hi Sara,\n\nCould we move the design review to Thursday? The prototype needs a little more time. Could you also send me the latest numbers?\n\nThanks",
+      },
+      {
+        id: "message",
+        label: "Message",
+        text: "Hey Sara! Can we move the design review to Thursday? Prototype isn't quite ready. Also, could you send the latest numbers?",
+      },
+      {
+        id: "bullets",
+        label: "Bullet list",
+        text: "• Move the design review to Thursday (prototype not ready yet)\n• Send me the latest numbers",
+      },
+    ],
+  },
+  steps: {
+    title: "Faster than typing. Easier than you think.",
+    items: [
+      { title: "Hold your shortcut", body: "Fn by default, or any key you like. Push-to-talk or tap to toggle." },
+      { title: "Say it like you'd say it", body: "Ums, restarts and run-on sentences are fine. Speak in any of 99 languages." },
+      { title: "Let go", body: "Clean text lands where your cursor is. Mail, Slack, Notion, your code editor, anywhere." },
+    ],
+  },
+  privacy: {
+    title: "Private by default, not by promise.",
+    body: "Your voice is turned into text by Whisper running on your own Mac. No server sees it, so there is nothing to log, leak or train on.",
+    items: [
+      { title: "On-device transcription", body: "Whisper runs locally on Apple Silicon. Pick a small, fast model or a large, accurate one." },
+      { title: "Works offline", body: "On a plane, on bad Wi-Fi, during someone else's outage. Dictation keeps working." },
+      { title: "No account, no tracking", body: "No sign-up. SpeakType doesn't log which apps or websites you use." },
+      { title: "Open source", body: "Every line is on GitHub. You don't have to trust us. You can check." },
+      { title: "Cloud only if you choose", body: "Want a cloud engine? Bring your own key. Audio goes straight to the provider you picked." },
+      { title: "Never lose a thought", body: "Every recording is kept in your history, even when something fails. Retry it with one click." },
+    ],
+  },
+  smart: {
+    title: "Smarter than raw transcription.",
+    body: "Plain dictation gives you exactly what you said, ums included. SpeakType can clean it up into what you meant, in the tone that fits.",
+    beforeLabel: "You said",
+    afterLabel: "SpeakType wrote",
+    examples: [
+      {
+        style: "Clean",
+        before: "so the the thing is we should probably ship on Monday no wait Tuesday",
+        after: "We should probably ship on Tuesday.",
+      },
+      {
+        style: "Bullet list",
+        before: "for groceries we need oat milk eggs uh some coffee and bread",
+        after: "• Oat milk\n• Eggs\n• Coffee\n• Bread",
+      },
+    ],
+    note: "Cleanup runs on a local model on your Mac, or in the cloud with your own key. Prefer word-for-word? Turn it off.",
+  },
+  custom: {
+    title: "Yours to tune.",
+    body: "Every step, from the key you hold to the model that writes, is your choice.",
+    items: [
+      { title: "Any shortcut", body: "Fn, Right Option, or a combo you record." },
+      { title: "Push-to-talk or toggle", body: "Hold while you talk, or tap to start and stop." },
+      { title: "Your engine", body: "Local Whisper models from tiny to large, or a cloud engine you pick." },
+      { title: "Your cleanup model", body: "Small local models like Qwen and Gemma, or any model on OpenRouter." },
+      { title: "Five writing styles", body: "Clean, Professional, Casual, Message and Bullet list." },
+      { title: "Your language", body: "Auto-detect, or lock to one of 99 languages." },
+    ],
+  },
+  compareTeaser: {
+    title: "Switching from Wispr Flow?",
+    body: "Same idea: hold a key, talk, get clean text. Without the cloud, the word cap or the $144 a year.",
+    link: "See the full comparison",
+  },
+  pricing: {
+    title: "Free on your Mac. Pro when you want more.",
+    body: `Unlimited local dictation is free forever. Pro adds AI cleanup and cloud engines. Try Pro free for ${p.trialDays} days, no card needed.`,
+    yearly: "Yearly",
+    monthly: "Monthly",
+    save: "Save 33%",
+    perMonth: "/ month",
+    perYear: "/ year",
+    billedYearly: `Billed $${p.proYearly} yearly`,
+    billedMonthly: "Billed monthly",
+    once: "once",
+    oneTime: `One-time payment · up to ${p.lifetimeMacs} Macs`,
+    forever: "forever",
+    plans: {
+      free: {
+        name: "Free",
+        cta: "Download free",
+        lead: "Everything you need to dictate.",
+        features: [
+          "Unlimited on-device dictation",
+          "No word limits, no account",
+          "99 languages",
+          "Every local Whisper model",
+          "Any shortcut, push-to-talk or toggle",
+          "Works offline",
+          "History and stats",
+        ],
+      },
+      pro: {
+        name: "Pro",
+        cta: `Start ${p.trialDays}-day free trial`,
+        buy: "Get Pro",
+        badge: "Most popular",
+        lead: "Everything in Free, plus:",
+        features: [
+          "AI cleanup in five writing styles",
+          "Local cleanup models, fully offline",
+          "Cloud engines with your own key",
+          "Transcribe audio files to text",
+          "Personal dictionary (coming soon)",
+          "Styles per app (coming soon)",
+        ],
+      },
+      lifetime: {
+        name: "Lifetime",
+        cta: "Buy once",
+        lead: "Everything in Pro, forever:",
+        features: [
+          "Pay once, no subscription",
+          `Use on up to ${p.lifetimeMacs} Macs`,
+          "All future updates",
+          "Support the indie developer",
+        ],
+      },
+    },
+    trialNote: "Paid checkout opens soon. Download now and Pro is free for 14 days.",
+  },
+  faq: {
+    title: "Questions",
+    items: [
+      {
+        q: "Is SpeakType really free?",
+        a: "Yes. On-device dictation is free with no word limits and no account. Pro is optional and adds AI cleanup and cloud engines.",
+      },
+      {
+        q: "Does my voice leave my Mac?",
+        a: "Not unless you turn on a cloud engine. By default, Whisper runs on your Mac and nothing is uploaded. If you choose a cloud engine, audio goes straight to the provider you picked, using your own key.",
+      },
+      {
+        q: "How is it different from Wispr Flow?",
+        a: `Wispr Flow always transcribes in the cloud, caps the free plan at ${p.wisprFreeWordsPerWeek.toLocaleString("en")} words a week and costs $${p.wisprYearly} a year. SpeakType runs locally, has no word cap, costs $${p.proYearly} a year for Pro, or $${p.lifetime} once.`,
+      },
+      {
+        q: "Which Macs does it run on?",
+        a: "macOS 14 or later. Apple Silicon (M1 and newer) is recommended for fast local transcription.",
+      },
+      {
+        q: "Which apps does it work in?",
+        a: "Any app with a text field: Mail, Slack, Notes, Google Docs, ChatGPT, Cursor, your terminal. It types where your cursor is.",
+      },
+      {
+        q: "What languages does it support?",
+        a: "Whisper understands 99 languages, including English, Swedish, Spanish, German, French and Japanese. It can detect the language for you.",
+      },
+      {
+        q: "Is it open source?",
+        a: "Yes, the code is on GitHub under the MIT license. Pro pays for a signed, notarized app, updates and continued development.",
+      },
+    ],
+  },
+  final: {
+    title: "Your voice. Your Mac. Your words.",
+    body: "Download SpeakType free and dictate your next message in under a minute.",
+  },
+  compare: {
+    title: "A private Wispr Flow alternative.",
+    body: "Wispr Flow made voice typing feel natural. SpeakType keeps that feeling and moves it onto your Mac: no cloud, no word cap, and a price you can pay once.",
+    colFeature: "",
+    colUs: "SpeakType",
+    colThem: "Wispr Flow",
+    rows: [
+      { label: "Where transcription runs", us: "On your Mac. Cloud optional", them: "Always in the cloud" },
+      { label: "Works offline", us: "Yes", them: "No" },
+      { label: "Free plan", us: "Unlimited words", them: `${p.wisprFreeWordsPerWeek.toLocaleString("en")} words a week` },
+      { label: "Pro price", us: `$${p.proYearly} a year`, them: `$${p.wisprYearly} a year` },
+      { label: "Pay once", us: `$${p.lifetime} lifetime`, them: "No" },
+      { label: "Account required", us: "No", them: "Yes" },
+      { label: "Open source", us: "Yes", them: "No" },
+      { label: "Writing styles", us: "Any language", them: "English only" },
+      { label: "Bring your own AI key", us: "Yes", them: "No" },
+      { label: "Choose your model", us: "Local or cloud, your pick", them: "No" },
+    ],
+    honestTitle: "Where Wispr Flow is ahead",
+    honestBody: "We'd rather you pick the right tool.",
+    honest: [
+      "It runs on Windows, iPhone and Android. SpeakType is Mac only for now.",
+      "It syncs your dictionary and snippets across devices and teams.",
+      "It has a personal dictionary today. Ours is coming soon.",
+    ],
+    switchTitle: "Switch in two minutes",
+    switchSteps: [
+      "Download SpeakType and drag it to Applications.",
+      "Allow microphone and accessibility access.",
+      "Pick a model. The recommended one is chosen for your Mac.",
+      "Quit Wispr Flow and hold Fn. That's it.",
+    ],
+    sourcesNote: "Wispr Flow details from wisprflow.ai, October 2026.",
+  },
+  downloads: {
+    title: "Download SpeakType",
+    body: "The latest version is signed and notarized by Apple. Older releases are below.",
+    latest: "Latest",
+    older: "All releases",
+    none: "Couldn't load the release list right now.",
+    viewOnGitHub: "View on GitHub",
+    prerelease: "Pre-release",
+  },
+  footer: {
+    tagline: "Private voice typing for Mac.",
+    product: "Product",
+    resources: "Resources",
+    releases: "Release notes",
+    source: "Source code",
+    rights: "Open source under the MIT license.",
+  },
+};
+
+export type Dictionary = typeof en;

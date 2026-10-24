@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
 ## [Unreleased]
+- **Web:** New marketing site in English and Swedish: home with an interactive dictation demo (pick a writing style), privacy, cleanup and customization sections, pricing (Free, Pro $6/mo or $48/yr, Lifetime $89), a Wispr Flow comparison page, and a restyled downloads page. Warm paper palette and Inter, after the 8pixel marketing site. Paid buttons use Polar checkout links from env and fall back to the free download until those exist. Adds sitemap, robots and hreflang.
+- **Docs:** Wispr Flow research and the plan to win its users (`docs/strategy/`).
 - **Reliability:** Recording now starts only after microphone permission, capture, and the WAV writer are ready. Cloud-only ignores stale offline hints, shows the real provider error, and treats an empty successful STT response as no speech. Cancellation cannot save or paste late output. Ollama controls stay hidden for cloud cleanup. History cleanup removes audio files but keeps usage statistics.
 - **macOS, release:** Release scripts use Apple Team `XDBG7P4V96` consistently.
 - **macOS, recorder:** Duplicate stop signals are coalesced so only one audio finalization and transcription can run for a recording.

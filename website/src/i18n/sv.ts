@@ -1,0 +1,274 @@
+import { PRICES } from "@/lib/pricing";
+import type { Dictionary } from "./en";
+
+const p = PRICES;
+const n = (x: number) => x.toLocaleString("sv-SE");
+
+export const sv: Dictionary = {
+  meta: {
+    homeTitle: "SpeakType — Privat rösttangentbord för Mac",
+    homeDescription:
+      "Håll in en tangent, prata, och färdig text dyker upp där du skriver. Körs på din Mac, funkar offline, ingen ordgräns. Ett privat alternativ till Wispr Flow.",
+    pricingTitle: "Priser — SpeakType",
+    pricingDescription: `Gratis för alltid på din Mac. Pro kostar $${p.proYearly} per år eller $${p.lifetime} en gång.`,
+    compareTitle: "SpeakType vs Wispr Flow — ett privat alternativ",
+    compareDescription:
+      "Jämför SpeakType och Wispr Flow: vart din röst tar vägen, offline, ordgränser, pris och funktioner.",
+    downloadsTitle: "Nedladdningar — SpeakType",
+    downloadsDescription: "Ladda ner SpeakType för Mac. Senaste versionen och äldre versioner.",
+  },
+  nav: {
+    pricing: "Priser",
+    compare: "vs Wispr Flow",
+    downloads: "Nedladdningar",
+    download: "Ladda ner",
+    github: "GitHub",
+    language: "English",
+    menu: "Meny",
+  },
+  cta: {
+    download: "Ladda ner för Mac",
+    free: "Gratis",
+    seePricing: "Se priser",
+    requirements: "macOS 14 eller senare · Apple Silicon rekommenderas",
+  },
+  hero: {
+    title: "Prata. Det skrivs. Inget lämnar din Mac.",
+    body: "Håll in en tangent och prata. SpeakType gör om det till ren text precis där markören står, i vilken app som helst. Den körs på din Mac, funkar offline och räknar aldrig dina ord.",
+  },
+  demo: {
+    windowTitle: "Nytt meddelande",
+    to: "Till: Sara",
+    subject: "Torsdag",
+    spoken:
+      "eh hej Sara jag tänkte att vi kanske kunde typ flytta designgenomgången till torsdag istället för prototypen är inte riktigt klar än och kan du också skicka de senaste siffrorna",
+    listening: "Lyssnar",
+    polishing: "Snyggar till",
+    onDevice: "på den här Macen",
+    replay: "Spela igen",
+    styleLabel: "Stil",
+    styles: [
+      {
+        id: "clean",
+        label: "Ren",
+        text: "Hej Sara, jag tänkte att vi kunde flytta designgenomgången till torsdag istället, eftersom prototypen inte är riktigt klar än. Kan du också skicka de senaste siffrorna?",
+      },
+      {
+        id: "professional",
+        label: "Professionell",
+        text: "Hej Sara,\n\nKan vi flytta designgenomgången till torsdag? Prototypen behöver lite mer tid. Kan du också skicka de senaste siffrorna?\n\nTack",
+      },
+      {
+        id: "message",
+        label: "Meddelande",
+        text: "Hej Sara! Kan vi flytta designgenomgången till torsdag? Prototypen är inte riktigt klar. Kan du skicka de senaste siffrorna också?",
+      },
+      {
+        id: "bullets",
+        label: "Punktlista",
+        text: "• Flytta designgenomgången till torsdag (prototypen är inte klar)\n• Skicka de senaste siffrorna",
+      },
+    ],
+  },
+  steps: {
+    title: "Snabbare än att skriva. Enklare än du tror.",
+    items: [
+      { title: "Håll in genvägen", body: "Fn som standard, eller valfri tangent. Håll för att prata eller tryck för att starta och stoppa." },
+      { title: "Säg det som du skulle säga det", body: "Hummanden, omstarter och långa meningar går bra. Prata på något av 99 språk." },
+      { title: "Släpp", body: "Ren text hamnar där markören står. Mail, Slack, Notion, din kodeditor, var som helst." },
+    ],
+  },
+  privacy: {
+    title: "Privat från start, inte bara ett löfte.",
+    body: "Din röst blir text med Whisper som körs på din egen Mac. Ingen server ser den, så det finns inget att logga, läcka eller träna på.",
+    items: [
+      { title: "Transkribering på enheten", body: "Whisper körs lokalt på Apple Silicon. Välj en liten, snabb modell eller en stor, träffsäker." },
+      { title: "Funkar offline", body: "På planet, på dåligt wifi, när någon annans tjänst ligger nere. Dikteringen fortsätter." },
+      { title: "Inget konto, ingen spårning", body: "Ingen registrering. SpeakType loggar inte vilka appar eller sajter du använder." },
+      { title: "Öppen källkod", body: "Varje rad finns på GitHub. Du behöver inte lita på oss. Du kan kolla själv." },
+      { title: "Molnet bara om du vill", body: "Vill du ha en molnmotor? Använd din egen nyckel. Ljudet går direkt till leverantören du valt." },
+      { title: "Tappa aldrig en tanke", body: "Varje inspelning sparas i historiken, även när något går fel. Försök igen med ett klick." },
+    ],
+  },
+  smart: {
+    title: "Smartare än rå transkribering.",
+    body: "Vanlig diktering ger dig exakt det du sa, hummanden och allt. SpeakType kan snygga till det till det du menade, i den ton som passar.",
+    beforeLabel: "Du sa",
+    afterLabel: "SpeakType skrev",
+    examples: [
+      {
+        style: "Ren",
+        before: "alltså grejen är att vi borde nog släppa på måndag nej vänta tisdag",
+        after: "Vi borde nog släppa på tisdag.",
+      },
+      {
+        style: "Punktlista",
+        before: "till handlingen behöver vi havremjölk ägg eh lite kaffe och bröd",
+        after: "• Havremjölk\n• Ägg\n• Kaffe\n• Bröd",
+      },
+    ],
+    note: "Tillsnyggningen körs med en lokal modell på din Mac, eller i molnet med din egen nyckel. Vill du ha ord för ord? Stäng av den.",
+  },
+  custom: {
+    title: "Ställ in den som du vill.",
+    body: "Varje steg, från tangenten du håller till modellen som skriver, väljer du själv.",
+    items: [
+      { title: "Valfri genväg", body: "Fn, höger Option eller en kombination du spelar in." },
+      { title: "Håll eller tryck", body: "Håll in medan du pratar, eller tryck för att starta och stoppa." },
+      { title: "Din motor", body: "Lokala Whisper-modeller från små till stora, eller en molnmotor du väljer." },
+      { title: "Din AI-modell", body: "Små lokala modeller som Qwen och Gemma, eller valfri modell på OpenRouter." },
+      { title: "Fem skrivstilar", body: "Ren, Professionell, Avslappnad, Meddelande och Punktlista." },
+      { title: "Ditt språk", body: "Automatisk igenkänning, eller lås till ett av 99 språk." },
+    ],
+  },
+  compareTeaser: {
+    title: "Byter du från Wispr Flow?",
+    body: `Samma idé: håll in en tangent, prata, få ren text. Utan molnet, ordgränsen eller $${p.wisprYearly} per år.`,
+    link: "Se hela jämförelsen",
+  },
+  pricing: {
+    title: "Gratis på din Mac. Pro när du vill ha mer.",
+    body: `Obegränsad lokal diktering är gratis för alltid. Pro lägger till AI-tillsnyggning och molnmotorer. Testa Pro gratis i ${p.trialDays} dagar, inget kort behövs.`,
+    yearly: "Årsvis",
+    monthly: "Månadsvis",
+    save: "Spara 33 %",
+    perMonth: "/ mån",
+    perYear: "/ år",
+    billedYearly: `$${p.proYearly} faktureras årsvis`,
+    billedMonthly: "Faktureras månadsvis",
+    once: "en gång",
+    oneTime: `Engångsbetalning · upp till ${p.lifetimeMacs} Macar`,
+    forever: "för alltid",
+    plans: {
+      free: {
+        name: "Gratis",
+        cta: "Ladda ner gratis",
+        lead: "Allt du behöver för att diktera.",
+        features: [
+          "Obegränsad diktering på enheten",
+          "Ingen ordgräns, inget konto",
+          "99 språk",
+          "Alla lokala Whisper-modeller",
+          "Valfri genväg, håll eller tryck",
+          "Funkar offline",
+          "Historik och statistik",
+        ],
+      },
+      pro: {
+        name: "Pro",
+        cta: `Testa gratis i ${p.trialDays} dagar`,
+        buy: "Skaffa Pro",
+        badge: "Populärast",
+        lead: "Allt i Gratis, plus:",
+        features: [
+          "AI-tillsnyggning i fem skrivstilar",
+          "Lokala AI-modeller, helt offline",
+          "Molnmotorer med din egen nyckel",
+          "Transkribera ljudfiler",
+          "Egen ordlista (kommer snart)",
+          "Stil per app (kommer snart)",
+        ],
+      },
+      lifetime: {
+        name: "Livstid",
+        cta: "Köp en gång",
+        lead: "Allt i Pro, för alltid:",
+        features: [
+          "Betala en gång, ingen prenumeration",
+          `Använd på upp till ${p.lifetimeMacs} Macar`,
+          "Alla framtida uppdateringar",
+          "Stöd en oberoende utvecklare",
+        ],
+      },
+    },
+    trialNote: "Betalningen öppnar snart. Ladda ner nu så är Pro gratis i 14 dagar.",
+  },
+  faq: {
+    title: "Frågor",
+    items: [
+      {
+        q: "Är SpeakType verkligen gratis?",
+        a: "Ja. Diktering på enheten är gratis, utan ordgräns och utan konto. Pro är valfritt och lägger till AI-tillsnyggning och molnmotorer.",
+      },
+      {
+        q: "Lämnar min röst min Mac?",
+        a: "Inte om du inte slår på en molnmotor. Som standard körs Whisper på din Mac och inget laddas upp. Väljer du en molnmotor går ljudet direkt till leverantören du valt, med din egen nyckel.",
+      },
+      {
+        q: "Hur skiljer den sig från Wispr Flow?",
+        a: `Wispr Flow transkriberar alltid i molnet, begränsar gratisplanen till ${n(p.wisprFreeWordsPerWeek)} ord i veckan och kostar $${p.wisprYearly} per år. SpeakType körs lokalt, har ingen ordgräns och Pro kostar $${p.proYearly} per år, eller $${p.lifetime} en gång.`,
+      },
+      {
+        q: "Vilka Macar funkar den på?",
+        a: "macOS 14 eller senare. Apple Silicon (M1 och nyare) rekommenderas för snabb lokal transkribering.",
+      },
+      {
+        q: "Vilka appar funkar den i?",
+        a: "Alla appar med ett textfält: Mail, Slack, Anteckningar, Google Docs, ChatGPT, Cursor, terminalen. Den skriver där markören står.",
+      },
+      {
+        q: "Vilka språk stöds?",
+        a: "Whisper förstår 99 språk, bland annat svenska, engelska, spanska, tyska, franska och japanska. Den kan känna igen språket åt dig.",
+      },
+      {
+        q: "Är den öppen källkod?",
+        a: "Ja, koden ligger på GitHub under MIT-licensen. Pro betalar för en signerad och notariserad app, uppdateringar och fortsatt utveckling.",
+      },
+    ],
+  },
+  final: {
+    title: "Din röst. Din Mac. Dina ord.",
+    body: "Ladda ner SpeakType gratis och diktera ditt nästa meddelande på under en minut.",
+  },
+  compare: {
+    title: "Ett privat alternativ till Wispr Flow.",
+    body: "Wispr Flow fick röstskrivning att kännas naturligt. SpeakType behåller den känslan och flyttar den till din Mac: inget moln, ingen ordgräns och ett pris du kan betala en gång.",
+    colFeature: "",
+    colUs: "SpeakType",
+    colThem: "Wispr Flow",
+    rows: [
+      { label: "Var transkriberingen körs", us: "På din Mac. Moln valfritt", them: "Alltid i molnet" },
+      { label: "Funkar offline", us: "Ja", them: "Nej" },
+      { label: "Gratisplan", us: "Obegränsat antal ord", them: `${n(p.wisprFreeWordsPerWeek)} ord i veckan` },
+      { label: "Pris för Pro", us: `$${p.proYearly} per år`, them: `$${p.wisprYearly} per år` },
+      { label: "Betala en gång", us: `$${p.lifetime} livstid`, them: "Nej" },
+      { label: "Konto krävs", us: "Nej", them: "Ja" },
+      { label: "Öppen källkod", us: "Ja", them: "Nej" },
+      { label: "Skrivstilar", us: "Alla språk", them: "Bara engelska" },
+      { label: "Egen AI-nyckel", us: "Ja", them: "Nej" },
+      { label: "Välj modell", us: "Lokal eller moln, du väljer", them: "Nej" },
+    ],
+    honestTitle: "Där Wispr Flow ligger före",
+    honestBody: "Vi vill hellre att du väljer rätt verktyg.",
+    honest: [
+      "Den finns för Windows, iPhone och Android. SpeakType finns bara för Mac än så länge.",
+      "Den synkar ordlista och textsnuttar mellan enheter och team.",
+      "Den har en egen ordlista redan idag. Vår kommer snart.",
+    ],
+    switchTitle: "Byt på två minuter",
+    switchSteps: [
+      "Ladda ner SpeakType och dra den till Program.",
+      "Ge åtkomst till mikrofon och hjälpmedel.",
+      "Välj en modell. Den som passar din Mac är förvald.",
+      "Avsluta Wispr Flow och håll in Fn. Klart.",
+    ],
+    sourcesNote: "Uppgifter om Wispr Flow från wisprflow.ai, oktober 2026.",
+  },
+  downloads: {
+    title: "Ladda ner SpeakType",
+    body: "Senaste versionen är signerad och notariserad av Apple. Äldre versioner finns nedan.",
+    latest: "Senaste",
+    older: "Alla versioner",
+    none: "Kunde inte hämta versionslistan just nu.",
+    viewOnGitHub: "Visa på GitHub",
+    prerelease: "Förhandsversion",
+  },
+  footer: {
+    tagline: "Privat rösttangentbord för Mac.",
+    product: "Produkt",
+    resources: "Resurser",
+    releases: "Versionsnyheter",
+    source: "Källkod",
+    rights: "Öppen källkod under MIT-licensen.",
+  },
+};
