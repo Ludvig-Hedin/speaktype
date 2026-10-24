@@ -2,7 +2,7 @@ import Foundation
 import Combine
 import SwiftUI // For IndexSet operations if needed, though Foundation usually covers it, but error says missing import.
 
-struct HistoryStatsEntry: Identifiable, Codable, Hashable {
+nonisolated struct HistoryStatsEntry: Identifiable, Codable, Hashable {
     let id: UUID
     let date: Date
     let wordCount: Int
@@ -12,20 +12,25 @@ struct HistoryStatsEntry: Identifiable, Codable, Hashable {
     var estimatedCostUSD: Double? = nil
 }
 
-struct HistoryItem: Identifiable, Codable, Hashable {
+nonisolated struct HistoryItem: Identifiable, Codable, Hashable {
     let id: UUID
     let date: Date
     var transcript: String
     let duration: TimeInterval
     let audioFileURL: URL?
-    let modelUsed: String?
-    let transcriptionTime: TimeInterval?
+    var modelUsed: String?
+    var transcriptionTime: TimeInterval?
     // Optional so existing persisted JSON decodes unchanged; carry provenance + cost for stats.
     var provider: String? = nil
     var estimatedCostUSD: Double? = nil
     var rawTranscript: String? = nil
     var polishedTranscript: String? = nil
     var summary: String? = nil
+    /// Set when transcription failed. The audio is kept so the user can retry from History.
+    /// Optional so older persisted JSON decodes unchanged (nil = a normal, successful item).
+    var failureReason: String? = nil
+
+    var isFailed: Bool { failureReason != nil }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
@@ -41,6 +46,8 @@ class HistoryService: ObservableObject {
     
     @Published var items: [HistoryItem] = []
     @Published private(set) var statsEntries: [HistoryStatsEntry] = []
+    /// Failed items currently being re-transcribed.
+    @Published private(set) var retryingItemIDs: Set<UUID> = []
     
     private let saveKey = "history_items"
     private let statsSaveKey = "history_stats_entries"
@@ -50,14 +57,26 @@ class HistoryService: ObservableObject {
         loadHistory()
     }
     
+    /// Serial background queue for JSON encoding + UserDefaults writes, so saving a long
+    /// history never blocks the main thread right after a dictation lands.
+    private static let persistenceQueue = DispatchQueue(
+        label: "com.speaktype.historyPersistence", qos: .utility)
+
+    /// Strips noise tags and trims, but keeps line breaks from polished output.
+    static func cleanedTranscript(_ text: String) -> String {
+        WhisperService.normalizedPreservingLineBreaks(from: text)
+    }
+
+    private static func wordCount(of text: String) -> Int {
+        text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
+    }
+
     func addItem(transcript: String, duration: TimeInterval, audioFileURL: URL? = nil, modelUsed: String? = nil, transcriptionTime: TimeInterval? = nil, provider: String? = nil, estimatedCostUSD: Double? = nil, rawTranscript: String? = nil, polishedTranscript: String? = nil) {
-        let normalizedTranscript = WhisperService.normalizedTranscription(from: transcript)
+        let normalizedTranscript = Self.cleanedTranscript(transcript)
         guard !normalizedTranscript.isEmpty else { return }
 
         let timestamp = Date()
-        let wordCount = normalizedTranscript.components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .count
+        let wordCount = Self.wordCount(of: normalizedTranscript)
 
         let newItem = HistoryItem(
             id: UUID(),
@@ -84,6 +103,103 @@ class HistoryService: ObservableObject {
         statsEntries.insert(statsEntry, at: 0)
         saveHistory()
         saveStats()
+    }
+
+    /// Save a recording whose transcription failed, keeping its audio for a later retry.
+    /// Failed items do not count toward statistics until a retry succeeds.
+    @discardableResult
+    func addFailedItem(audioFileURL: URL, duration: TimeInterval, errorMessage: String, modelUsed: String? = nil) -> UUID {
+        let newItem = HistoryItem(
+            id: UUID(),
+            date: Date(),
+            transcript: "",
+            duration: duration,
+            audioFileURL: audioFileURL,
+            modelUsed: modelUsed,
+            transcriptionTime: nil,
+            failureReason: errorMessage
+        )
+        items.insert(newItem, at: 0)
+        saveHistory()
+        return newItem.id
+    }
+
+    /// Re-run transcription (and optional polish) for a failed item and update it in place.
+    func retryTranscription(id: UUID) async {
+        guard !retryingItemIDs.contains(id),
+            let item = items.first(where: { $0.id == id }), item.isFailed,
+            let audioURL = item.audioFileURL
+        else { return }
+
+        guard FileManager.default.fileExists(atPath: audioURL.path) else {
+            markFailed(id: id, reason: "Audio file missing")
+            return
+        }
+
+        retryingItemIDs.insert(id)
+        defer { retryingItemIDs.remove(id) }
+
+        let language = UserDefaults.standard.string(forKey: "transcriptionLanguage") ?? "auto"
+        do {
+            let outcome = try await TranscriptionCoordinator.transcribe(
+                audioFile: audioURL, language: language)
+            let raw = Self.cleanedTranscript(outcome.text)
+            guard !raw.isEmpty else {
+                markFailed(id: id, reason: "No speech detected")
+                return
+            }
+            let finalText = Self.cleanedTranscript(
+                await TranscriptionFinalizer.finalizeTranscript(rawTranscript: raw))
+            completeFailedItem(
+                id: id,
+                transcript: finalText.isEmpty ? raw : finalText,
+                rawTranscript: raw,
+                outcome: outcome
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            markFailed(id: id, reason: error.localizedDescription)
+        }
+    }
+
+    private func completeFailedItem(id: UUID, transcript: String, rawTranscript: String, outcome: TranscriptionOutcome) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].transcript = transcript
+        items[index].rawTranscript = rawTranscript
+        items[index].polishedTranscript = transcript == rawTranscript ? nil : transcript
+        items[index].modelUsed = outcome.modelLabel
+        items[index].transcriptionTime = outcome.transcriptionTime
+        items[index].provider = outcome.provider.rawValue
+        items[index].estimatedCostUSD = outcome.estimatedCostUSD
+        items[index].failureReason = nil
+
+        let item = items[index]
+        statsEntries.removeAll { $0.id == id }
+        statsEntries.append(
+            HistoryStatsEntry(
+                id: id,
+                date: item.date,
+                wordCount: Self.wordCount(of: transcript),
+                duration: item.duration,
+                provider: item.provider,
+                estimatedCostUSD: item.estimatedCostUSD
+            )
+        )
+        statsEntries.sort { $0.date > $1.date }
+        saveHistory()
+        saveStats()
+    }
+
+    private func markFailed(id: UUID, reason: String) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].failureReason = reason
+        saveHistory()
+    }
+
+    /// Most recent successful transcript, for "Paste last transcript".
+    var lastTranscriptText: String? {
+        items.first(where: { !$0.isFailed && !$0.transcript.isEmpty })?.transcript
     }
 
     func setPolishedTranscript(_ text: String, for id: UUID) {
@@ -155,14 +271,24 @@ class HistoryService: ObservableObject {
     }
     
     private func saveHistory() {
-        if let encoded = try? JSONEncoder().encode(items) {
-            UserDefaults.standard.set(encoded, forKey: saveKey)
+        let snapshot = items
+        let key = saveKey
+        Self.persistenceQueue.async {
+            Self.encodeAndStore(snapshot, forKey: key)
         }
     }
 
     private func saveStats() {
-        if let encoded = try? JSONEncoder().encode(statsEntries) {
-            UserDefaults.standard.set(encoded, forKey: statsSaveKey)
+        let snapshot = statsEntries
+        let key = statsSaveKey
+        Self.persistenceQueue.async {
+            Self.encodeAndStore(snapshot, forKey: key)
+        }
+    }
+
+    nonisolated private static func encodeAndStore<T: Encodable>(_ value: T, forKey key: String) {
+        if let encoded = try? JSONEncoder().encode(value) {
+            UserDefaults.standard.set(encoded, forKey: key)
         }
     }
     
@@ -170,8 +296,9 @@ class HistoryService: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: saveKey),
            let decoded = try? JSONDecoder().decode([HistoryItem].self, from: data) {
             let normalizedItems = decoded.compactMap { item -> HistoryItem? in
-                let normalizedTranscript = WhisperService.normalizedTranscription(
-                    from: item.transcript)
+                // Failed items have no transcript yet; keep them so they can be retried.
+                if item.isFailed { return item }
+                let normalizedTranscript = Self.cleanedTranscript(item.transcript)
                 guard !normalizedTranscript.isEmpty else { return nil }
 
                 guard normalizedTranscript != item.transcript else { return item }
@@ -188,7 +315,8 @@ class HistoryService: ObservableObject {
                     estimatedCostUSD: item.estimatedCostUSD,
                     rawTranscript: item.rawTranscript,
                     polishedTranscript: item.polishedTranscript,
-                    summary: item.summary
+                    summary: item.summary,
+                    failureReason: item.failureReason
                 )
             }
 
@@ -212,6 +340,7 @@ class HistoryService: ObservableObject {
     }
     
     private func migrateStatsIfNeeded(from historyItems: [HistoryItem]) {
+        let historyItems = historyItems.filter { !$0.isFailed }
         guard statsEntries.isEmpty, !historyItems.isEmpty else { return }
 
         statsEntries = historyItems.map { item in
@@ -247,8 +376,15 @@ class HistoryService: ObservableObject {
     }
 
 #if DEBUG
+    /// Block until queued background saves have been written (tests read UserDefaults directly).
+    func flushPendingSavesForTesting() {
+        Self.persistenceQueue.sync {}
+    }
+
     func resetAllDataForTesting() {
+        Self.persistenceQueue.sync {}
         items = []
+        retryingItemIDs = []
         statsEntries = []
         UserDefaults.standard.removeObject(forKey: saveKey)
         UserDefaults.standard.removeObject(forKey: statsSaveKey)

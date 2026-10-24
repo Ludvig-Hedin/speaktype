@@ -1,6 +1,7 @@
 import AVFoundation
 import Combine
 import CoreMedia
+import OSLog
 import SwiftUI
 
 struct MiniRecorderView: View {
@@ -14,8 +15,22 @@ struct MiniRecorderView: View {
     @State private var isWarmingUp = false
     @State private var transcriptionTask: Task<Void, Never>?
     @State private var recordingStartTask: Task<Void, Never>?
+    /// A stop that arrived while the mic was still starting; applied once capture is live.
+    @State private var pendingStopAfterStart = false
+    /// Pill is showing a transient message (error, "No speech detected", paste hint).
+    @State private var isShowingMessage = false
+    @State private var awaitingPasteResult = false
+    @State private var dismissTask: Task<Void, Never>?
+    /// Route decided once at record start (see `startRecording`).
+    @State private var usesLocalRoute = true
+    @State private var routeIsRemote = false
+    @State private var routeProviderLabel: String?
     var onCommit: ((String) -> Void)?
     var onCancel: (() -> Void)?
+    /// The recorder accepted a start request (used to pick the paste target).
+    var onStartAccepted: (() -> Void)?
+    /// The recorder accepted a stop request; the transcript will be committed.
+    var onStopAccepted: (() -> Void)?
 
     @AppStorage(wrappedValue: SelectedModelPreference.recommendedVariant(), SelectedModelPreference.storageKey) private var selectedModel: String
     @AppStorage("recordingMode") private var recordingMode: Int = 0
@@ -91,9 +106,16 @@ struct MiniRecorderView: View {
     }
 
     // Default Init for Preview
-    init(onCommit: ((String) -> Void)? = nil, onCancel: (() -> Void)? = nil) {
+    init(
+        onCommit: ((String) -> Void)? = nil,
+        onCancel: (() -> Void)? = nil,
+        onStartAccepted: (() -> Void)? = nil,
+        onStopAccepted: (() -> Void)? = nil
+    ) {
         self.onCommit = onCommit
         self.onCancel = onCancel
+        self.onStartAccepted = onStartAccepted
+        self.onStopAccepted = onStopAccepted
     }
 
     var body: some View {
@@ -114,6 +136,10 @@ struct MiniRecorderView: View {
                 Text(statusMessage)
                     .font(Typography.labelMedium)
                     .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .padding(.horizontal, 18)
                     .transition(.opacity)
             } else {
                 HStack(spacing: 12) {
@@ -205,6 +231,9 @@ struct MiniRecorderView: View {
         .onReceive(NotificationCenter.default.publisher(for: .recordingCancelRequested)) { _ in
             cancelRecording()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .recordingShowMessageRequested)) {
+            handlePanelMessage($0)
+        }
         .onAppear {
             initializedService()
 
@@ -215,11 +244,15 @@ struct MiniRecorderView: View {
                 }
             }
             localEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                if event.keyCode == 53 {
-                    Task { @MainActor in self.handleEscape() }
-                    return nil  // swallow Escape
+                guard event.keyCode == 53 else { return event }
+                // Local monitors run on the main thread. Only take Escape while the recorder is
+                // actually recording or transcribing, so other SpeakType windows (sheets,
+                // menus, fields) keep their normal Escape behavior.
+                let shouldSwallow = MainActor.assumeIsolated {
+                    self.isListening || (self.isProcessing && !self.isShowingMessage)
                 }
-                return event
+                Task { @MainActor in self.handleEscape() }
+                return shouldSwallow ? nil : event
             }
         }
         .onDisappear {
@@ -338,8 +371,10 @@ struct MiniRecorderView: View {
     // MARK: - Logic
 
     private func initializedService() {
-        // Pre-warm the audio capture session for instant first recording
-        audioRecorder.prewarmSession()
+        // No microphone pre-warm here: it left the mic running (orange indicator) whenever the
+        // first start failed. The session starts per recording and stops when it ends.
+        usesLocalRoute = TranscriptionModeUserDefaults.mode != .remoteOnly
+            && !TranscriptionCoordinator.willUseRemoteNextTranscript().isRemote
 
         guard TranscriptionModeUserDefaults.mode != .remoteOnly else {
             debugLog("Remote transcription selected - skipping local model initialization")
@@ -365,7 +400,7 @@ struct MiniRecorderView: View {
     /// Recording control in the floating bar must follow `AudioRecordingService.isRecording`, not only
     /// local `@State`, so Stop still works if `isListening` drifts out of sync (e.g. toggle mode + hotkey flow).
     private func handleRecordingControlTap() {
-        if isListening || audioRecorder.isRecording {
+        if isListening || audioRecorder.isRecording || recordingStartTask != nil {
             stopAndTranscribe()
         } else {
             startRecording()
@@ -376,8 +411,10 @@ struct MiniRecorderView: View {
         cancelCommit = true
         recordingStartTask?.cancel()
         recordingStartTask = nil
+        pendingStopAfterStart = false
         transcriptionTask?.cancel()
         transcriptionTask = nil
+        clearMessage()
 
         let shouldStopRecording = isListening || audioRecorder.isRecording
         isListening = false
@@ -390,11 +427,16 @@ struct MiniRecorderView: View {
         isStoppingRecording = true
         Task {
             _ = await audioRecorder.stopRecording(discardOutput: true)
-            await MainActor.run { isStoppingRecording = false }
+            isStoppingRecording = false
         }
     }
 
     private func startRecording() {
+        // A new press pre-empts a message state (error, "No speech detected", paste hint).
+        if isShowingMessage {
+            clearMessage()
+        }
+
         guard !isStoppingRecording else {
             debugLog("Audio recorder is still stopping, ignoring start request")
             onCancel?()
@@ -417,13 +459,19 @@ struct MiniRecorderView: View {
             return
         }
 
+        // Decide the route once per recording. It reads the Keychain and system load, so it
+        // must not be recomputed in `body` on every audio-level update.
         let route = TranscriptionCoordinator.willUseRemoteNextTranscript()
+        routeIsRemote = route.isRemote
+        routeProviderLabel = route.providerLabel
+        usesLocalRoute = TranscriptionModeUserDefaults.mode != .remoteOnly && !route.isRemote
+
         if TranscriptionModeUserDefaults.mode == .remoteOnly && !route.isRemote {
             showStartError("Enable audio upload in Settings to use cloud transcription")
             return
         }
 
-        if shouldUseLocalRoute {
+        if usesLocalRoute {
             guard !selectedModel.isEmpty else {
                 showStartError("No local model selected")
                 return
@@ -436,7 +484,9 @@ struct MiniRecorderView: View {
             }
         }
 
+        onStartAccepted?()
         cancelCommit = false
+        pendingStopAfterStart = false
         isProcessing = true
         statusMessage = "Starting microphone…"
         debugLog("Starting recording...")
@@ -444,20 +494,20 @@ struct MiniRecorderView: View {
         recordingStartTask = Task {
             guard await audioRecorder.startRecording() else {
                 guard !Task.isCancelled else { return }
-                await MainActor.run { showStartError("Could not start the microphone") }
+                recordingStartTask = nil
+                pendingStopAfterStart = false
+                showStartError("Could not start the microphone")
                 return
             }
             guard !Task.isCancelled else {
                 _ = await audioRecorder.stopRecording(discardOutput: true)
                 return
             }
-            await MainActor.run {
-                recordingStartTask = nil
-                isProcessing = false
-                isListening = true
-            }
+            recordingStartTask = nil
+            isProcessing = false
+            isListening = true
 
-            if shouldUseLocalRoute {
+            if usesLocalRoute {
                 whisperService.cancelIdleUnload()
                 if !whisperService.isInitialized || whisperService.currentModelVariant != selectedModel {
                     let variant = selectedModel
@@ -466,27 +516,70 @@ struct MiniRecorderView: View {
                     }
                 }
             }
+
+            // The user let go (or pressed again in toggle mode) while the mic was warming up.
+            // Apply that stop now that capture is live, instead of dropping it.
+            if pendingStopAfterStart {
+                pendingStopAfterStart = false
+                stopAndTranscribe()
+            }
         }
     }
 
     private var shouldShowLocalWarmup: Bool {
-        shouldUseLocalRoute && (isWarmingUp || whisperService.isLoading)
-    }
-
-    private var shouldUseLocalRoute: Bool {
-        TranscriptionModeUserDefaults.mode != .remoteOnly
-            && !TranscriptionCoordinator.willUseRemoteNextTranscript().isRemote
+        usesLocalRoute && (isWarmingUp || whisperService.isLoading)
     }
 
     private func showStartError(_ message: String) {
+        showMessage(message, seconds: 2)
+    }
+
+    /// Show a status message in the pill, then close the panel. One cancellable timer: a new
+    /// start or Escape cancels it, and a newer message replaces it.
+    private func showMessage(_ message: String, seconds: Double) {
         debugLog(message)
+        dismissTask?.cancel()
+        isListening = false
         isProcessing = true
+        isShowingMessage = true
         statusMessage = message
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
-            isProcessing = false
+        dismissTask = Task {
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            clearMessage()
             onCancel?()
         }
+    }
+
+    private func clearMessage() {
+        dismissTask?.cancel()
+        dismissTask = nil
+        awaitingPasteResult = false
+        guard isShowingMessage else { return }
+        isShowingMessage = false
+        isProcessing = false
+        statusMessage = "Transcribing..."
+    }
+
+    /// After handing text to the paste flow, wait briefly for its result (the paste flow closes
+    /// the panel, or asks for the "press ⌘V" hint) without blocking a new recording.
+    private func awaitPasteResult() {
+        dismissTask?.cancel()
+        isShowingMessage = true
+        awaitingPasteResult = true
+        dismissTask = Task {
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            clearMessage()
+            onCancel?()
+        }
+    }
+
+    private func handlePanelMessage(_ notification: Notification) {
+        guard awaitingPasteResult,
+            let message = notification.userInfo?["message"] as? String
+        else { return }
+        showMessage(message, seconds: 3)
     }
 
     private func stopAndTranscribe() {
@@ -494,6 +587,14 @@ struct MiniRecorderView: View {
 
         guard !isStoppingRecording else {
             debugLog("Already stopping, ignoring duplicate stop request")
+            return
+        }
+
+        // Stop arrived while the mic is still starting: remember it and apply it once live.
+        if recordingStartTask != nil && !isListening {
+            debugLog("Stop requested during mic warm-up, deferring until capture is live")
+            pendingStopAfterStart = true
+            onStopAccepted?()
             return
         }
 
@@ -505,18 +606,16 @@ struct MiniRecorderView: View {
         // A local route needs a local model. Cloud-only does not.
         guard TranscriptionModeUserDefaults.mode == .remoteOnly || !selectedModel.isEmpty else {
             debugLog("No model selected - cannot transcribe")
-            Task { @MainActor in
-                isListening = false
-                isProcessing = false
-                statusMessage = "No AI model selected. Go to Settings → AI Models to download one."
-
-                // Show error for 3 seconds
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                onCancel?()
+            isStoppingRecording = true
+            Task {
+                _ = await audioRecorder.stopRecording(discardOutput: true)
+                isStoppingRecording = false
             }
+            showMessage("No AI model selected. Go to Settings → AI Models to download one.", seconds: 3)
             return
         }
 
+        onStopAccepted?()
         transcriptionTask?.cancel()
         isStoppingRecording = true
         isListening = false
@@ -524,15 +623,20 @@ struct MiniRecorderView: View {
         statusMessage = "Transcribing..."
         transcriptionTask = Task {
             let url = await audioRecorder.stopRecording()
-            await MainActor.run { isStoppingRecording = false }
-            debugLog("stopRecording returned: \(url?.absoluteString ?? "nil")")
+            isStoppingRecording = false
+            debugLog("stopRecording returned: \(url?.lastPathComponent ?? "nil")")
 
             guard let url = url else {
                 debugLog("No recording URL, cancelling")
-                await MainActor.run {
-                    isListening = false
-                    onCancel?()
-                }
+                isListening = false
+                isProcessing = false
+                onCancel?()
+                return
+            }
+
+            // Escape during the stop: discard without transcribing.
+            guard !Task.isCancelled, !cancelCommit else {
+                try? FileManager.default.removeItem(at: url)
                 return
             }
 
@@ -546,11 +650,19 @@ struct MiniRecorderView: View {
         guard isListening || isProcessing || isWarmingUp || whisperService.isLoading else { return }
 
         debugLog("Escape pressed - cancelling immediate commit")
+
+        if isShowingMessage {
+            clearMessage()
+            onCancel?()
+            return
+        }
+
         cancelCommit = true
         recordingStartTask?.cancel()
         recordingStartTask = nil
+        pendingStopAfterStart = false
 
-        if isListening {
+        if isListening || audioRecorder.isRecording {
             cancelRecording()
         } else {
             transcriptionTask?.cancel()
@@ -560,45 +672,44 @@ struct MiniRecorderView: View {
         }
     }
 
+    /// Diagnostics go to the unified log (Console.app), not a world-readable file. Messages here
+    /// carry no transcript text; transcript snippets are logged separately as `.private`.
     private func debugLog(_ message: String) {
-        let logPath = "/tmp/speaktype_debug.log"
-        let logEntry = "[\(Date())] \(message)\n"
-        if let data = logEntry.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: logPath) {
-                if let handle = FileHandle(forWritingAtPath: logPath) {
-                    handle.seekToEndOfFile()
-                    handle.write(data)
-                    handle.closeFile()
-                }
-            } else {
-                FileManager.default.createFile(atPath: logPath, contents: data)
-            }
-        }
+        AppLogger.transcription.debug("\(message, privacy: .public)")
     }
+
+    /// Keep the audio and record the failure in History so the user can retry later.
+    private func saveFailedRecording(url: URL, reason: String) async {
+        let duration = await getAudioDuration(url: url)
+        HistoryService.shared.addFailedItem(
+            audioFileURL: url, duration: duration, errorMessage: reason)
+    }
+
+    /// Recordings shorter than this with no detected speech are treated as accidental taps and
+    /// discarded instead of filling History with failed items.
+    private static let minimumRetainedSilentRecording: TimeInterval = 1.0
 
     private func processRecording(url: URL) async {
         debugLog("processRecording started with url: \(url.lastPathComponent)")
         do {
-            let route = TranscriptionCoordinator.willUseRemoteNextTranscript()
-
             // Only warm up the on-device model when the next transcription will run locally.
-            if shouldUseLocalRoute,
+            if usesLocalRoute,
                 !whisperService.isInitialized || whisperService.currentModelVariant != selectedModel
             {
                 debugLog("Loading model: \(selectedModel)")
-                await MainActor.run { statusMessage = "Warming up model. First use is slower..." }
+                statusMessage = "Warming up model. First use is slower..."
                 do {
                     try await whisperService.loadModel(variant: selectedModel)
                     debugLog("Model loaded successfully")
                 } catch {
                     debugLog("Model load failed: \(error.localizedDescription)")
-                    await MainActor.run {
-                        statusMessage = "Model load failed"
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                            self.isProcessing = false
-                            self.onCancel?()
-                        }
+                    guard !cancelCommit else {
+                        try? FileManager.default.removeItem(at: url)
+                        return
                     }
+                    await saveFailedRecording(
+                        url: url, reason: "Model load failed: \(error.localizedDescription)")
+                    showMessage("Model load failed", seconds: 2)
                     return
                 }
             }
@@ -606,8 +717,7 @@ struct MiniRecorderView: View {
             debugLog("Starting transcription...")
             // Do not update visible status after the user cancels.
             if !cancelCommit {
-                let status = route.isRemote ? "Transcribing via \(route.providerLabel ?? "cloud")…" : "Transcribing..."
-                await MainActor.run { statusMessage = status }
+                statusMessage = routeIsRemote ? "Transcribing via \(routeProviderLabel ?? "cloud")…" : "Transcribing..."
             }
             let outcome = try await TranscriptionCoordinator.transcribe(audioFile: url, language: transcriptionLanguage)
             try Task.checkCancellation()
@@ -616,24 +726,24 @@ struct MiniRecorderView: View {
                 return
             }
             let text = outcome.text
-            debugLog("Transcription result: \(text.prefix(50))...")
+            AppLogger.transcription.debug("Transcription result: \(String(text.prefix(50)), privacy: .private)")
 
             guard !text.isEmpty else {
-                debugLog("Empty text, cancelling")
-                try? FileManager.default.removeItem(at: url)
-                await MainActor.run {
-                    statusMessage = "No speech detected"
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        self.isProcessing = false
-                        self.onCancel?()
-                    }
+                debugLog("Empty text")
+                let duration = await getAudioDuration(url: url)
+                if duration >= Self.minimumRetainedSilentRecording {
+                    HistoryService.shared.addFailedItem(
+                        audioFileURL: url, duration: duration, errorMessage: "No speech detected")
+                } else {
+                    try? FileManager.default.removeItem(at: url)
                 }
+                showMessage("No speech detected", seconds: 1.5)
                 return
             }
 
             let shouldPolish = TranscriptionFinalizer.willPolishNextTranscript()
             if shouldPolish, !cancelCommit {
-                await MainActor.run { statusMessage = "Polishing..." }
+                statusMessage = "Polishing..."
             }
             let finalText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: text)
             try Task.checkCancellation()
@@ -641,7 +751,12 @@ struct MiniRecorderView: View {
                 try? FileManager.default.removeItem(at: url)
                 return
             }
-            debugLog("Final text (after optional polish): \(finalText.prefix(50))...")
+            AppLogger.transcription.debug("Final text: \(String(finalText.prefix(50)), privacy: .private)")
+
+            // Paste first so the text lands without waiting on disk work, then save. The paste
+            // flow is asynchronous, so the history entry exists before any keystroke is sent.
+            onCommit?(finalText)
+            awaitPasteResult()
 
             let duration = await getAudioDuration(url: url)
             HistoryService.shared.addItem(
@@ -655,35 +770,21 @@ struct MiniRecorderView: View {
                 rawTranscript: text,
                 polishedTranscript: finalText == text ? nil : finalText
             )
-
-            debugLog("Calling onCommit...")
-            await MainActor.run {
-                if !cancelCommit {
-                    onCommit?(finalText)
-                }
-                isProcessing = false
-
-                // If we cancelled by dismissing early, the window might already be closed,
-                // but if we waited for it (e.g. short transcription), close it now.
-                if cancelCommit {
-                    onCancel?()
-                }
-            }
-            debugLog("onCommit called successfully")
+            debugLog("Committed and saved to history")
         } catch is CancellationError {
             debugLog("Transcription cancelled")
             try? FileManager.default.removeItem(at: url)
-            await MainActor.run { isProcessing = false }
+            isProcessing = false
         } catch {
             debugLog("Error: \(error.localizedDescription)")
-            try? FileManager.default.removeItem(at: url)
-            await MainActor.run {
-                statusMessage = error.localizedDescription
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    self.isProcessing = false
-                    self.onCancel?()
-                }
+            guard !cancelCommit else {
+                try? FileManager.default.removeItem(at: url)
+                isProcessing = false
+                return
             }
+            // Never throw away what the user said: keep the audio as a failed History item.
+            await saveFailedRecording(url: url, reason: error.localizedDescription)
+            showMessage(error.localizedDescription, seconds: 2)
         }
     }
 
@@ -691,7 +792,8 @@ struct MiniRecorderView: View {
         let asset = AVURLAsset(url: url)
         do {
             let duration = try await asset.load(.duration)
-            return CMTimeGetSeconds(duration)
+            let seconds = CMTimeGetSeconds(duration)
+            return seconds.isFinite ? seconds : 0
         } catch {
             return 0
         }

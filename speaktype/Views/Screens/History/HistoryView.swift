@@ -7,6 +7,7 @@ struct HistoryView: View {
     @State private var itemPendingDeletion: HistoryItem? = nil
     @State private var expandedItemId: UUID? = nil
     @State private var showCopyToast = false
+    @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
     
     var body: some View {
         ScrollView {
@@ -62,7 +63,7 @@ struct HistoryView: View {
                                 .font(Typography.displaySmall)
                                 .foregroundStyle(Color.textPrimary)
                             
-                            Text("Press ⌘+Shift+Space to start recording")
+                            Text("Press \(selectedHotkey.configuredLabel) to start recording")
                                 .font(Typography.bodyMedium)
                                 .foregroundStyle(Color.textSecondary)
                         }
@@ -94,6 +95,10 @@ struct HistoryView: View {
                                 },
                                 onCopy: { copyToClipboard(text: item.transcript) },
                                 onDelete: { itemPendingDeletion = item },
+                                onRetry: {
+                                    Task { await historyService.retryTranscription(id: item.id) }
+                                },
+                                isRetrying: historyService.retryingItemIDs.contains(item.id),
                                 audioPlayer: audioPlayer
                             )
                         }
@@ -203,6 +208,8 @@ struct HistoryCard: View {
     let onToggle: () -> Void
     let onCopy: () -> Void
     let onDelete: () -> Void
+    let onRetry: () -> Void
+    let isRetrying: Bool
     @ObservedObject var audioPlayer: AudioPlayerService
 
     private var audioFileExists: Bool {
@@ -234,11 +241,22 @@ struct HistoryCard: View {
                     // Content
                     VStack(alignment: .leading, spacing: 8) {
                         // Transcript preview
-                        Text(item.transcript)
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                            .lineLimit(2)
-                            .lineSpacing(4)
+                        if item.isFailed {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.accentWarning)
+                                Text("Transcription failed")
+                                    .font(Typography.bodyMedium)
+                                    .foregroundStyle(Color.textSecondary)
+                            }
+                        } else {
+                            Text(item.transcript)
+                                .font(Typography.bodyMedium)
+                                .foregroundStyle(Color.textPrimary)
+                                .lineLimit(2)
+                                .lineSpacing(4)
+                        }
                         
                         // Metadata
                         HStack(spacing: 12) {
@@ -295,15 +313,44 @@ struct HistoryCard: View {
                         .padding(.horizontal, 20)
                     
                     VStack(alignment: .leading, spacing: 16) {
-                        // Full transcript
-                        Text(item.transcript)
-                            .font(Typography.bodyLarge)
-                            .foregroundStyle(Color.textPrimary)
-                            .textSelection(.enabled)
-                            .lineSpacing(6)
+                        // Full transcript (or why it failed)
+                        if let failureReason = item.failureReason {
+                            Text(failureReason)
+                                .font(Typography.bodyMedium)
+                                .foregroundStyle(Color.textSecondary)
+                                .textSelection(.enabled)
+                        } else {
+                            Text(item.transcript)
+                                .font(Typography.bodyLarge)
+                                .foregroundStyle(Color.textPrimary)
+                                .textSelection(.enabled)
+                                .lineSpacing(6)
+                        }
                         
                         // Actions row
                         HStack(spacing: 12) {
+                            if item.isFailed {
+                                Button(action: onRetry) {
+                                    HStack(spacing: 6) {
+                                        if isRetrying {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                        } else {
+                                            Image(systemName: "arrow.clockwise")
+                                                .font(.system(size: 12))
+                                        }
+                                        Text(isRetrying ? "Retrying…" : "Retry")
+                                            .font(Typography.labelMedium)
+                                    }
+                                    .foregroundStyle(Color.textSecondary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(Color.bgHover)
+                                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
+                                }
+                                .buttonStyle(.stPlain)
+                                .disabled(isRetrying || !audioFileExists)
+                            } else {
                             Button(action: onCopy) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "doc.on.doc")
@@ -318,6 +365,7 @@ struct HistoryCard: View {
                                 .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
                             }
                             .buttonStyle(.stPlain)
+                            }
                             
                             Button(role: .destructive, action: onDelete) {
                                 HStack(spacing: 6) {

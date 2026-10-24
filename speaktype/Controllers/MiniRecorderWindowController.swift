@@ -4,13 +4,20 @@ import SwiftUI
 class MiniRecorderWindowController: NSObject {
     private var panel: NSPanel?
     private var hostingController: NSHostingController<AnyView>?
+    /// Frontmost app at the latest start request. Promoted to `lastActiveApp` only when the
+    /// recorder accepts the start, so a rejected press (e.g. while transcribing) can't change
+    /// where the current transcript gets pasted.
+    private var startCandidateApp: NSRunningApplication?
     private var lastActiveApp: NSRunningApplication?
     private var pendingPasteTarget: NSRunningApplication?
 
+    static let accessibilityPasteMessage =
+        "Copied. Press ⌘V to paste. Turn on Accessibility for auto-paste."
+
     // Start recording - show panel and begin recording
     func startRecording() {
-        // Capture previous app to restore focus later
-        lastActiveApp = NSWorkspace.shared.frontmostApplication
+        // Remember the app the user was in; it becomes the paste target if the start is accepted.
+        startCandidateApp = NSWorkspace.shared.frontmostApplication
 
         if panel == nil {
             setupPanel()
@@ -49,8 +56,8 @@ class MiniRecorderWindowController: NSObject {
         // panel?.orderOut(nil)
 
         // Keep focus unchanged while the hotkey is still being released.
-        // Re-activation happens later during commit, right before auto-paste.
-        pendingPasteTarget = lastActiveApp
+        // Re-activation happens later during commit, right before auto-paste. The paste target
+        // is captured in `onStopAccepted`, only when the recorder actually takes this stop.
         NotificationCenter.default.post(name: .recordingStopRequested, object: nil)
     }
 
@@ -66,6 +73,14 @@ class MiniRecorderWindowController: NSObject {
             },
             onCancel: { [weak self] in
                 self?.panel?.orderOut(nil)
+            },
+            onStartAccepted: { [weak self] in
+                guard let self else { return }
+                self.lastActiveApp = self.startCandidateApp
+            },
+            onStopAccepted: { [weak self] in
+                guard let self else { return }
+                self.pendingPasteTarget = self.lastActiveApp
             }
         )
 
@@ -111,45 +126,31 @@ class MiniRecorderWindowController: NSObject {
     private func handleCommit(text: String) {
         let pasteTarget = pendingPasteTarget ?? lastActiveApp
         pendingPasteTarget = nil
-        Task {
-            // 1. Copy to clipboard
-            ClipboardService.shared.copy(text: text)
+        Task { @MainActor in
+            let result = await ClipboardService.shared.pasteText(
+                text,
+                into: pasteTarget,
+                beforePaste: { [weak self] in self?.panel?.orderOut(nil) }
+            )
 
-            // 2. Close panel
-            await MainActor.run {
-                self.panel?.orderOut(nil)
-            }
-
-            // 3. Check accessibility - if not granted, just copy to clipboard silently.
-            // Off the main thread: `AXIsProcessTrusted()` blocks on `tccd`, and this runs
-            // immediately after a transcription lands.
-            let accessibilityTrusted = await Task.detached(priority: .userInitiated) {
-                ClipboardService.shared.isAccessibilityTrusted
-            }.value
-
-            if !accessibilityTrusted {
-                // Text is already copied to clipboard, just return
-                // Don't show annoying popup - user can paste manually with Cmd+V
-                print(
-                    "⚠️ Accessibility not granted - text copied to clipboard, user can paste with Cmd+V"
+            if result == .copiedOnly {
+                // No Accessibility: say so in the panel instead of failing silently. The text
+                // stays on the clipboard for a manual ⌘V.
+                NotificationCenter.default.post(
+                    name: .recordingShowMessageRequested,
+                    object: nil,
+                    userInfo: ["message": Self.accessibilityPasteMessage]
                 )
-                return
             }
+        }
+    }
 
-            // 4. Re-activate the target app
-            if let app = pasteTarget {
-                _ = await MainActor.run {
-                    app.activate()
-                }
-            }
-
-            // 5. Wait for focus
-            try? await Task.sleep(nanoseconds: 500_000_000)
-
-            // 6. Paste using CGEvent (Accessibility permission only)
-            await MainActor.run {
-                ClipboardService.shared.paste()
-            }
+    /// Paste text that is not from a fresh recording (e.g. "Paste last transcript" in the menu
+    /// bar) into `target`, or whatever app is frontmost.
+    func pasteExistingText(_ text: String, into target: NSRunningApplication?) {
+        let target = target ?? NSWorkspace.shared.frontmostApplication
+        Task { @MainActor in
+            _ = await ClipboardService.shared.pasteText(text, into: target)
         }
     }
 

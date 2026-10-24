@@ -136,7 +136,7 @@ enum TrialAction {
     var postTrialLimit: Int? {
         switch self {
         case .transcribe:
-            return 10 // 10 transcriptions per day
+            return nil // Local dictation is free and unlimited (owner decision)
         case .viewHistory:
             return 5 // Last 5 items only
         case .exportTranscription:

@@ -18,6 +18,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var globalKeyUpMonitor: Any?
     private var localKeyUpMonitor: Any?
     private weak var updateWindow: NSWindow?
+    /// Last app other than SpeakType that was frontmost — the target for "Paste last
+    /// transcript", since opening the menu bar window can make SpeakType frontmost.
+    private var lastExternalApp: NSRunningApplication?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Register background-mode defaults before any UI is built so the activation policy
@@ -67,6 +70,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Setup dynamic hotkey monitoring based on user selection
         setupHotkeyMonitoring()
+
+        // The Fn event tap can only be created once Accessibility is granted. If it was missing
+        // at launch, build the tap (and reinstall the key monitors) as soon as it is granted,
+        // instead of requiring a relaunch.
+        PermissionService.shared.$isAccessibilityGranted
+            .removeDuplicates()
+            .filter { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.handleAccessibilityGranted() }
+            .store(in: &cancellables)
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard
+                let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication,
+                app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+            else { return }
+            MainActor.assumeIsolated { self?.lastExternalApp = app }
+        }
 
         // Seed permission state once (off-main), then keep it fresh whenever the app comes
         // forward. Cheaper than a permanent poll, and the values are read on the hotkey
@@ -156,6 +182,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         miniRecorderController?.startRecording()
     }
 
+    /// Paste the most recent transcript into the app the user was working in.
+    func pasteLastTranscriptFromMenuBar() {
+        guard let text = HistoryService.shared.lastTranscriptText else { return }
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        let isSelfFrontmost =
+            frontmost?.processIdentifier == ProcessInfo.processInfo.processIdentifier
+        miniRecorderController?.pasteExistingText(
+            text, into: isSelfFrontmost ? lastExternalApp : frontmost)
+    }
+
     // MARK: - Emoji Picker Suppression
 
     private func suppressEmojiPicker() {
@@ -212,6 +248,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.handleKeyUpEvent(event)
             return event
         }
+    }
+
+    private func handleAccessibilityGranted() {
+        guard hotkeyEventTap == nil else { return }
+        removeHotkeyMonitors()
+        setupHotkeyMonitoring()
+    }
+
+    private func removeHotkeyMonitors() {
+        for monitor in [
+            globalFlagsMonitor, localFlagsMonitor, globalKeyDownMonitor, localKeyDownMonitor,
+            globalKeyUpMonitor, localKeyUpMonitor,
+        ] {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+        }
+        globalFlagsMonitor = nil
+        localFlagsMonitor = nil
+        globalKeyDownMonitor = nil
+        localKeyDownMonitor = nil
+        globalKeyUpMonitor = nil
+        localKeyUpMonitor = nil
     }
 
     private func setupSuppressingHotkeyEventTap() {
@@ -318,7 +375,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // dedup window collapses them into one toggle.
         guard !isDuplicateHotkeyEvent(isPressed: true) else { return }
 
-        if AudioRecordingService.shared.isRecording {
+        // "Starting" counts as recording, so a tap during mic warm-up stops instead of being lost.
+        if AudioRecordingService.shared.isRecordingOrStarting {
             miniRecorderController?.stopRecording()
         } else {
             miniRecorderController?.startRecording()
@@ -419,7 +477,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             let recordingMode = UserDefaults.standard.integer(forKey: "recordingMode")
             if recordingMode == 1 {
-                if AudioRecordingService.shared.isRecording {
+                // "Starting" counts as recording: a second press during warm-up stops.
+                if AudioRecordingService.shared.isRecordingOrStarting {
                     miniRecorderController?.stopRecording()
                 } else {
                     miniRecorderController?.startRecording()

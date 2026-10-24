@@ -6,6 +6,7 @@ struct MenuBarDashboardView: View {
 
     let openDashboard: () -> Void
     let startRecording: () -> Void
+    let pasteLastTranscript: () -> Void
     let quit: () -> Void
 
     @AppStorage("hotkeyEnabled") private var hotkeyEnabled: Bool = true
@@ -289,6 +290,19 @@ struct MenuBarDashboardView: View {
             }
             .buttonStyle(.stPlain)
 
+            Button(action: handlePasteLastTranscript) {
+                Label("Paste Last Transcript", systemImage: "doc.on.clipboard")
+                    .font(Typography.labelMedium)
+                    .foregroundStyle(Color.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.bgHover)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.stPlain)
+            .disabled(historyService.lastTranscriptText == nil)
+            .opacity(historyService.lastTranscriptText == nil ? 0.5 : 1)
+
             HStack(spacing: 10) {
                 Button(action: openDashboard) {
                     Label("Open Dashboard", systemImage: "rectangle.grid.2x2")
@@ -320,6 +334,14 @@ struct MenuBarDashboardView: View {
         dismiss()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             startRecording()
+        }
+    }
+
+    private func handlePasteLastTranscript() {
+        // Close the menu first so focus returns to the app the user was typing in.
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            pasteLastTranscript()
         }
     }
 
@@ -459,9 +481,9 @@ private struct MenuBarTranscriptRow: View {
                     .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(item.transcript.isEmpty ? "Empty transcription" : item.transcript)
+                    Text(item.isFailed ? "Transcription failed" : (item.transcript.isEmpty ? "Empty transcription" : item.transcript))
                         .font(Typography.bodySmall)
-                        .foregroundStyle(Color.textPrimary)
+                        .foregroundStyle(item.isFailed ? Color.textSecondary : Color.textPrimary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -493,6 +515,7 @@ private struct MenuBarTranscriptRow: View {
     }
 
     private func copyTranscript() {
+        guard !item.isFailed else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(item.transcript, forType: .string)
     }

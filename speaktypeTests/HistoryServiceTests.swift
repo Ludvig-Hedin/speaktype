@@ -32,6 +32,7 @@ final class HistoryServiceTests: XCTestCase {
     func testPersistence() {
         let transcript = "Persistent Item"
         service.addItem(transcript: transcript, duration: 5.0)
+        service.flushPendingSavesForTesting()
         
         // Simulate app restart by re-initializing (or checking UserDefaults directly)
         // Since 'init' loads from UserDefaults, creating a new instance isn't easy with singleton,
@@ -99,6 +100,7 @@ final class HistoryServiceTests: XCTestCase {
 
     func testStatsPersistenceUsesSeparateStore() {
         service.addItem(transcript: "Persistent stats entry", duration: 5.0)
+        service.flushPendingSavesForTesting()
 
         guard let data = UserDefaults.standard.data(forKey: "history_stats_entries"),
               let decoded = try? JSONDecoder().decode([HistoryStatsEntry].self, from: data) else {
@@ -109,5 +111,34 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(decoded.count, 1)
         XCTAssertEqual(decoded.first?.wordCount, 3)
         XCTAssertEqual(decoded.first?.duration, 5.0)
+    }
+
+    func testFailedItemKeepsAudioAndSkipsStats() throws {
+        let audioURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("wav")
+        try Data("audio".utf8).write(to: audioURL)
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        service.addFailedItem(audioFileURL: audioURL, duration: 3.0, errorMessage: "Network error")
+
+        let item = try XCTUnwrap(service.items.first)
+        XCTAssertTrue(item.isFailed)
+        XCTAssertEqual(item.failureReason, "Network error")
+        XCTAssertEqual(item.audioFileURL, audioURL)
+        XCTAssertEqual(service.transcriptionCount(), 0)
+        XCTAssertNil(service.lastTranscriptText)
+    }
+
+    func testLegacyItemWithoutFailureFieldDecodes() throws {
+        let json = #"[{"id":"\#(UUID().uuidString)","date":0,"transcript":"Hi","duration":1}]"#
+        let decoded = try JSONDecoder().decode([HistoryItem].self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.count, 1)
+        XCTAssertFalse(decoded[0].isFailed)
+    }
+
+    func testAddItemPreservesLineBreaks() {
+        service.addItem(transcript: "First point.\n\n- one\n- two  [BLANK_AUDIO]", duration: 2.0)
+        XCTAssertEqual(service.items.first?.transcript, "First point.\n\n- one\n- two")
     }
 }

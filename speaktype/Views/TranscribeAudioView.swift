@@ -128,7 +128,7 @@ struct TranscribeAudioView: View {
             if !historyService.items.isEmpty {
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(historyService.items) { item in
+                        ForEach(historyService.items.filter { !$0.isFailed }) { item in
                             transcriptCard(item)
                         }
                     }

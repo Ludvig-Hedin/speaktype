@@ -60,6 +60,7 @@ struct speaktypeApp: App {
                 MenuBarDashboardView(
                     openDashboard: openDashboard,
                     startRecording: startRecordingFromMenuBar,
+                    pasteLastTranscript: { appDelegate.pasteLastTranscriptFromMenuBar() },
                     quit: { NSApplication.shared.terminate(nil) }
                 )
             }

@@ -372,4 +372,33 @@ class WhisperService {
 
         return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    /// Same noise-tag cleanup as `normalizedTranscription`, but keeps line breaks so polished
+    /// paragraphs and lists survive in history. Only runs of spaces/tabs are collapsed.
+    static func normalizedPreservingLineBreaks(from rawText: String) -> String {
+        var normalized = rawText
+
+        for pattern in placeholderPatterns {
+            normalized = normalized.replacingOccurrences(
+                of: pattern,
+                with: " ",
+                options: .regularExpression
+            )
+        }
+
+        normalized = normalized.replacingOccurrences(
+            of: bracketedNoisePattern,
+            with: " ",
+            options: [.regularExpression, .caseInsensitive]
+        )
+
+        normalized = normalized.replacingOccurrences(
+            of: #"[ \t]+"#, with: " ", options: .regularExpression)
+        normalized = normalized.replacingOccurrences(
+            of: #" *\r?\n *"#, with: "\n", options: .regularExpression)
+        normalized = normalized.replacingOccurrences(
+            of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+
+        return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }

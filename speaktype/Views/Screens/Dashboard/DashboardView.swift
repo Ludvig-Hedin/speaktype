@@ -20,6 +20,7 @@ struct DashboardView: View {
 
     @AppStorage(wrappedValue: SelectedModelPreference.recommendedVariant(), SelectedModelPreference.storageKey) private var selectedModel: String
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage: String = "auto"
+    @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
     @State private var showFileImporter = false
     @State private var isTranscribing = false
     @State private var transcriptionStatus = ""
@@ -139,7 +140,7 @@ struct DashboardView: View {
                                     .font(Typography.bodyMedium)
                                     .foregroundStyle(Color.textPrimary)
 
-                                Text("Press ⌘+Shift+Space to start recording")
+                                Text("Press \(selectedHotkey.configuredLabel) to start recording")
                                     .font(Typography.bodySmall)
                                     .foregroundStyle(Color.textSecondary)
                             }
@@ -273,7 +274,13 @@ struct DashboardView: View {
                     }
                 }
             } catch {
-                if ownsFile { try? FileManager.default.removeItem(at: url) }
+                // Keep the audio of our own recordings as a failed History item to retry later.
+                if ownsFile {
+                    let duration = (try? await getAudioDuration(url: url)) ?? 0
+                    historyService.addFailedItem(
+                        audioFileURL: url, duration: duration,
+                        errorMessage: error.localizedDescription)
+                }
                 DispatchQueue.main.async {
                     transcriptionStatus = "Error"
                     isTranscribing = false
@@ -471,6 +478,7 @@ struct StatBlock: View {
 
 struct RecentTranscriptionRow: View {
     let item: HistoryItem
+    @ObservedObject private var audioPlayer = AudioPlayerService.shared
     @State private var isHovered = false
     @State private var showCopySuccess = false
 
@@ -490,9 +498,9 @@ struct RecentTranscriptionRow: View {
             // Main content
             VStack(alignment: .leading, spacing: 8) {
                 // Transcript - multiple lines
-                Text(item.transcript.isEmpty ? "Empty transcription" : item.transcript)
+                Text(item.isFailed ? "Transcription failed" : (item.transcript.isEmpty ? "Empty transcription" : item.transcript))
                     .font(Typography.bodyMedium)
-                    .foregroundStyle(Color.textPrimary)
+                    .foregroundStyle(item.isFailed ? Color.textSecondary : Color.textPrimary)
                     .lineLimit(3)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
@@ -531,6 +539,7 @@ struct RecentTranscriptionRow: View {
                     // Quick actions
                     HStack(spacing: 8) {
                         // Copy button
+                        if !item.isFailed {
                         Button(action: copyToClipboard) {
                             HStack(spacing: 4) {
                                 Image(systemName: showCopySuccess ? "checkmark" : "doc.on.doc")
@@ -550,14 +559,17 @@ struct RecentTranscriptionRow: View {
                             )
                         }
                         .buttonStyle(.stPlain)
+                        }
 
                         // Play audio button (if available)
-                        if item.audioFileURL != nil {
-                            Button(action: {}) {
+                        if let audioURL = item.audioFileURL,
+                            FileManager.default.fileExists(atPath: audioURL.path)
+                        {
+                            Button(action: { togglePlayback(audioURL) }) {
                                 HStack(spacing: 4) {
-                                    Image(systemName: "play.fill")
+                                    Image(systemName: isPlayingThisItem ? "pause.fill" : "play.fill")
                                         .font(.system(size: 11))
-                                    Text("Play")
+                                    Text(isPlayingThisItem ? "Pause" : "Play")
                                         .font(Typography.captionSmall)
                                 }
                                 .foregroundStyle(Color.textSecondary)
@@ -590,6 +602,22 @@ struct RecentTranscriptionRow: View {
             withAnimation(.easeOut(duration: 0.15)) {
                 isHovered = hovering
             }
+        }
+    }
+
+    private var isPlayingThisItem: Bool {
+        audioPlayer.isPlaying && audioPlayer.currentAudioURL == item.audioFileURL
+    }
+
+    /// Same shared player the History screen uses: load this row's audio, then play/pause.
+    private func togglePlayback(_ url: URL) {
+        if audioPlayer.currentAudioURL != url {
+            audioPlayer.loadAudio(from: url)
+        }
+        if audioPlayer.isPlaying {
+            audioPlayer.pause()
+        } else {
+            audioPlayer.play()
         }
     }
 

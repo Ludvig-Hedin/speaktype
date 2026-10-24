@@ -110,6 +110,14 @@ enum HotkeyOption: String, Codable, CaseIterable, Identifiable {
 
     /// Default hotkey option
     static var `default`: HotkeyOption { .fn }
+
+    /// Label for the key the user actually presses (custom combos show their recorded keys).
+    var configuredLabel: String {
+        if self == .custom && CustomShortcutStorage.isSet {
+            return CustomShortcutStorage.displayString
+        }
+        return displayName
+    }
 }
 
 // MARK: - SwiftUI Binding support

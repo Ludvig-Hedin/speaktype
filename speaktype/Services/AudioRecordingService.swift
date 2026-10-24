@@ -37,7 +37,25 @@ class AudioRecordingService: NSObject, ObservableObject {
     private var isSessionStarted = false
     private var setupTask: Task<Void, Never>?
     private var isStopping = false  // Flag to prevent appending during stop
-    private var isStarting = false
+    /// True while `startRecording()` is bringing the microphone up (permission, session start,
+    /// first buffer). Hotkey toggle logic treats this as "recording" so a second press stops.
+    private(set) var isStarting = false
+
+    /// Recording, or about to be. Use for toggle decisions so a press during mic warm-up stops.
+    var isRecordingOrStarting: Bool { isRecording || isStarting }
+
+    // MARK: - audioQueue-confined capture state
+    /// Whether sample buffers should be written. Set before `startRunning()` so the very first
+    /// delivered buffer is kept, and cleared inside the stop block after the release tail.
+    private var captureActive = false
+    private var didReceiveFirstBuffer = false
+    private var firstBufferWaiter: CheckedContinuation<Void, Never>?
+    private var firstBufferGeneration = 0
+
+    /// Extra audio kept after the user lets go, so the last word is not clipped.
+    private static let releaseTail: TimeInterval = 0.15
+    /// Upper bound on waiting for the microphone to deliver its first buffer.
+    private static let firstBufferTimeout: TimeInterval = 0.4
 
     // MARK: - Chunking state
     private var chunkAssetWriter: AVAssetWriter?
@@ -228,20 +246,6 @@ class AudioRecordingService: NSObject, ObservableObject {
         // This prevents continuous CPU usage when idle
     }
 
-    /// Pre-warm the capture session so first recording starts instantly
-    func prewarmSession() {
-        if captureSession == nil { setupSession() }
-
-        audioQueue.async {
-            guard let session = self.captureSession, !session.isRunning else { return }
-            print("🎤 Pre-warming audio capture session...")
-            session.startRunning()
-            // Give it a moment to fully initialize
-            Thread.sleep(forTimeInterval: 0.3)
-            print("🎤 Audio capture session ready")
-        }
-    }
-
     @discardableResult
     func startRecording() async -> Bool {
         guard !isStarting, !isRecording, !isStopping else { return false }
@@ -260,34 +264,49 @@ class AudioRecordingService: NSObject, ObservableObject {
         guard !Task.isCancelled else { return false }
         guard permissionGranted else { return false }
 
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        // Writer setup and `startRunning()` both block, so they run on `audioQueue`. The writer
+        // is ready before the session starts, so the first buffer the mic delivers is recorded.
+        let deviceId = selectedDeviceId
+        let url: URL? = await withCheckedContinuation { continuation in
             audioQueue.async {
-                if self.captureSession == nil {
-                    self.configureSession(deviceId: self.selectedDeviceId)
-                }
-                if self.captureSession?.isRunning != true {
-                    self.captureSession?.startRunning()
-                    Thread.sleep(forTimeInterval: 0.3)
-                }
-                continuation.resume()
+                continuation.resume(returning: self.beginCapture(deviceId: deviceId))
             }
         }
+        guard let url else { return false }
+
+        // Replace the old fixed 300ms sleep: report "listening" as soon as audio is flowing.
+        await waitForFirstBuffer(timeout: Self.firstBufferTimeout)
+
         guard !Task.isCancelled else {
-            audioQueue.async { self.captureSession?.stopRunning() }
+            await abortCapture()
             return false
         }
-        guard captureSession?.isRunning == true else { return false }
 
-        isStopping = false
+        isRecording = true
+        recordingStartTime = Date()
+        audioLevel = 0.0
+        audioFrequency = 0.0
+        print("Recording started: \(url.lastPathComponent)")
+        return true
+    }
+
+    /// Creates the WAV writer and starts the capture session. MUST be called on `audioQueue`.
+    /// Returns the output file URL, or nil when the mic or writer could not start.
+    private func beginCapture(deviceId: String?) -> URL? {
+        if captureSession == nil {
+            configureSession(deviceId: deviceId)
+        }
+        guard let session = captureSession else { return nil }
+
         shouldDiscardCurrentRecordingOutput = false
         resetMainWriterState()
         resetChunkWriterState()
+
         let url = getRecordingsDirectory().appendingPathComponent(
             "recording-\(Date().timeIntervalSince1970).wav")
-        currentFileURL = url
 
         do {
-            assetWriter = try AVAssetWriter(outputURL: url, fileType: .wav)
+            let writer = try AVAssetWriter(outputURL: url, fileType: .wav)
 
             let settings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatLinearPCM,
@@ -301,26 +320,80 @@ class AudioRecordingService: NSObject, ObservableObject {
 
             let writerInput = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
             writerInput.expectsMediaDataInRealTime = true
-            guard assetWriter?.canAdd(writerInput) == true else { throw CocoaError(.fileWriteUnknown) }
-            assetWriter?.add(writerInput)
-            assetWriterInput = writerInput
+            guard writer.canAdd(writerInput) else { throw CocoaError(.fileWriteUnknown) }
+            writer.add(writerInput)
+            guard writer.startWriting() else { throw writer.error ?? CocoaError(.fileWriteUnknown) }
 
-            guard assetWriter?.startWriting() == true else { throw assetWriter?.error ?? CocoaError(.fileWriteUnknown) }
+            assetWriter = writer
+            assetWriterInput = writerInput
+            currentFileURL = url
             isSessionStarted = false
-            isRecording = true
-            recordingStartTime = Date()
-            await MainActor.run {
-                self.audioLevel = 0.0
-                self.audioFrequency = 0.0
-            }
-            print("Recording started: \(url.lastPathComponent)")
-            return true
         } catch {
             print("Error starting recording: \(error)")
             try? FileManager.default.removeItem(at: url)
             resetMainWriterState()
-            audioQueue.async { self.captureSession?.stopRunning() }
-            return false
+            return nil
+        }
+
+        didReceiveFirstBuffer = false
+        captureActive = true
+        if !session.isRunning {
+            session.startRunning()
+        }
+
+        guard session.isRunning else {
+            captureActive = false
+            assetWriter?.cancelWriting()
+            try? FileManager.default.removeItem(at: url)
+            resetMainWriterState()
+            return nil
+        }
+        return url
+    }
+
+    /// Suspends until the first sample buffer arrives or `timeout` passes.
+    private func waitForFirstBuffer(timeout: TimeInterval) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            audioQueue.async {
+                if self.didReceiveFirstBuffer || !self.captureActive {
+                    continuation.resume()
+                    return
+                }
+                self.firstBufferGeneration += 1
+                let generation = self.firstBufferGeneration
+                self.firstBufferWaiter = continuation
+                self.audioQueue.asyncAfter(deadline: .now() + timeout) {
+                    guard self.firstBufferGeneration == generation,
+                        let waiter = self.firstBufferWaiter
+                    else { return }
+                    self.firstBufferWaiter = nil
+                    waiter.resume()
+                }
+            }
+        }
+    }
+
+    /// MUST be called on `audioQueue`.
+    private func resumeFirstBufferWaiter() {
+        guard let waiter = firstBufferWaiter else { return }
+        firstBufferWaiter = nil
+        waiter.resume()
+    }
+
+    /// Tear down a start that was cancelled before it was reported as recording.
+    private func abortCapture() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            audioQueue.async {
+                self.captureActive = false
+                self.resumeFirstBufferWaiter()
+                let writer = self.assetWriter
+                let url = self.currentFileURL
+                self.resetMainWriterState()
+                writer?.cancelWriting()
+                if let url { try? FileManager.default.removeItem(at: url) }
+                self.captureSession?.stopRunning()
+                continuation.resume()
+            }
         }
     }
 
@@ -330,20 +403,20 @@ class AudioRecordingService: NSObject, ObservableObject {
 
         guard !isStopping, isRecording, let url = currentFileURL else { return nil }
         isStopping = true
-        shouldDiscardCurrentRecordingOutput = discardOutput
 
-        // Ensure minimum recording duration to prevent empty/corrupted WAV files
-        if let startTime = currentFileURL?.path.components(separatedBy: "-").last?
-            .replacingOccurrences(of: ".wav", with: ""),
-            let startTimestamp = Double(startTime)
-        {
-            let duration = Date().timeIntervalSince1970 - startTimestamp
-            if duration < 0.5 {
-                try? await Task.sleep(nanoseconds: UInt64((0.5 - duration) * 1_000_000_000))
+        if !discardOutput {
+            // Ensure minimum recording duration to prevent empty/corrupted WAV files
+            if let startTime = recordingStartTime {
+                let duration = Date().timeIntervalSince(startTime)
+                if duration < 0.5 {
+                    try? await Task.sleep(nanoseconds: UInt64((0.5 - duration) * 1_000_000_000))
+                }
             }
+            // Keep capturing briefly after release so the last word is not cut off.
+            try? await Task.sleep(nanoseconds: UInt64(Self.releaseTail * 1_000_000_000))
         }
 
-        isRecording = false  // Stop capturing new frames immediately
+        isRecording = false
         DispatchQueue.main.async {
             self.audioLevel = 0.0
             self.audioFrequency = 0.0
@@ -351,6 +424,11 @@ class AudioRecordingService: NSObject, ObservableObject {
 
         return await withCheckedContinuation { continuation in
             audioQueue.async {
+                // Stop writing new frames before finalizing.
+                self.captureActive = false
+                self.resumeFirstBufferWaiter()
+                self.shouldDiscardCurrentRecordingOutput = discardOutput
+
                 // --- Finalize the last in-flight chunk ---
                 let finishGroup = DispatchGroup()
                 var finalizedRecordingURL: URL?
@@ -480,13 +558,18 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
         _ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        // Only process audio when actually recording (saves CPU)
-        guard isRecording else { return }
+        // Only process audio while a capture is active (saves CPU). `captureActive` lives on
+        // `audioQueue` (this delegate's queue), so it is set before the session starts and the
+        // first delivered buffer is written rather than dropped.
+        guard captureActive else { return }
+
+        if !didReceiveFirstBuffer {
+            didReceiveFirstBuffer = true
+            resumeFirstBufferWaiter()
+        }
 
         processAudioLevel(from: sampleBuffer)
 
-        // Don't append if we're stopping - prevents race condition crash
-        guard !isStopping else { return }
         guard let writer = assetWriter, let input = assetWriterInput else { return }
 
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
@@ -499,7 +582,6 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
             }
 
             if input.isReadyForMoreMediaData {
-                guard !isStopping else { return }
                 input.append(sampleBuffer)
             }
         }

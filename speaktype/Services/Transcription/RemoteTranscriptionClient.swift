@@ -39,11 +39,18 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
         RemoteAPIKeyStore.hasKey(for: provider)
     }
 
+    /// Waits before each retry of a transient failure (timeout, 429, 5xx). Two retries max;
+    /// 400/401/403 and other client errors fail immediately.
+    private static let retryDelays: [Duration] = [.milliseconds(500), .milliseconds(1500)]
+
     func transcribeDetailed(audioFile: URL, language: String) async throws -> TranscriptionOutcome {
         guard let key = RemoteAPIKeyStore.read(for: provider) else { throw ClientError.missingAPIKey }
         guard let url = provider.transcriptionURL else { throw ClientError.badURL }
 
-        let audioData = try Data(contentsOf: audioFile)
+        // Reading the WAV is blocking file I/O; keep it off the main actor.
+        let audioData = try await Task.detached(priority: .userInitiated) {
+            try Data(contentsOf: audioFile)
+        }.value
         let boundary = "Boundary-\(UUID().uuidString)"
 
         var request = URLRequest(url: url)
@@ -60,6 +67,40 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
         )
 
         let start = Date()
+        var attempt = 0
+        while true {
+            do {
+                let data = try await send(request)
+                let elapsed = Date().timeIntervalSince(start)
+
+                guard let text = Self.parseText(from: data) else {
+                    throw ClientError.emptyResponse
+                }
+
+                let duration = await Self.audioDuration(url: audioFile)
+                return TranscriptionOutcome(
+                    text: text,
+                    provider: provider.providerKind,
+                    modelLabel: model.name,
+                    audioDuration: duration,
+                    estimatedCostUSD: duration.flatMap { model.costEstimate(durationSeconds: $0) },
+                    transcriptionTime: elapsed
+                )
+            } catch let error as RetryableError {
+                guard attempt < Self.retryDelays.count else { throw error.finalError }
+                try await Task.sleep(for: Self.retryDelays[attempt])
+                attempt += 1
+            }
+        }
+    }
+
+    /// A transient failure worth retrying, with the error to surface if retries run out.
+    private struct RetryableError: Error {
+        let finalError: ClientError
+    }
+
+    /// One HTTP attempt. Throws `RetryableError` for timeouts, 429 and 5xx.
+    private func send(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
         do {
@@ -68,31 +109,23 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
             throw CancellationError()
         } catch {
             try Task.checkCancellation()
-            throw ClientError.network(error.localizedDescription)
+            let clientError = ClientError.network(error.localizedDescription)
+            if let urlError = error as? URLError,
+                [.timedOut, .networkConnectionLost].contains(urlError.code)
+            {
+                throw RetryableError(finalError: clientError)
+            }
+            throw clientError
         }
-        let elapsed = Date().timeIntervalSince(start)
 
         guard let http = response as? HTTPURLResponse else { throw ClientError.emptyResponse }
         switch http.statusCode {
-        case 200...299: break
+        case 200...299: return data
         case 401, 403: throw ClientError.unauthorized
-        case 429: throw ClientError.rateLimited
+        case 429: throw RetryableError(finalError: .rateLimited)
+        case 500...599: throw RetryableError(finalError: .httpStatus(http.statusCode))
         default: throw ClientError.httpStatus(http.statusCode)
         }
-
-        guard let text = Self.parseText(from: data) else {
-            throw ClientError.emptyResponse
-        }
-
-        let duration = await Self.audioDuration(url: audioFile)
-        return TranscriptionOutcome(
-            text: text,
-            provider: provider.providerKind,
-            modelLabel: model.name,
-            audioDuration: duration,
-            estimatedCostUSD: duration.flatMap { model.costEstimate(durationSeconds: $0) },
-            transcriptionTime: elapsed
-        )
     }
 
     // MARK: - Helpers
