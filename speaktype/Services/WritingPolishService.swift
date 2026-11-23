@@ -75,7 +75,9 @@ enum WritingPolishService {
                     transcript: trimmed
                 )
                 let clean = sanitizeModelOutput(out).trimmingCharacters(in: .whitespacesAndNewlines)
-                return isPlausibleCleanup(raw: trimmed, cleaned: clean) ? clean : rawTranscript
+                if isPlausibleCleanup(raw: trimmed, cleaned: clean) { return clean }
+                print("WritingPolishService: cleanup output looked like an answer, not a cleanup; keeping raw text")
+                return rawTranscript
             } catch is CancellationError {
                 return rawTranscript
             } catch {
@@ -97,7 +99,7 @@ enum WritingPolishService {
                 userTranscript: trimmed
             )
             let out = sanitizeModelOutput(polished).trimmingCharacters(in: .whitespacesAndNewlines)
-            return out.isEmpty ? rawTranscript : out
+            return isPlausibleCleanup(raw: trimmed, cleaned: out) ? out : rawTranscript
         } catch is CancellationError {
             return rawTranscript
         } catch {
@@ -106,7 +108,10 @@ enum WritingPolishService {
         }
     }
 
-    /// Keep the original when the result resembles a short answer or an extended response.
+    /// Safety net for the failure that hurts most: the model *answering* the dictation
+    /// ("what's the capital of France" → "Paris") or writing an essay instead of cleaning it.
+    /// A cleanup keeps roughly the same number of words; self-corrections and fillers can halve
+    /// it, so the floor is loose. Outside the band we keep the raw transcript.
     static func isPlausibleCleanup(raw: String, cleaned: String) -> Bool {
         guard !cleaned.isEmpty, !cleaned.contains("<transcript>"), !cleaned.contains("</transcript>") else { return false }
         let rawWords = raw.split(whereSeparator: \.isWhitespace).count

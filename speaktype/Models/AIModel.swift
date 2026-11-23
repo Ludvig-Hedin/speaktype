@@ -24,10 +24,23 @@ struct AIModel: Identifiable, Equatable {
     // Speed: relative performance on Apple Silicon (10 = fastest)
     // Accuracy: based on Word Error Rate (10 = ~2% WER, 5 = ~15% WER)
     static let availableModels: [AIModel] = [
+        // Argmax's compressed build of the newer (2024-09-30) Large v3 Turbo: about 40% of the
+        // download and resident memory of the full model with near-identical accuracy.
+        AIModel(
+            name: "Whisper Large v3 Turbo Compact",
+            variant: "openai_whisper-large-v3-v20240930_turbo_632MB",
+            details: "Multilingual • Best accuracy • Light on memory",
+            rating: "Recommended",
+            size: "632 MB",
+            speed: 8.0,
+            accuracy: 9.4,
+            expectedSizeBytes: 550_000_000,
+            minimumRAMGB: 6
+        ),
         AIModel(
             name: "Whisper Large v3 Turbo",
             variant: "openai_whisper-large-v3_turbo",
-            details: "Multilingual • Optimized",
+            details: "Multilingual • Full size • Uses more memory",
             rating: "Excellent",
             size: "1.6 GB",
             speed: 7.0,  // Optimized but still large
@@ -61,7 +74,7 @@ struct AIModel: Identifiable, Equatable {
             name: "Whisper Small",
             variant: "openai_whisper-small.en",
             details: "English-only • Great Balance",
-            rating: "Recommended",
+            rating: "Great",
             size: "244 MB",
             speed: 8.0,  // Fast for its accuracy
             accuracy: 8.5,  // ~5% WER (English)

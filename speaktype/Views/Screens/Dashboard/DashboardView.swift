@@ -144,20 +144,8 @@ struct DashboardView: View {
                 print("File selection error: \(error.localizedDescription)")
             }
         }
-        .onAppear {
-            Task {
-                if !whisperService.isInitialized
-                    || whisperService.currentModelVariant != selectedModel
-                {
-                    try? await whisperService.loadModel(variant: selectedModel)
-                }
-            }
-        }
-        .onChange(of: selectedModel) {
-            Task {
-                try? await whisperService.loadModel(variant: selectedModel)
-            }
-        }
+        // No model load on appear: opening the window must not pull ~1 GB into memory. The
+        // model loads on demand when a transcription actually runs locally.
     }
 
     // MARK: - Helpers

@@ -89,15 +89,27 @@ struct RemoteTranscriptionModel: Identifiable, Equatable, Hashable {
 
     static let catalog: [RemoteTranscriptionModel] = [
         // OpenRouter. The same key is used by the writing-polish client.
+        // Benchmarked 2026-11-23 on 17 real dictations (Swedish, English, mixed). GPT Transcribe
+        // was the only one that never translated or dropped a Swedish/English switch.
         RemoteTranscriptionModel(
             id: "openai/gpt-transcribe", provider: .openRouter,
-            name: "GPT Transcribe", note: "Recommended · latest high accuracy",
+            name: "GPT Transcribe", note: "Recommended · best with mixed Swedish and English",
             pricePerMinuteUSD: 0.0045
         ),
         RemoteTranscriptionModel(
-            id: "openai/gpt-4o-mini-transcribe", provider: .openRouter,
-            name: "GPT-4o mini Transcribe", note: "Lower cost",
-            pricePerMinuteUSD: nil
+            id: "assemblyai/universal-3-6-pro", provider: .openRouter,
+            name: "AssemblyAI Universal-3.6 Pro", note: "Fastest · sometimes misses language switches",
+            pricePerMinuteUSD: 0.005
+        ),
+        RemoteTranscriptionModel(
+            id: "elevenlabs/scribe-v2", provider: .openRouter,
+            name: "ElevenLabs Scribe v2", note: "Very accurate · slower on long clips",
+            pricePerMinuteUSD: 0.0037
+        ),
+        RemoteTranscriptionModel(
+            id: "mistralai/voxtral-mini-transcribe-3-0", provider: .openRouter,
+            name: "Voxtral Mini Transcribe 3", note: "Cheapest good one · best for one language",
+            pricePerMinuteUSD: 0.0035
         ),
         // OpenAI — https://openai.com/api/pricing
         RemoteTranscriptionModel(

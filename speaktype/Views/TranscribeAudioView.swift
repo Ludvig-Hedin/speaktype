@@ -66,15 +66,7 @@ struct TranscribeAudioView: View {
                 print("File selection error: \(error.localizedDescription)")
             }
         }
-        .onAppear {
-            if TranscriptionModeUserDefaults.mode != .remoteOnly {
-                Task {
-                if !whisperService.isInitialized {
-                    try? await whisperService.initialize()
-                }
-                }
-            }
-        }
+        // The model loads on demand inside `transcribe`, not when this view appears.
     }
 
     // MARK: - Drop zone

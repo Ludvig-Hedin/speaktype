@@ -41,6 +41,7 @@ enum ModelValidationService {
 
     /// Run at launch (off-main). Logs resolved/unresolved cleanup models and repairs the selection.
     static func validateOnStartup() async {
+        CleanupModel.migrateRetiredSelection()
         logSTTInventory()
         guard let live = await fetchOpenRouterModelIDs() else {
             print("⚠️ ModelValidation: couldn't fetch OpenRouter models (offline/rate-limited); keeping configured selection.")

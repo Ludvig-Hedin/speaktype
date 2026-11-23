@@ -46,14 +46,19 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
     func transcribeDetailed(audioFile: URL, language: String) async throws -> TranscriptionOutcome {
         guard let key = RemoteAPIKeyStore.read(for: provider) else { throw ClientError.missingAPIKey }
 
-        // Reading the WAV is blocking file I/O; keep it off the main actor.
+        // Upload a compressed copy (~8× smaller, ~3× faster round trip); fall back to the WAV.
+        let compressed = await AudioUploadEncoder.compressedCopy(of: audioFile)
+        defer { if let compressed { try? FileManager.default.removeItem(at: compressed) } }
+        let uploadFile = compressed ?? audioFile
+
+        // Reading the file is blocking I/O; keep it off the main actor.
         let audioData = try await Task.detached(priority: .userInitiated) {
-            try Data(contentsOf: audioFile)
+            try Data(contentsOf: uploadFile)
         }.value
         let request = try makeRequest(
             key: key,
             audioData: audioData,
-            filename: audioFile.lastPathComponent,
+            filename: uploadFile.lastPathComponent,
             language: language,
             dictionary: UserDefaults.standard.string(forKey: DictationHints.dictionaryKey) ?? ""
         )

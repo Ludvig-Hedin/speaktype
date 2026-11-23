@@ -385,20 +385,8 @@ struct MiniRecorderView: View {
             return
         }
 
-        guard !selectedModel.isEmpty else {
-            debugLog("No model selected - skipping initialization")
-            return
-        }
-
-        Task {
-            debugLog("Initializing WhisperService with model: \(selectedModel)")
-            do {
-                try await whisperService.loadModel(variant: selectedModel)
-                debugLog("Model preloaded successfully")
-            } catch {
-                debugLog("Model preload failed: \(error.localizedDescription)")
-            }
-        }
+        // No preload here: the model loads when recording starts (while the user speaks) and is
+        // released when idle, so it never sits in memory between dictations.
     }
 
     /// Recording control in the floating bar must follow `AudioRecordingService.isRecording`, not only
@@ -695,6 +683,22 @@ struct MiniRecorderView: View {
 
     private func processRecording(url: URL) async {
         debugLog("processRecording started with url: \(url.lastPathComponent)")
+
+        // No voice in the take: don't spend a model call (or invent "Thank you.").
+        let peak = await audioRecorder.lastRecordingPeakLevel()
+        if peak < AudioRecordingService.speechPeakThreshold {
+            debugLog("Silent take (peak \(peak)) - skipping transcription")
+            let duration = await getAudioDuration(url: url)
+            if duration >= Self.minimumRetainedSilentRecording {
+                HistoryService.shared.addFailedItem(
+                    audioFileURL: url, duration: duration, errorMessage: "No speech detected")
+            } else {
+                try? FileManager.default.removeItem(at: url)
+            }
+            showMessage("No speech detected", seconds: 1.5)
+            return
+        }
+
         do {
             // Only warm up the on-device model when the next transcription will run locally.
             if usesLocalRoute,

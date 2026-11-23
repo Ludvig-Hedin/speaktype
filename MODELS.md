@@ -21,6 +21,9 @@ in Settings (Keychain); env vars are a dev convenience for shell-launched runs.
 Default: `anthropic/claude-haiku-5.5` via OpenRouter. Haiku runs with reasoning disabled.
 Cloud cleanup sends the dictation inside `<transcript>` tags. An implausible rewrite leaves the
 original text in place. OpenRouter requests include `provider.data_collection = "deny"`.
+Other cleanup models: DeepSeek V4.1 Flash (cheapest), GPT-6 Luna, MiniMax M3.1 Flash, Gemini 3.5
+Flash Lite (benchmark 2026-11-23 on 17 real dictations: none answered or translated with the tagged
+prompt). Reasoning is off, or minimal where an endpoint requires it.
 
 On startup `ModelValidationService.validateOnStartup()` fetches the live `/models` list, marks
 each catalog ID resolved/unresolved (unresolved → shown "(unavailable)" and disabled), and repairs
@@ -36,7 +39,11 @@ supportsSwedish, swedishFallbackEngineID, implemented, experimental, note`.
 **Active now** (`implemented: true`, wired through `TranscriptionProvider`): on-device Whisper,
 OpenRouter GPT Transcribe, direct OpenAI Transcribe, and Groq Whisper Large v3 Turbo. OpenRouter
 uses the same Keychain key for cleanup and transcription. Its recommended model is
-`openai/gpt-transcribe` at about $0.0045 per audio minute.
+`openai/gpt-transcribe` at about $0.0045 per audio minute (still the best with mixed Swedish and
+English, 2026-11-23). Also offered: AssemblyAI Universal-3.6 Pro (fastest), ElevenLabs Scribe v2,
+Voxtral Mini Transcribe 3 (cheapest). Audio is uploaded as 32 kbps AAC (~8× smaller than the WAV,
+~3× faster round trip). Local default: `openai_whisper-large-v3-v20240930_turbo_632MB` (~0.4 GB
+resident vs ~1.3 GB for the full Turbo), loaded on demand and released after 2 min idle.
 
 Choose **Swedish + English** to send both language hints to GPT Transcribe. Other engines use
 automatic language detection for that choice. The personal dictionary in Settings stores one

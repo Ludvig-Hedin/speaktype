@@ -102,6 +102,17 @@ class WhisperService {
     // Init is internal to allow testing, but prefer using .shared in production
     init() {}
 
+    /// Variants already compiled ("specialized") for this Mac's Neural Engine.
+    private static let specializedVariantsKey = "whisperSpecializedVariants"
+    static var specializedVariants: Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: specializedVariantsKey) ?? [])
+    }
+    private static func markSpecialized(_ variant: String) {
+        var set = specializedVariants
+        set.insert(variant)
+        UserDefaults.standard.set(Array(set), forKey: specializedVariantsKey)
+    }
+
     // Default initialization (loads default or saved model).
     // Falls back to the persisted selected variant when nothing is loaded yet — `currentModelVariant`
     // is cleared to "" by idle-unload(), so relying on it alone would try to load an empty variant.
@@ -187,15 +198,19 @@ class WhisperService {
         }
 
         do {
-            // Use WhisperKitConfig with optimized settings
+            // Prewarm (load → unload → load) is only needed the first time a model is
+            // specialized for this Mac; it keeps that first compile's peak memory down. After
+            // that the compiled cache exists, and prewarming would double every lazy load.
+            let needsPrewarm = !Self.specializedVariants.contains(variant)
+
             let config = WhisperKitConfig(
                 model: variant,
                 modelFolder: ModelStorage.modelDirectory(for: variant).path,
                 tokenizerFolder: ModelStorage.downloadBase,
-                computeOptions: ModelComputeOptions(),  // Uses GPU + Neural Engine
+                computeOptions: ModelComputeOptions(),  // Neural Engine for encoder + decoder
                 verbose: false,
                 logLevel: .error,
-                prewarm: true,  // Built-in model specialization (replaces manual warmup)
+                prewarm: needsPrewarm,
                 load: true,
                 download: false  // Already downloaded via ModelDownloadService
             )
@@ -215,10 +230,12 @@ class WhisperService {
             isLoading = false
             loadingStage = ""
 
-            // Decide whether to keep this model resident permanently or release it when
-            // idle, based on how much RAM is free right now.
+            if needsPrewarm { Self.markSpecialized(variant) }
             keepResident = ModelMemoryPolicy.shouldKeepResident(variant: variant)
-            print("✅ WhisperKit initialized with \(variant) — keepResident=\(keepResident)")
+            print("✅ WhisperKit initialized with \(variant)")
+            // A load that is not followed by a transcription (model picker, file view) must
+            // still give its memory back.
+            scheduleIdleUnloadIfNeeded()
         } catch {
             isLoading = false
             loadingStage = ""
@@ -256,7 +273,8 @@ class WhisperService {
             state.idleUnloadGeneration += 1
             return state.idleUnloadGeneration
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + ModelMemoryPolicy.idleUnloadDelay) {
+        let delay = ModelMemoryPolicy.currentIdleUnloadDelay(variant: currentModelVariant)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             [weak self] in
             guard let self else { return }
             // Superseded by newer activity (the lock gives the cross-thread happens-before so a
@@ -341,6 +359,9 @@ class WhisperService {
         var options = DecodingOptions()
         options.task = .transcribe
         options.language = DictationHints.singleLanguage(language)
+        // Split on voice activity: long takes decode in parallel windows and silent stretches
+        // are skipped instead of being "heard" as "Thank you."
+        options.chunkingStrategy = .vad
         return options
     }
 

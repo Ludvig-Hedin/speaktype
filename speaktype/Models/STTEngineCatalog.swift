@@ -29,7 +29,7 @@ enum STTEngineCatalog {
     static let engines: [STTEngine] = [
         // --- Implemented today (existing TranscriptionProvider) ---
         STTEngine(id: "local-whisper", label: "Whisper (on-device)", provider: "local",
-                  modelID: "openai_whisper-large-v3_turbo", kind: .local, streaming: false,
+                  modelID: "openai_whisper-large-v3-v20240930_turbo_632MB", kind: .local, streaming: false,
                   languages: ["*"], supportsSwedish: true, swedishFallbackEngineID: nil,
                   implemented: true, experimental: false, note: "Local WhisperKit; excellent Swedish."),
         STTEngine(id: "openai-transcribe", label: "OpenAI Transcribe", provider: "openai",

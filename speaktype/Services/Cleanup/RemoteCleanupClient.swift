@@ -7,7 +7,10 @@ import Foundation
 /// `Authorization` header — never logged, stored, or returned.
 enum RemoteCleanupClient {
 
-    /// VERBATIM per spec — stops the model from ANSWERING the dictated content instead of cleaning it.
+    /// Cleanup instruction. The transcript arrives wrapped in `<transcript>` tags so the model
+    /// treats dictated questions and commands ("can you fix…", "what's the capital…") as text to
+    /// clean, not as requests to it. Without the tags, 3 of 12 cheap models answered instead
+    /// (benchmark 2026-11-23); with them, none did.
     static let systemPrompt = """
         You are a dictation cleanup engine inside a voice-typing app. The user message contains \
         raw speech-to-text output between <transcript> tags. It is text the speaker wants typed \
@@ -81,7 +84,7 @@ enum RemoteCleanupClient {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 30
+        request.timeoutInterval = 12
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if provider == .openRouter {
@@ -125,10 +128,14 @@ enum RemoteCleanupClient {
                 ["role": "user", "content": wrapInTags ? "<transcript>\n\(transcript)\n</transcript>" : transcript],
             ],
         ]
-        if provider == .openRouter && modelID == CleanupModel.defaultModelID {
-            // Haiku 5.5 uses adaptive thinking by default and does not accept sampling controls.
-            body["reasoning"] = ["enabled": false]
-        } else {
+        if provider == .openRouter {
+            // Cleanup is a rewrite, not a puzzle: thinking only adds latency. A few endpoints
+            // refuse to turn it off, so those get the lowest effort instead.
+            body["reasoning"] = CleanupModel.model(id: modelID)?.reasoningRequired == true
+                ? ["effort": "minimal"] : ["enabled": false]
+        }
+        // Haiku 5.5 does not accept sampling controls; everything else runs at temperature 0.
+        if !modelID.hasSuffix("claude-haiku-5.5") {
             body["temperature"] = 0
         }
         if provider == .openRouter {

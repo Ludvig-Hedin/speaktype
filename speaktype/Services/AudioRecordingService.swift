@@ -37,6 +37,20 @@ class AudioRecordingService: NSObject, ObservableObject {
     private var isSessionStarted = false
     private var setupTask: Task<Void, Never>?
     private var isStopping = false  // Flag to prevent appending during stop
+
+    /// Peak normalized level (0...1, −50 dB floor) of the take in progress. audioQueue only.
+    private var currentPeakLevel: Float = 0
+    /// Below this the take had no voice in it. Measured on real takes 2026-11-23: silent ones
+    /// peaked at 0–0.2 (and Whisper turned them into "Thank you."), the quietest speech at 0.36.
+    /// Skipped takes stay in History with their audio, so nothing is lost.
+    static let speechPeakThreshold: Float = 0.22
+
+    /// Peak level of the last take. Read after `stopRecording()` returns.
+    func lastRecordingPeakLevel() async -> Float {
+        await withCheckedContinuation { continuation in
+            audioQueue.async { continuation.resume(returning: self.currentPeakLevel) }
+        }
+    }
     /// True while `startRecording()` is bringing the microphone up (permission, session start,
     /// first buffer). Hotkey toggle logic treats this as "recording" so a second press stops.
     private(set) var isStarting = false
@@ -136,6 +150,15 @@ class AudioRecordingService: NSObject, ObservableObject {
         // and restores the persisted (or default) selection once the list is ready, so there is no
         // synchronous device pick here — doing one would race the restore and clobber it.
         fetchAvailableDevices()
+
+        // Old builds wrote 4-second chunk files that nothing reads any more; they pile up
+        // (~100 MB on one Mac). Only the full recordings in Recordings/ are kept.
+        DispatchQueue.global(qos: .background).async {
+            guard let support = FileManager.default.urls(
+                for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+            let chunks = support.appendingPathComponent("SpeakType/Chunks")
+            try? FileManager.default.removeItem(at: chunks)
+        }
 
         // Listen for device changes (plug/unplug)
         NotificationCenter.default.addObserver(
@@ -299,6 +322,7 @@ class AudioRecordingService: NSObject, ObservableObject {
         guard let session = captureSession else { return nil }
 
         shouldDiscardCurrentRecordingOutput = false
+        currentPeakLevel = 0
         resetMainWriterState()
         resetChunkWriterState()
 
@@ -806,6 +830,10 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
         // Empirically, ZCR for speech varies. Let's amplify likely speech range.
         var normalizedFreq = zcr * 5.0  // Gain to make changes visible
         normalizedFreq = max(0.0, min(1.0, normalizedFreq))
+
+        // Loudest moment of this take (audioQueue only). Lets the recorder skip clips with no
+        // voice at all instead of sending them to a model that invents "Thank you."
+        if normalizedLevel > currentPeakLevel { currentPeakLevel = normalizedLevel }
 
         DispatchQueue.main.async {
             self.audioLevel = normalizedLevel
