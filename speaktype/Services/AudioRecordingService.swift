@@ -750,8 +750,11 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
         var sumSquares: Float = 0.0
         var zeroCrossings: Int = 0
         var previousSample: Float = 0.0
+        // Only formats one of the branches below can read count as a measured level.
+        var parsedSamples = false
 
         if (asbd.mFormatFlags & kAudioFormatFlagIsFloat) != 0 {
+            parsedSamples = true
             // Float32 Processing (Standard on Mac)
             let actualData = data.assumingMemoryBound(to: Float.self)
             previousSample = actualData[0]
@@ -769,6 +772,7 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
         } else {
             // Int16 Processing (Fallback)
             if asbd.mBitsPerChannel == 16 {
+                parsedSamples = true
                 let actualData = data.assumingMemoryBound(to: Int16.self)
                 previousSample = Float(actualData[0])
 
@@ -782,6 +786,7 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
                     previousSample = sample
                 }
             } else if asbd.mBitsPerChannel == 32 {
+                parsedSamples = true
                 // Int32 Processing
                 let actualData = data.assumingMemoryBound(to: Int32.self)
                 previousSample = Float(actualData[0])
@@ -840,7 +845,7 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
 
         // Loudest moment of this take (audioQueue only). Lets the recorder skip clips with no
         // voice at all instead of sending them to a model that invents "Thank you."
-        if rms.isFinite {
+        if parsedSamples, rms.isFinite {
             didMeasureLevel = true
             if normalizedLevel > currentPeakLevel { currentPeakLevel = normalizedLevel }
         }

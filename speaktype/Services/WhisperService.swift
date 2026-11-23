@@ -294,7 +294,10 @@ class WhisperService {
         // already started at record-time.
         // Also reload when the user picked another model since this one was loaded.
         let selected = UserDefaults.standard.string(forKey: SelectedModelPreference.storageKey) ?? ""
-        let switched = !selected.isEmpty && isInitialized && selected != currentModelVariant
+        let selectedReady = !selected.isEmpty
+            && FileManager.default.fileExists(atPath: ModelStorage.modelDirectory(for: selected).path)
+            && !(ModelDownloadService.shared.isDownloading[selected] ?? false)
+        let switched = selectedReady && isInitialized && selected != currentModelVariant
         if pipe == nil || !isInitialized || switched {
             let variant = switched ? selected : resolvedVariant()
             guard !variant.isEmpty else { throw TranscriptionError.notInitialized }
