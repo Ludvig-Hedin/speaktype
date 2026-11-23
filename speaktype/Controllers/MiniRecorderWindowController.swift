@@ -2,6 +2,7 @@ import Cocoa
 import SwiftUI
 
 class MiniRecorderWindowController: NSObject {
+    private let keyboardFocusVisibility: KeyboardFocusVisibility
     private var panel: NSPanel?
     private var hostingController: NSHostingController<AnyView>?
     /// Frontmost app at the latest start request. Promoted to `lastActiveApp` only when the
@@ -13,6 +14,10 @@ class MiniRecorderWindowController: NSObject {
 
     static let accessibilityPasteMessage =
         "Copied. Press ⌘V to paste. Turn on Accessibility for auto-paste."
+
+    init(keyboardFocusVisibility: KeyboardFocusVisibility) {
+        self.keyboardFocusVisibility = keyboardFocusVisibility
+    }
 
     // Start recording - show panel and begin recording
     func startRecording() {
@@ -87,7 +92,12 @@ class MiniRecorderWindowController: NSObject {
         // Initialize hosting controller with transparent background view
         // Wrap in AnyView because .background() changes the type from MiniRecorderView to some View
         hostingController = NSHostingController(
-            rootView: AnyView(recorderView.background(Color.clear)))
+            rootView: AnyView(
+                recorderView
+                    .background(Color.clear)
+                    .modifier(KeyboardFocusEffect(visibility: keyboardFocusVisibility))
+            )
+        )
 
         let p = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 300, height: 50),

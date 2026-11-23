@@ -555,7 +555,7 @@ struct RadioButton: View {
                 ZStack {
                     Circle()
                         .strokeBorder(
-                            isSelected ? Color.accentBlue : Color.textMuted.opacity(0.55),
+                            Color.textMuted.opacity(0.55),
                             lineWidth: isSelected ? 1.5 : 1.25
                         )
                         .frame(width: 18, height: 18)

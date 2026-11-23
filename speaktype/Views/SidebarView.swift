@@ -26,9 +26,6 @@ struct SidebarView: View {
                 }
             }
             .padding(.horizontal, SidebarConstants.itemHorizontalPadding)
-            // Suppress the system keyboard focus ring so the first nav row isn't
-            // outlined (accent-colored) the moment the window opens.
-            .focusEffectDisabled()
 
             Spacer()
 
@@ -90,6 +87,8 @@ struct SidebarButton: View {
     let item: SidebarItem
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.isFocusEffectEnabled) private var showsFocus
+    @FocusState private var isFocused: Bool
     @State private var isHovered = false
 
     var body: some View {
@@ -112,17 +111,18 @@ struct SidebarButton: View {
                 RoundedRectangle(cornerRadius: SidebarConstants.itemCornerRadius, style: .continuous)
                     .fill(isSelected ? Color.bgSelected : (isHovered ? Color.bgHover : Color.clear))
             )
-            // Active row gets a whisper-of-blue hairline — the "you are here" cue.
-            .overlay(
-                RoundedRectangle(cornerRadius: SidebarConstants.itemCornerRadius, style: .continuous)
-                    .strokeBorder(
-                        Color.accentBlue.opacity(isSelected ? 0.4 : 0),
-                        lineWidth: 1
-                    )
-            )
+            .overlay {
+                if showsFocus && isFocused {
+                    RoundedRectangle(cornerRadius: SidebarConstants.itemCornerRadius, style: .continuous)
+                        .strokeBorder(Color.accentBlue, lineWidth: 2)
+                        .allowsHitTesting(false)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .focused($isFocused)
+        .focusEffectDisabled()
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.1)) {
                 isHovered = hovering

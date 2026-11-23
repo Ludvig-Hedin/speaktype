@@ -4,6 +4,7 @@ import KeyboardShortcuts
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    let keyboardFocusVisibility = KeyboardFocusVisibility()
     private var miniRecorderController: MiniRecorderWindowController?
     private var globalFlagsMonitor: Any?
     private var localFlagsMonitor: Any?
@@ -52,7 +53,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        miniRecorderController = MiniRecorderWindowController()
+        keyboardFocusVisibility.startMonitoring()
+        miniRecorderController = MiniRecorderWindowController(
+            keyboardFocusVisibility: keyboardFocusVisibility
+        )
 
         WritingPolishUserDefaults.registerDefaults(in: .standard)
         // Transcription defaults to on-device only (privacy-safe) until the user opts into cloud.
@@ -125,6 +129,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        keyboardFocusVisibility.hide()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        keyboardFocusVisibility.stopMonitoring()
     }
 
     // MARK: - Background agent / Dock icon
@@ -551,6 +563,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let updateSheetView = UpdateSheet(update: update)
+            .modifier(KeyboardFocusEffect(visibility: keyboardFocusVisibility))
         let hostingController = NSHostingController(rootView: updateSheetView)
 
         let window = NSWindow(contentViewController: hostingController)

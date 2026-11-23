@@ -184,7 +184,7 @@ final class ShortcutRecorderNSView: NSView {
             badge.textColor = .controlAccentColor
             clearButton.isHidden = true
             layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.1).cgColor
-            layer?.borderColor = NSColor.controlAccentColor.cgColor
+            layer?.borderColor = NSColor.separatorColor.cgColor
             layer?.borderWidth = 1.5
         } else if CustomShortcutStorage.isSet {
             badge.stringValue = CustomShortcutStorage.displayString

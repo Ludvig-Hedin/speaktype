@@ -7,6 +7,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 - **Web:** Free-only launch. Pricing shows one free plan with every feature and a note that Pro comes later; price rows and FAQ answers follow. Set `NEXT_PUBLIC_PAID_PLANS_OPEN=1` to show paid plans.
 
+## [1.0.32] - 2026-11-23
+- **macOS:** Removed blue selection outlines. Focus rings appear during keyboard navigation and hide when you return to the mouse or trackpad.
+
 ## [1.0.31] - 2026-10-24
 - **Web:** New marketing site in English and Swedish: home with an interactive dictation demo (pick a writing style), privacy, cleanup and customization sections, pricing (Free, Pro $6/mo or $48/yr, Lifetime $89), a Wispr Flow comparison page, and a restyled downloads page. Warm paper palette and Inter, after the 8pixel marketing site. Paid buttons use Polar checkout links from env and fall back to the free download until those exist. Adds sitemap, robots and hreflang.
 - **macOS, reliability:** A failed transcription no longer deletes the recording. It is saved in History as "Transcription failed" with a Retry button. A quick tap during mic start-up now stops instead of recording on. Auto-paste restores the user's previous clipboard (never a password-manager copy) and marks its own write as transient. Without Accessibility the recorder says "Copied. Press ⌘V to paste." instead of failing silently. A new press replaces an on-screen message instead of being ignored. The mic no longer stays on after a start error. Escape only cancels while recording. The Fn hotkey works as soon as Accessibility is granted. History keeps line breaks from polished text. A press ignored during transcription can no longer change the paste target. Cloud transcription retries twice on timeouts, 429 and 5xx. Transcripts are no longer written to `/tmp/speaktype_debug.log`.
