@@ -54,12 +54,21 @@ nonisolated enum AudioUploadEncoder {
         }
         writer.startSession(atSourceTime: .zero)
 
+        var failed = false
         while let buffer = readerOutput.copyNextSampleBuffer() {
-            while !writerInput.isReadyForMoreMediaData {
-                if writer.status != .writing { break }
+            while !writerInput.isReadyForMoreMediaData, writer.status == .writing {
                 usleep(1_000)
             }
-            guard writer.status == .writing, writerInput.append(buffer) else { break }
+            guard writer.status == .writing, writerInput.append(buffer) else {
+                failed = true
+                break
+            }
+        }
+        if failed || reader.status == .failed || writer.status != .writing {
+            reader.cancelReading()
+            writer.cancelWriting()
+            try? FileManager.default.removeItem(at: out)
+            return nil
         }
         writerInput.markAsFinished()
 

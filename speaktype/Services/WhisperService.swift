@@ -292,8 +292,11 @@ class WhisperService {
         // demand so every caller (mini recorder, dashboard, file transcribe) works after an idle
         // period instead of throwing .notInitialized. loadModel() coalesces with any warm-load
         // already started at record-time.
-        if pipe == nil || !isInitialized {
-            let variant = resolvedVariant()
+        // Also reload when the user picked another model since this one was loaded.
+        let selected = UserDefaults.standard.string(forKey: SelectedModelPreference.storageKey) ?? ""
+        let switched = !selected.isEmpty && isInitialized && selected != currentModelVariant
+        if pipe == nil || !isInitialized || switched {
+            let variant = switched ? selected : resolvedVariant()
             guard !variant.isEmpty else { throw TranscriptionError.notInitialized }
             try await loadModel(variant: variant)
         }

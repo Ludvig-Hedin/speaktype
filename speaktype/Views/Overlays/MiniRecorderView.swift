@@ -684,17 +684,15 @@ struct MiniRecorderView: View {
     private func processRecording(url: URL) async {
         debugLog("processRecording started with url: \(url.lastPathComponent)")
 
-        // No voice in the take: don't spend a model call (or invent "Thank you.").
-        let peak = await audioRecorder.lastRecordingPeakLevel()
-        if peak < AudioRecordingService.speechPeakThreshold {
+        // No voice in the take: don't spend a model call (or invent "Thank you."). Only when
+        // the level was actually measured, and the audio always stays in History for Retry.
+        if let peak = await audioRecorder.lastRecordingPeakLevel(),
+            peak < AudioRecordingService.speechPeakThreshold
+        {
             debugLog("Silent take (peak \(peak)) - skipping transcription")
             let duration = await getAudioDuration(url: url)
-            if duration >= Self.minimumRetainedSilentRecording {
-                HistoryService.shared.addFailedItem(
-                    audioFileURL: url, duration: duration, errorMessage: "No speech detected")
-            } else {
-                try? FileManager.default.removeItem(at: url)
-            }
+            HistoryService.shared.addFailedItem(
+                audioFileURL: url, duration: duration, errorMessage: "No speech detected")
             showMessage("No speech detected", seconds: 1.5)
             return
         }

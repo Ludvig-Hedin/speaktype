@@ -40,15 +40,21 @@ class AudioRecordingService: NSObject, ObservableObject {
 
     /// Peak normalized level (0...1, −50 dB floor) of the take in progress. audioQueue only.
     private var currentPeakLevel: Float = 0
+    /// Whether any buffer of this take could be measured. Some devices deliver formats the
+    /// meter can't read (e.g. non-interleaved multichannel, 24-bit); then we never skip.
+    private var didMeasureLevel = false
     /// Below this the take had no voice in it. Measured on real takes 2026-11-23: silent ones
     /// peaked at 0–0.2 (and Whisper turned them into "Thank you."), the quietest speech at 0.36.
     /// Skipped takes stay in History with their audio, so nothing is lost.
     static let speechPeakThreshold: Float = 0.22
 
-    /// Peak level of the last take. Read after `stopRecording()` returns.
-    func lastRecordingPeakLevel() async -> Float {
+    /// Peak level of the last take, or `nil` when it could not be measured.
+    /// Read after `stopRecording()` returns.
+    func lastRecordingPeakLevel() async -> Float? {
         await withCheckedContinuation { continuation in
-            audioQueue.async { continuation.resume(returning: self.currentPeakLevel) }
+            audioQueue.async {
+                continuation.resume(returning: self.didMeasureLevel ? self.currentPeakLevel : nil)
+            }
         }
     }
     /// True while `startRecording()` is bringing the microphone up (permission, session start,
@@ -323,6 +329,7 @@ class AudioRecordingService: NSObject, ObservableObject {
 
         shouldDiscardCurrentRecordingOutput = false
         currentPeakLevel = 0
+        didMeasureLevel = false
         resetMainWriterState()
         resetChunkWriterState()
 
@@ -833,7 +840,10 @@ extension AudioRecordingService: AVCaptureAudioDataOutputSampleBufferDelegate {
 
         // Loudest moment of this take (audioQueue only). Lets the recorder skip clips with no
         // voice at all instead of sending them to a model that invents "Thank you."
-        if normalizedLevel > currentPeakLevel { currentPeakLevel = normalizedLevel }
+        if rms.isFinite {
+            didMeasureLevel = true
+            if normalizedLevel > currentPeakLevel { currentPeakLevel = normalizedLevel }
+        }
 
         DispatchQueue.main.async {
             self.audioLevel = normalizedLevel

@@ -99,7 +99,12 @@ enum WritingPolishService {
                 userTranscript: trimmed
             )
             let out = sanitizeModelOutput(polished).trimmingCharacters(in: .whitespacesAndNewlines)
-            return isPlausibleCleanup(raw: trimmed, cleaned: out) ? out : rawTranscript
+            // Styles like Bullet list or Message reshape text on purpose; guard only Clean.
+            guard !out.isEmpty else { return rawTranscript }
+            if configuration.preset == .clean, !isPlausibleCleanup(raw: trimmed, cleaned: out) {
+                return rawTranscript
+            }
+            return out
         } catch is CancellationError {
             return rawTranscript
         } catch {
@@ -126,7 +131,10 @@ enum WritingPolishService {
 
     /// Strip accidental code fences or wrapping quotes from model output.
     private static func sanitizeModelOutput(_ text: String) -> String {
-        var s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var s = text
+            .replacingOccurrences(of: "<transcript>", with: "")
+            .replacingOccurrences(of: "</transcript>", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if s.hasPrefix("```") {
             s = String(s.dropFirst(3))
             if let nl = s.firstIndex(of: "\n") {

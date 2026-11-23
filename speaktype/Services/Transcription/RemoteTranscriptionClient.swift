@@ -46,43 +46,58 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
     func transcribeDetailed(audioFile: URL, language: String) async throws -> TranscriptionOutcome {
         guard let key = RemoteAPIKeyStore.read(for: provider) else { throw ClientError.missingAPIKey }
 
-        // Upload a compressed copy (~8× smaller, ~3× faster round trip); fall back to the WAV.
+        // Upload a compressed copy (~8× smaller, ~3× faster round trip). If the encoder fails,
+        // or a model rejects the format with a 4xx, send the original WAV instead.
         let compressed = await AudioUploadEncoder.compressedCopy(of: audioFile)
         defer { if let compressed { try? FileManager.default.removeItem(at: compressed) } }
-        let uploadFile = compressed ?? audioFile
 
+        let start = Date()
+        let text: String
+        if let compressed {
+            do {
+                text = try await upload(compressed, key: key, language: language)
+            } catch ClientError.httpStatus(let code) where (400...499).contains(code) {
+                print("Compressed upload rejected (\(code)); retrying with WAV")
+                text = try await upload(audioFile, key: key, language: language)
+            }
+        } else {
+            text = try await upload(audioFile, key: key, language: language)
+        }
+        let elapsed = Date().timeIntervalSince(start)
+
+        let duration = await Self.audioDuration(url: audioFile)
+        return TranscriptionOutcome(
+            text: text,
+            provider: provider.providerKind,
+            modelLabel: model.name,
+            audioDuration: duration,
+            estimatedCostUSD: duration.flatMap { model.costEstimate(durationSeconds: $0) },
+            transcriptionTime: elapsed
+        )
+    }
+
+    /// One upload with retries on transient failures (timeout, 429, 5xx).
+    private func upload(_ file: URL, key: String, language: String) async throws -> String {
         // Reading the file is blocking I/O; keep it off the main actor.
         let audioData = try await Task.detached(priority: .userInitiated) {
-            try Data(contentsOf: uploadFile)
+            try Data(contentsOf: file)
         }.value
         let request = try makeRequest(
             key: key,
             audioData: audioData,
-            filename: uploadFile.lastPathComponent,
+            filename: file.lastPathComponent,
             language: language,
             dictionary: UserDefaults.standard.string(forKey: DictationHints.dictionaryKey) ?? ""
         )
 
-        let start = Date()
         var attempt = 0
         while true {
             do {
                 let data = try await send(request)
-                let elapsed = Date().timeIntervalSince(start)
-
                 guard let text = Self.parseText(from: data) else {
                     throw ClientError.emptyResponse
                 }
-
-                let duration = await Self.audioDuration(url: audioFile)
-                return TranscriptionOutcome(
-                    text: text,
-                    provider: provider.providerKind,
-                    modelLabel: model.name,
-                    audioDuration: duration,
-                    estimatedCostUSD: duration.flatMap { model.costEstimate(durationSeconds: $0) },
-                    transcriptionTime: elapsed
-                )
+                return text
             } catch let error as RetryableError {
                 guard attempt < Self.retryDelays.count else { throw error.finalError }
                 try await Task.sleep(for: Self.retryDelays[attempt])

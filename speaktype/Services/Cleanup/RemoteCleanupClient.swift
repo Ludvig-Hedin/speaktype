@@ -84,7 +84,10 @@ enum RemoteCleanupClient {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 12
+        // Short dictations should fail fast (raw text is pasted instead); long texts and summaries
+        // need time because nothing streams back until the model finishes.
+        let words = transcript.split(whereSeparator: { $0.isWhitespace }).count
+        request.timeoutInterval = (wrapInTags && words < 400) ? 12 : 45
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if provider == .openRouter {
