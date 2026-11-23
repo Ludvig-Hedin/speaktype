@@ -17,18 +17,16 @@ struct StatisticsView: View {
     @State private var timeTrigger = Date()
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                headerSection
-                summaryCards
-                barChartSection
-                detailsSection
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 24)
+        PageScaffold(
+            title: "Statistics",
+            subtitle: "\(totalWords(for: selectedPeriod)) words this \(selectedPeriod.rawValue.lowercased())",
+            spacing: 24
+        ) {
+            periodPicker
+        } content: {
+            summaryCards
+            barChartSection
         }
-        .background(Color.clear)
         .onAppear {
             startTimer()
         }
@@ -48,74 +46,52 @@ struct StatisticsView: View {
 
     // MARK: - View Components
 
-    private var headerSection: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Statistics")
-                    .font(Typography.displayLarge)
-                    .foregroundStyle(Color.textPrimary)
-
-                Text(
-                    "\(totalWords(for: selectedPeriod)) words this \(selectedPeriod.rawValue.lowercased())"
-                )
-                .font(Typography.bodySmall)
-                .foregroundStyle(Color.textSecondary)
-            }
-
-            Spacer()
-
-            // Period selector
-            HStack(spacing: 8) {
-                ForEach(StatisticsPeriod.allCases) { period in
-                    PeriodButton(
-                        period: period,
-                        isSelected: selectedPeriod == period,
-                        action: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                selectedPeriod = period
-                            }
+    private var periodPicker: some View {
+        HStack(spacing: 2) {
+            ForEach(StatisticsPeriod.allCases) { period in
+                PeriodButton(
+                    period: period,
+                    isSelected: selectedPeriod == period,
+                    action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedPeriod = period
                         }
-                    )
-                }
+                    }
+                )
             }
         }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous)
+                .fill(Color.bgHover)
+        )
     }
 
     private var summaryCards: some View {
-        HStack(spacing: 16) {
-            StatCard(
-                icon: "doc.text.fill",
-                label: "Total Words",
-                value: "\(totalWords(for: selectedPeriod))"
-            )
-
-            StatCard(
-                icon: "calendar",
-                label: "Daily Average",
-                value: "\(dailyAverage(for: selectedPeriod))"
-            )
-
-            StatCard(
-                icon: "chart.line.uptrend.xyaxis",
-                label: "Best Day",
-                value: "\(bestDay(for: selectedPeriod))"
-            )
-
-            StatCard(
-                icon: "number",
-                label: "Transcriptions",
-                value: "\(transcriptionCount(for: selectedPeriod))"
-            )
+        HStack(alignment: .top, spacing: 0) {
+            StatBlock(value: "\(totalWords(for: selectedPeriod))", label: "Total words")
+            summaryDivider
+            StatBlock(value: "\(dailyAverage(for: selectedPeriod))", label: "Daily average")
+            summaryDivider
+            StatBlock(value: "\(bestDay(for: selectedPeriod))", label: "Best day")
+            summaryDivider
+            StatBlock(value: "\(transcriptionCount(for: selectedPeriod))", label: "Transcriptions")
 
             // Only surfaces once cloud transcription has actually incurred a cost.
             if totalCost(for: selectedPeriod) > 0 {
-                StatCard(
-                    icon: "dollarsign.circle",
-                    label: "Est. Cloud Cost",
-                    value: formattedCost(for: selectedPeriod)
-                )
+                summaryDivider
+                StatBlock(value: formattedCost(for: selectedPeriod), label: "Est. cloud cost")
             }
         }
+        .padding(.vertical, 18)
+        .themedCard(padding: 0)
+    }
+
+    private var summaryDivider: some View {
+        Rectangle()
+            .fill(Color.border.opacity(0.6))
+            .frame(width: 0.5)
+            .padding(.vertical, 2)
     }
 
     private func startDate(for period: StatisticsPeriod) -> Date {
@@ -139,53 +115,40 @@ struct StatisticsView: View {
     }
 
     private var barChartSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 16) {
                 Text("Activity")
-                    .font(Typography.headlineLarge)
+                    .font(Typography.headlineSmall)
                     .foregroundStyle(Color.textPrimary)
 
-                Spacer()
-
-                if !dailyData(for: selectedPeriod).isEmpty {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(transcriptionCount(for: selectedPeriod)) transcriptions")
-                            .font(Typography.labelSmall)
-                            .foregroundStyle(Color.textSecondary)
-                        Text(formattedDuration(for: selectedPeriod))
-                            .font(Typography.captionSmall)
-                            .foregroundStyle(Color.textMuted)
-                    }
+                if dailyData(for: selectedPeriod).isEmpty {
+                    emptyChartView
+                } else {
+                    chartView
                 }
             }
+            .padding(20)
 
-            if dailyData(for: selectedPeriod).isEmpty {
-                emptyChartView
-            } else {
-                chartView
-            }
+            RowDivider()
+
+            detailsSection
+                .padding(.vertical, 16)
         }
-        .themedCard(padding: 24)
+        .themedCard(padding: 0)
     }
 
     private var emptyChartView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.textMuted.opacity(0.4))
+        VStack(spacing: 6) {
+            Text("No activity yet")
+                .font(Typography.bodyMedium)
+                .foregroundStyle(Color.textPrimary)
 
-            VStack(spacing: 6) {
-                Text("No activity yet")
-                    .font(Typography.headlineMedium)
-                    .foregroundStyle(Color.textPrimary)
-
-                Text("Your transcription statistics will appear here")
-                    .font(Typography.bodySmall)
-                    .foregroundStyle(Color.textSecondary)
-            }
+            Text("Your transcription statistics will appear here")
+                .font(Typography.bodySmall)
+                .foregroundStyle(Color.textMuted)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 280)
+        .frame(height: 220)
     }
 
     private var chartView: some View {
@@ -195,34 +158,21 @@ struct StatisticsView: View {
                     x: .value("Date", data.dateString),
                     y: .value("Words", data.wordCount)
                 )
-                .foregroundStyle(Color.textSecondary.opacity(0.3))
-                .cornerRadius(Constants.UI.radiusSmall)
+                .foregroundStyle(Color.textPrimary.opacity(0.8))
+                .cornerRadius(3)
             }
         }
         .chartXAxis {
-            if selectedPeriod == .year {
-                // For year (monthly view), show months
-                AxisMarks(values: .automatic) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                        .foregroundStyle(Color.border.opacity(0.2))
-                    AxisValueLabel()
-                        .font(Typography.captionSmall)
-                        .foregroundStyle(Color.textMuted)
-                }
-            } else if selectedPeriod == .month {
-                // For month view, show every 7 days
-                AxisMarks(values: .stride(by: .day, count: 7)) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                        .foregroundStyle(Color.border.opacity(0.2))
+            if selectedPeriod == .month {
+                // For month view, label every 7 days
+                AxisMarks(values: .stride(by: .day, count: 7)) { _ in
                     AxisValueLabel()
                         .font(Typography.captionSmall)
                         .foregroundStyle(Color.textMuted)
                 }
             } else {
-                // For week view, show all days
-                AxisMarks { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                        .foregroundStyle(Color.border.opacity(0.2))
+                // Week shows each day; year shows months
+                AxisMarks { _ in
                     AxisValueLabel()
                         .font(Typography.captionSmall)
                         .foregroundStyle(Color.textMuted)
@@ -230,9 +180,9 @@ struct StatisticsView: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(Color.border.opacity(0.2))
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                    .foregroundStyle(Color.border.opacity(0.8))
                 AxisValueLabel()
                     .font(Typography.captionSmall)
                     .foregroundStyle(Color.textMuted)
@@ -241,24 +191,21 @@ struct StatisticsView: View {
         .chartPlotStyle { plotArea in
             plotArea.background(Color.clear)
         }
-        .frame(height: 280)
-        .padding(.top, 8)
+        .frame(height: 220)
     }
 
     private var detailsSection: some View {
-        HStack(spacing: 16) {
+        HStack(alignment: .top, spacing: 0) {
             DetailCard(
                 icon: "number",
                 label: "Avg. words per note",
                 value: "\(averageWordsPerTranscription(for: selectedPeriod))"
             )
-
             DetailCard(
                 icon: "star.fill",
                 label: "Most active day",
                 value: mostActiveDay(for: selectedPeriod)
             )
-
             DetailCard(
                 icon: "clock",
                 label: "Total duration",
@@ -479,52 +426,30 @@ struct StatCard: View {
     let value: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 16))
-                .foregroundStyle(Color.textMuted)
-
-            Text(value)
-                .font(Typography.statValueL)
-                .tracking(-0.3)
-                .foregroundStyle(Color.textPrimary)
-
-            Text(label)
-                .font(Typography.captionSmall)
-                .foregroundStyle(Color.textSecondary)
-                .textCase(.uppercase)
-                .tracking(0.5)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .themedCard()
+        StatBlock(value: value, label: label)
+            .padding(.vertical, 18)
+            .themedCard(padding: 0)
     }
 }
 
+/// Secondary figure in the Activity footer: label over value, no icon, no card.
 struct DetailCard: View {
     let icon: String
     let label: String
     let value: String
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(Typography.caption)
                 .foregroundStyle(Color.textMuted)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(Typography.captionSmall)
-                    .foregroundStyle(Color.textSecondary)
-                Text(value)
-                    .font(Typography.labelMedium)
-                    .monospacedDigit()
-                    .foregroundStyle(Color.textPrimary)
-            }
-
-            Spacer()
+            Text(value)
+                .font(Typography.labelLarge)
+                .monospacedDigit()
+                .foregroundStyle(Color.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .themedCard(padding: 16)
+        .padding(.horizontal, 20)
     }
 }
 
@@ -538,10 +463,16 @@ struct PeriodButton: View {
             Text(period.rawValue)
                 .font(Typography.labelMedium)
                 .foregroundStyle(isSelected ? Color.textPrimary : Color.textMuted)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(isSelected ? Color.bgHover : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: Constants.UI.radiusSmall - 2, style: .continuous)
+                            .fill(Color.segmentSelected)
+                            .shadow(color: .black.opacity(0.08), radius: 1, y: 0.5)
+                    }
+                }
+                .contentShape(Rectangle())
         }
         .buttonStyle(.stPlain)
     }

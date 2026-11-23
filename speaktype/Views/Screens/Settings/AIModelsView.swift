@@ -20,24 +20,25 @@ struct AIModelsView: View {
 
     // MARK: - Body
 
+    private var recommendedName: String {
+        AIModel.recommendedModel(forDeviceRAMGB: WhisperService.deviceRAMGB).name
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                headerSection
-
-                // Show setup banner if no model downloaded
-                if !hasAnyModelDownloaded {
-                    setupBanner
-                }
-
+        PageScaffold(
+            title: "AI Models",
+            subtitle: "Recommended for your Mac (\(WhisperService.deviceRAMGB)GB RAM): **\(recommendedName)**",
+            subtitleHelp: "First transcription after selecting a model may take 10-30 seconds while the AI loads.",
+            spacing: 24
+        ) {
+            // Before any download, the default-model slot becomes the "get started" hint.
+            if hasAnyModelDownloaded {
                 currentModelCard
-                modelsListSection
+            } else {
+                setupBanner
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 24)
+            modelsListSection
         }
-        .background(Color.clear)
         .onAppear {
             Task {
                 await downloadService.refreshDownloadedModels()
@@ -47,106 +48,50 @@ struct AIModelsView: View {
 
     // MARK: - Subviews
 
-    private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("AI Models")
-                .font(Typography.displayLarge)
-                .foregroundStyle(Color.textPrimary)
-
-            HStack(spacing: 6) {
-                let recommended = AIModel.recommendedModel(
-                    forDeviceRAMGB: WhisperService.deviceRAMGB)
-                Text(
-                    "Recommended for your Mac (\(WhisperService.deviceRAMGB)GB RAM): **\(recommended.name)**"
-                )
-                .font(Typography.bodySmall)
-                .foregroundStyle(Color.textSecondary)
-                .stCompactUI()
-
-                // Info icon with tooltip on hover
-                Image(systemName: "info.circle")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.textMuted)
-                    .help(
-                        "First transcription after selecting a model may take 10-30 seconds while the AI loads."
-                    )
-            }
-        }
-    }
-
     private var currentModelCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Default Model")
-                .font(Typography.captionSmall)
+        HStack {
+            Text("Default model")
+                .font(Typography.bodyMedium)
                 .foregroundStyle(Color.textSecondary)
-                .textCase(.uppercase)
-                .tracking(0.5)
-
+            Spacer()
             Text(selectedModelName)
-                .font(Typography.headlineMedium)
+                .font(Typography.labelLarge)
                 .foregroundStyle(Color.textPrimary)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            ZStack {
-                RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
-                    .fill(Color.bgCard.opacity(0.55))
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
-                .strokeBorder(Color.border.opacity(0.5), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 4)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .themedCard(padding: 0)
     }
 
     private var modelsListSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Available Models")
-                .font(Typography.headlineLarge)
-                .foregroundStyle(Color.textPrimary)
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel("Available Models")
 
-            VStack(spacing: 12) {
-                ForEach($models) { $model in
+            VStack(spacing: 0) {
+                ForEach(Array($models.enumerated()), id: \.element.id) { index, $model in
+                    if index > 0 {
+                        RowDivider().padding(.horizontal, 16)
+                    }
                     ModelRow(model: $model, selectedModel: $selectedModel)
                 }
             }
+            .themedCard(padding: 0)
         }
     }
 
     private var setupBanner: some View {
-        HStack(spacing: 16) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.system(size: 32))
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Download a Model to Get Started")
+                .font(Typography.labelLarge)
                 .foregroundStyle(Color.textPrimary)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Download a Model to Get Started")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.textPrimary)
-
-                Text(
-                    "Choose a model below to enable voice transcription. We recommend **\(AIModel.recommendedModel(forDeviceRAMGB: WhisperService.deviceRAMGB).name)** for your Mac."
-                )
-                .font(.system(size: 13))
+            Text("Choose a model below to enable voice transcription. We recommend **\(recommendedName)** for your Mac.")
+                .font(Typography.bodySmall)
                 .foregroundStyle(Color.textSecondary)
-            }
-
-            Spacer()
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
-                .fill(Color.textPrimary.opacity(0.04))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
-                .strokeBorder(Color.textPrimary.opacity(0.08), lineWidth: 1)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .themedCard(padding: 16)
     }
 }
 

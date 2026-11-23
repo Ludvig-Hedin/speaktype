@@ -30,6 +30,15 @@ struct MainView: View {
         }
         .background(Color.bgSidebar)
         .onAppear {
+            #if DEBUG
+                // Dev-only: `-uiPreviewTab Settings` opens a section directly (screenshot checks).
+                if let tab = UserDefaults.standard.string(forKey: "uiPreviewTab"),
+                    let item = SidebarItem(rawValue: tab)
+                {
+                    selection = item
+                    return
+                }
+            #endif
             // If no model downloaded and haven't shown prompt, go to AI Models
             if !hasAnyModelDownloaded && !hasShownModelPrompt {
                 hasShownModelPrompt = true

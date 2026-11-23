@@ -3,59 +3,22 @@ import AVFoundation
 import KeyboardShortcuts
 import SwiftUI
 
-// MARK: - Settings (responsive 2-column)
+// MARK: - Settings (one centered column, grouped like System Settings / Linear)
 
 struct SettingsView: View {
     var body: some View {
-        GeometryReader { geo in
-            // Two columns once the content pane is wide enough; single column when narrow.
-            let twoColumn = geo.size.width > 880
+        PageScaffold(title: "Settings", spacing: 16) {
+            ShortcutsSection()
+            GeneralBehaviorSection()
+            SpokenLanguageSection()
+            InputDeviceSection()
+            AppearanceSection()
+            UpdatesSection()
+            PermissionsSection()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    Text("Settings")
-                        .font(Typography.displayLarge)
-                        .appleTitleTracking()
-                        .foregroundStyle(Color.textPrimary)
-
-                    if twoColumn {
-                        HStack(alignment: .top, spacing: 16) {
-                            VStack(spacing: 16) {
-                                ShortcutsSection()
-                                SpokenLanguageSection()
-                                InputDeviceSection()
-                            }
-                            .frame(maxWidth: .infinity, alignment: .top)
-
-                            VStack(spacing: 16) {
-                                GeneralBehaviorSection()
-                                AppearanceSection()
-                                UpdatesSection()
-                                PermissionsSection()
-                            }
-                            .frame(maxWidth: .infinity, alignment: .top)
-                        }
-                    } else {
-                        VStack(spacing: 16) {
-                            ShortcutsSection()
-                            GeneralBehaviorSection()
-                            SpokenLanguageSection()
-                            InputDeviceSection()
-                            AppearanceSection()
-                            UpdatesSection()
-                            PermissionsSection()
-                        }
-                    }
-
-                    // Advanced / optional configuration — full width, at the bottom.
-                    RemoteTranscriptionSettingsSection()
-                    WritingPolishSettingsSection()
-                }
-                // Cap the reading width so sections never stretch too wide, and center it.
-                .frame(maxWidth: 1040, alignment: .leading)
-                .frame(maxWidth: .infinity)
-                .padding(24)
-            }
+            // Advanced / optional configuration, at the bottom.
+            RemoteTranscriptionSettingsSection()
+            WritingPolishSettingsSection()
         }
     }
 }
@@ -69,10 +32,9 @@ private struct ShortcutsSection: View {
 
     var body: some View {
         SettingsSection {
-            SettingsSectionHeader(
-                icon: "command", title: "Shortcuts", subtitle: "Recording hotkey")
+            SettingsSectionHeader(title: "Shortcuts")
 
-            VStack(spacing: 14) {
+            VStack(spacing: 0) {
                 HStack {
                     Text("Primary hotkey")
                         .font(Typography.bodyMedium)
@@ -120,10 +82,11 @@ private struct ShortcutsSection: View {
                         }
                         .menuCapsule()
                     }
-                    .menuStyle(.borderlessButton)
+                    .appMenuStyle()
                     .fixedSize()
                     .clickActionPointerCursor()
                 }
+                .settingsRowPadding()
 
                 if selectedHotkey == .custom {
                     VStack(alignment: .leading, spacing: 8) {
@@ -147,32 +110,28 @@ private struct ShortcutsSection: View {
                             .font(Typography.captionSmall)
                             .foregroundStyle(Color.textMuted)
                     }
-                    .padding(14)
-                    .background(Color.bgHover.opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous)
-                            .strokeBorder(Color.border.opacity(0.5), lineWidth: 0.5)
-                    )
+                    .padding(.bottom, 11)
                     .onAppear { customShortcutDisplay = CustomShortcutStorage.displayString }
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
+                RowDivider()
+
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Recording mode")
                             .font(Typography.bodyMedium)
                             .foregroundStyle(Color.textPrimary)
                         Spacer()
                         RecordingModePicker(recordingMode: $recordingMode)
-                            .frame(maxWidth: 240)
+                            .frame(width: 160)
                     }
                     Text(recordingMode == 0
                         ? "Hold the hotkey to record; release when done."
                         : "Press once to start, again to stop.")
-                        .font(Typography.captionSmall)
+                        .font(Typography.caption)
                         .foregroundStyle(Color.textMuted)
-                        .stCompactUI()
                 }
+                .settingsRowPadding()
             }
         }
     }
@@ -187,9 +146,9 @@ private struct GeneralBehaviorSection: View {
 
     var body: some View {
         SettingsSection {
-            SettingsSectionHeader(icon: "macwindow", title: "General", subtitle: "App behavior")
+            SettingsSectionHeader(title: "General")
 
-            VStack(spacing: 14) {
+            VStack(spacing: 0) {
                 settingToggle(
                     "Launch at login",
                     help: "Start in the background at login so the hotkey is always ready.",
@@ -198,6 +157,8 @@ private struct GeneralBehaviorSection: View {
                 .onChange(of: launchAtLogin) { _, newValue in
                     LaunchAtLoginService.setEnabled(newValue)
                 }
+
+                RowDivider()
 
                 settingToggle(
                     "Run in background",
@@ -209,44 +170,37 @@ private struct GeneralBehaviorSection: View {
                     (NSApp.delegate as? AppDelegate)?.applyActivationPolicy()
                 }
 
-                VStack(spacing: 6) {
-                    HStack {
-                        Text("Show menu bar icon")
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                        Spacer()
-                        Toggle("", isOn: $showMenuBarIcon)
-                            .labelsHidden()
-                            .disabled(!showDockIcon)
-                    }
-                    .clickActionPointerCursor()
+                RowDivider()
 
-                    if !showDockIcon {
-                        Text("Required while the Dock icon is hidden — the only way back in.")
-                            .font(Typography.captionSmall)
-                            .foregroundStyle(Color.textMuted)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
+                settingToggle(
+                    "Show menu bar icon",
+                    help: showDockIcon
+                        ? nil : "Required while the Dock icon is hidden — the only way back in.",
+                    isOn: $showMenuBarIcon
+                )
+                .disabled(!showDockIcon)
             }
         }
     }
 
-    private func settingToggle(_ title: String, help: String, isOn: Binding<Bool>) -> some View {
-        VStack(spacing: 6) {
-            HStack {
+    private func settingToggle(_ title: String, help: String?, isOn: Binding<Bool>) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(Typography.bodyMedium)
                     .foregroundStyle(Color.textPrimary)
-                Spacer()
-                Toggle("", isOn: isOn).labelsHidden()
+                if let help {
+                    Text(help)
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .clickActionPointerCursor()
-            Text(help)
-                .font(Typography.captionSmall)
-                .foregroundStyle(Color.textMuted)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
+            Toggle("", isOn: isOn).labelsHidden()
         }
+        .settingsRowPadding()
+        .clickActionPointerCursor()
     }
 }
 
@@ -269,7 +223,7 @@ struct SpokenLanguageSection: View {
 
     var body: some View {
         SettingsSection {
-            SettingsSectionHeader(icon: "globe", title: "Spoken language", subtitle: "Dictation hint")
+            SettingsSectionHeader(title: "Spoken language")
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
@@ -308,7 +262,7 @@ struct SpokenLanguageSection: View {
                         }
                         .menuCapsule()
                     }
-                    .menuStyle(.borderlessButton)
+                    .appMenuStyle()
                     .fixedSize()
                     .clickActionPointerCursor()
                 }
@@ -362,7 +316,7 @@ private struct AppearanceSection: View {
 
     var body: some View {
         SettingsSection {
-            SettingsSectionHeader(icon: "paintpalette", title: "Appearance", subtitle: "Theme")
+            SettingsSectionHeader(title: "Appearance")
 
             HStack(spacing: 12) {
                 ForEach(AppTheme.allCases) { theme in
@@ -386,11 +340,9 @@ private struct UpdatesSection: View {
 
     var body: some View {
         SettingsSection {
-            SettingsSectionHeader(
-                icon: "arrow.down.circle", title: "Updates",
-                subtitle: "SpeakType \(AppVersion.currentVersion)")
+            SettingsSectionHeader(title: "Updates")
 
-            VStack(spacing: 14) {
+            VStack(spacing: 0) {
                 HStack {
                     Text("Check automatically")
                         .font(Typography.bodyMedium)
@@ -398,30 +350,36 @@ private struct UpdatesSection: View {
                     Spacer()
                     Toggle("", isOn: $autoUpdate).labelsHidden()
                 }
+                .settingsRowPadding()
                 .clickActionPointerCursor()
 
-                Button(action: { Task { await updateService.checkForUpdates() } }) {
-                    HStack(spacing: 6) {
-                        if updateService.isCheckingForUpdates {
-                            ProgressView().scaleEffect(0.7).frame(width: 14, height: 14)
-                        } else {
-                            Image(systemName: "arrow.clockwise").font(.system(size: 12))
-                        }
-                        Text(updateService.isCheckingForUpdates ? "Checking…" : "Check for updates")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.stSecondary)
-                .disabled(updateService.isCheckingForUpdates)
+                RowDivider()
 
-                Button(action: { NSWorkspace.shared.open(UpdateConfiguration.releasesPageURL) }) {
-                    Text("Browse all releases…")
-                        .font(Typography.labelMedium)
+                HStack(spacing: 12) {
+                    Text("SpeakType \(AppVersion.currentVersion)")
+                        .font(Typography.bodyMedium)
                         .foregroundStyle(Color.textSecondary)
-                        .frame(maxWidth: .infinity)
+                    Spacer()
+                    Button(action: { NSWorkspace.shared.open(UpdateConfiguration.releasesPageURL) }) {
+                        Text("Browse all releases…")
+                            .font(Typography.labelMedium)
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                    .buttonStyle(.stPlain)
+                    .clickActionPointerCursor()
+
+                    Button(action: { Task { await updateService.checkForUpdates() } }) {
+                        HStack(spacing: 6) {
+                            if updateService.isCheckingForUpdates {
+                                ProgressView().scaleEffect(0.6).frame(width: 12, height: 12)
+                            }
+                            Text(updateService.isCheckingForUpdates ? "Checking…" : "Check for updates")
+                        }
+                    }
+                    .buttonStyle(.stSecondary)
+                    .disabled(updateService.isCheckingForUpdates)
                 }
-                .buttonStyle(.stPlain)
-                .clickActionPointerCursor()
+                .settingsRowPadding()
             }
         }
     }
@@ -434,36 +392,42 @@ private struct InputDeviceSection: View {
 
     var body: some View {
         SettingsSection {
-            SettingsSectionHeader(icon: "mic", title: "Microphone", subtitle: "Input device")
+            SettingsSectionHeader(title: "Microphone")
 
-            VStack(spacing: 10) {
+            VStack(spacing: 0) {
                 if audioRecorder.availableDevices.isEmpty {
                     Text("No input devices found")
                         .font(Typography.bodyMedium)
                         .foregroundStyle(Color.textMuted)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 12)
+                        .settingsRowPadding()
                 } else {
                     ForEach(audioRecorder.availableDevices, id: \.uniqueID) { device in
-                        DeviceRow(
+                        DeviceListRow(
                             name: device.localizedName,
                             isActive: audioRecorder.isRecording
                                 && audioRecorder.selectedDeviceId == device.uniqueID,
-                            isSelected: audioRecorder.selectedDeviceId == device.uniqueID
+                            isSelected: audioRecorder.selectedDeviceId == device.uniqueID,
+                            action: { audioRecorder.selectedDeviceId = device.uniqueID }
                         )
-                        .onTapGesture { audioRecorder.selectedDeviceId = device.uniqueID }
+                        RowDivider()
                     }
                 }
 
-                Button(action: { audioRecorder.fetchAvailableDevices() }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.clockwise").font(.system(size: 12))
-                        Text("Refresh")
+                HStack {
+                    Button(action: { audioRecorder.fetchAvailableDevices() }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.clockwise").font(.system(size: 11))
+                            Text("Refresh")
+                        }
+                        .font(Typography.labelMedium)
+                        .foregroundStyle(Color.textSecondary)
                     }
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.stPlain)
+                    .clickActionPointerCursor()
+                    Spacer()
                 }
-                .buttonStyle(.stSecondary)
-                .padding(.top, 4)
+                .padding(.top, 12)
             }
         }
         .onAppear { audioRecorder.fetchAvailableDevices() }
@@ -477,15 +441,16 @@ private struct PermissionsSection: View {
 
     var body: some View {
         SettingsSection {
-            SettingsSectionHeader(icon: "shield", title: "Permissions", subtitle: "Required access")
+            SettingsSectionHeader(title: "Permissions")
 
-            VStack(spacing: 10) {
+            VStack(spacing: 0) {
                 SettingsPermissionItem(
                     icon: "mic.fill", color: Color.textSecondary,
                     title: "Microphone", desc: "Record your voice",
                     isGranted: permissions.isMicGranted,
                     action: { permissions.requestMicPermission() }
                 )
+                RowDivider()
                 SettingsPermissionItem(
                     icon: "hand.raised.fill", color: Color.textSecondary,
                     title: "Accessibility", desc: "Paste text into any app",
@@ -502,30 +467,29 @@ private struct PermissionsSection: View {
 // MARK: - Supporting Components
 
 struct SettingsSectionHeader: View {
-    let icon: String
     let title: String
-    let subtitle: String
+    var subtitle: String? = nil
+
+    /// `icon` is accepted for older call sites but no longer drawn: section titles stay text-only.
+    init(icon: String? = nil, title: String, subtitle: String? = nil) {
+        self.title = title
+        self.subtitle = subtitle
+    }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 13))
-                .foregroundStyle(Color.textMuted)
-                .frame(width: 18)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(Typography.labelLarge)
-                    .foregroundStyle(Color.textPrimary)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(Typography.headlineSmall)
+                .foregroundStyle(Color.textPrimary)
+            if let subtitle {
                 Text(subtitle)
-                    .font(Typography.captionSmall)
+                    .font(Typography.caption)
                     .foregroundStyle(Color.textMuted)
-                    .stCompactUI()
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            Spacer()
         }
-        .padding(.bottom, Constants.UI.rowGap)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, Constants.UI.space2)
     }
 }
 
@@ -540,7 +504,24 @@ struct SettingsSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             content
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .themedCard(padding: Constants.UI.cardPadding)
+        // Settings rows are switches, like System Settings — not checkboxes.
+        .toggleStyle(.switch)
+    }
+}
+
+extension View {
+    /// Vertical rhythm for one row inside a grouped settings list.
+    func settingsRowPadding() -> some View {
+        padding(.vertical, 11)
+    }
+
+    /// Menus in settings: render our label as-is (no flattened icon, no second chevron).
+    func appMenuStyle() -> some View {
+        menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
     }
 }
 
@@ -558,23 +539,18 @@ struct RadioButton: View {
                             Color.textMuted.opacity(0.55),
                             lineWidth: isSelected ? 1.5 : 1.25
                         )
-                        .frame(width: 18, height: 18)
+                        .frame(width: 16, height: 16)
                     if isSelected {
-                        Circle().fill(Color.accentBlue).frame(width: 9, height: 9)
+                        Circle().fill(Color.accentBlue).frame(width: 8, height: 8)
                     }
                 }
 
                 Text(title)
                     .font(Typography.bodyMedium)
-                    .fontWeight(isSelected ? .semibold : .regular)
                     .foregroundStyle(isSelected ? Color.textPrimary : Color.textSecondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(isSelected ? Color.bgSelected.opacity(0.85) : Color.clear)
-            }
+            .padding(.vertical, 6)
+            .padding(.trailing, 8)
             .contentShape(Rectangle())
         }
         .buttonStyle(.stPlain)
@@ -591,19 +567,12 @@ struct SettingsPermissionItem: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(Color.textSecondary)
-                .font(.system(size: 15))
-                .frame(width: 30, height: 30)
-                .background(Color.bgSelected.opacity(0.7))
-                .clipShape(Circle())
-
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(Typography.bodyMedium)
                     .foregroundStyle(Color.textPrimary)
                 Text(desc)
-                    .font(Typography.captionSmall)
+                    .font(Typography.caption)
                     .foregroundStyle(Color.textMuted)
             }
 
@@ -612,40 +581,68 @@ struct SettingsPermissionItem: View {
             if isGranted {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(Color.accentSuccess)
-                    .font(.system(size: 18))
+                    .font(.system(size: 16))
             } else {
                 Button("Enable") { action() }
                     .buttonStyle(.stAction)
             }
         }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
-                .fill(Color.bgHover.opacity(0.5))
-        }
-        .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
-                .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
-        )
+        .settingsRowPadding()
     }
 }
 
-// MARK: - Recording mode (custom pills — clearer active segment than system segmented control)
+/// One microphone in the Microphone list: plain row, radio on the left, no card.
+private struct DeviceListRow: View {
+    let name: String
+    let isActive: Bool
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .strokeBorder(Color.textMuted.opacity(0.55), lineWidth: isSelected ? 1.5 : 1.25)
+                        .frame(width: 16, height: 16)
+                    if isSelected {
+                        Circle().fill(Color.accentBlue).frame(width: 8, height: 8)
+                    }
+                }
+                Text(name)
+                    .font(Typography.bodyMedium)
+                    .foregroundStyle(isSelected || isHovered ? Color.textPrimary : Color.textSecondary)
+                Spacer()
+                if isActive {
+                    Text("Active")
+                        .font(Typography.labelSmall)
+                        .foregroundStyle(Color.accentSuccess)
+                }
+            }
+            .settingsRowPadding()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.stPlain)
+        .clickActionPointerCursor()
+        .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: - Recording mode (compact two-segment control)
 
 private struct RecordingModePicker: View {
     @Binding var recordingMode: Int
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             modeSegment(tag: 0, title: "Hold")
             modeSegment(tag: 1, title: "Toggle")
         }
-        .padding(4)
-        .background(Capsule(style: .continuous).fill(Color.bgHover.opacity(0.55)))
-        .overlay(
-            Capsule(style: .continuous)
-                .strokeBorder(Color.border.opacity(0.35), lineWidth: 0.5)
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous)
+                .fill(Color.bgHover)
         )
     }
 
@@ -656,20 +653,18 @@ private struct RecordingModePicker: View {
         } label: {
             Text(title)
                 .font(Typography.labelMedium)
-                .fontWeight(selected ? .semibold : .regular)
                 .foregroundStyle(selected ? Color.textPrimary : Color.textMuted)
                 .padding(.horizontal, 14)
-                .padding(.vertical, 7)
+                .padding(.vertical, 5)
                 .frame(maxWidth: .infinity)
                 .background {
                     if selected {
-                        Capsule(style: .continuous).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: Constants.UI.radiusSmall - 2, style: .continuous)
+                            .fill(Color.segmentSelected)
+                            .shadow(color: .black.opacity(0.08), radius: 1, y: 0.5)
                     }
                 }
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(Color.textPrimary.opacity(selected ? 0.1 : 0), lineWidth: 0.5)
-                )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.stPlain)
     }
@@ -690,13 +685,9 @@ enum AppTheme: String, CaseIterable, Identifiable {
 struct MenuCapsule: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(.thinMaterial, in: Capsule(style: .continuous))
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(Color.border.opacity(0.5), lineWidth: 0.5)
-            )
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .controlChrome()
     }
 }
 

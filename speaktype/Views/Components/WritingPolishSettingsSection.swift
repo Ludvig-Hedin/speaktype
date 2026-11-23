@@ -191,7 +191,7 @@ struct WritingPolishSettingsSection: View {
                                 }
                                 .menuCapsule()
                             }
-                            .menuStyle(.borderlessButton)
+                            .appMenuStyle()
                             .fixedSize()
                             .clickActionPointerCursor()
                         }
@@ -321,7 +321,7 @@ struct WritingPolishSettingsSection: View {
                             }
                             .menuCapsule()
                         }
-                        .menuStyle(.borderlessButton)
+                        .appMenuStyle()
                         .clickActionPointerCursor()
                         .disabled(!writingPolishEnabled)
                     }

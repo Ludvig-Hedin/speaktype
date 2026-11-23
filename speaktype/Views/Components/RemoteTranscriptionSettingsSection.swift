@@ -109,7 +109,7 @@ struct RemoteTranscriptionSettingsSection: View {
                 }
                 .menuCapsule()
             }
-            .menuStyle(.borderlessButton)
+            .appMenuStyle()
             .fixedSize()
             .clickActionPointerCursor()
         }

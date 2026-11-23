@@ -42,21 +42,24 @@ struct ModelRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top) {
+            HStack(alignment: .center) {
                 // Model Info
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
                     // Model Name
                     Text(model.name)
-                        .font(Typography.cardTitle)
+                        .font(Typography.titleLarge)
                         .foregroundStyle(Color.textPrimary)
 
-                    // Model Details - Icons and stats
+                    // Description (already names the language support)
+                    Text(model.details)
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.textSecondary)
+
+                    // Size and ratings
                     HStack(spacing: 14) {
-                        ModelMetaItem(
-                            icon: model.isEnglishOnly ? "character.book.closed" : "globe",
-                            text: model.languageSupportLabel
-                        )
-                        ModelMetaItem(icon: "arrow.down.circle", text: model.size)
+                        Text(model.size)
+                            .font(Typography.cardMeta)
+                            .foregroundStyle(Color.textMuted)
 
                         // Speed rating
                         HStack(spacing: 4) {
@@ -78,11 +81,6 @@ struct ModelRow: View {
                         }
                         .foregroundStyle(Color.textMuted)
                     }
-
-                    // Description
-                    Text(model.details)
-                        .font(Typography.cardDescription)
-                        .foregroundStyle(Color.textSecondary)
 
                     // RAM warning for undersized devices
                     if let warning = model.ramWarning(deviceRAMGB: WhisperService.deviceRAMGB) {
@@ -113,30 +111,16 @@ struct ModelRow: View {
                 // Action button
                 actionButton
             }
-            .padding(18)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
 
             // Download progress
             if isDownloading {
                 downloadProgressSection
             }
         }
-        .background {
-            ZStack {
-                RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
-                    .fill(Color.bgCard.opacity(isActive ? 0.62 : 0.48))
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius, style: .continuous)
-                .strokeBorder(
-                    isActive ? Color.textPrimary.opacity(0.22) : Color.border.opacity(0.45),
-                    lineWidth: isActive ? 1.25 : 1
-                )
-        )
-        .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 4)
+        // A plain row: the parent list draws the one card and the dividers.
+        .background(isActive ? Color.bgHover.opacity(0.45) : Color.clear)
     }
 
     // MARK: - Subviews
@@ -168,8 +152,8 @@ struct ModelRow: View {
             }
             .frame(height: 4)
         }
-        .padding(.horizontal, 18)
-        .padding(.bottom, 18)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 14)
     }
 
     @ViewBuilder
@@ -203,17 +187,14 @@ struct ModelRow: View {
                         "This model is selected but not downloaded. Download it or select another model."
                     )
                 } else {
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 12))
+                    HStack(spacing: 5) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .semibold))
                         Text("Selected")
-                            .font(Typography.buttonLabelSmall)
+                            .font(Typography.labelMedium)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Color.btnPrimaryBg)
-                    .foregroundStyle(Color.btnPrimaryFg)
-                    .clipShape(Capsule(style: .continuous))
+                    .foregroundStyle(Color.textPrimary)
+                    .padding(.horizontal, 6)
                 }
             } else {
                 if isLoadingModel {
@@ -251,17 +232,8 @@ struct ModelRow: View {
                         loadAndSelectModel()
                     } label: {
                         Text("Use")
-                            .font(Typography.buttonLabelSmall)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(.thinMaterial, in: Capsule(style: .continuous))
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
-                            )
-                            .foregroundStyle(Color.textPrimary)
                     }
-                    .buttonStyle(.stPlain)
+                    .buttonStyle(.stSecondary)
                     .help("Set as default model")
                 }
             }
@@ -285,41 +257,18 @@ struct ModelRow: View {
         Button(action: {
             downloadService.cancelDownload(for: model.variant)
         }) {
-            HStack(spacing: 6) {
-                Text("Cancel")
-                    .font(Typography.buttonLabelSmall)
-                Image(systemName: "xmark.circle")
-                    .font(.system(size: 12))
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(Color.bgHover)
-            .foregroundStyle(Color.textPrimary)
-            .clipShape(Capsule(style: .continuous))
+            Text("Cancel")
         }
-        .buttonStyle(.stPlain)
+        .buttonStyle(.stSecondary)
     }
 
     private var downloadButton: some View {
         Button(action: {
             downloadService.downloadModel(variant: model.variant)
         }) {
-            HStack(spacing: 6) {
-                Text("Download")
-                    .font(Typography.buttonLabel)
-                Image(systemName: "arrow.down.circle")
-                    .font(.system(size: 12))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
-            .background(.thinMaterial, in: Capsule(style: .continuous))
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(Color.border.opacity(0.45), lineWidth: 0.5)
-            )
-            .foregroundStyle(Color.textPrimary)
+            Text("Download")
         }
-        .buttonStyle(.stPlain)
+        .buttonStyle(.stSecondary)
     }
 
     // MARK: - Model Loading
