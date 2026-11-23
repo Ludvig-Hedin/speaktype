@@ -25,15 +25,17 @@ struct RemoteTranscriptionSettingsSection: View {
                 subtitle: "Choose on-device, cloud, or automatic")
 
             VStack(alignment: .leading, spacing: 16) {
-                modePicker
+                VStack(alignment: .leading, spacing: 4) {
+                    modePicker
 
-                Text(mode.explanation)
-                    .font(Typography.captionSmall)
-                    .foregroundStyle(Color.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text(mode.explanation)
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 if mode.canUseRemote {
-                    Divider().overlay(Color.border.opacity(0.4))
+                    RowDivider()
                     providerPicker
                     if provider != nil {
                         modelPicker
@@ -43,6 +45,8 @@ struct RemoteTranscriptionSettingsSection: View {
                     privacyNote
                 }
             }
+            .padding(.top, 4)
+            .padding(.bottom, 11)
         }
         .onAppear(perform: refreshKeyState)
         .onReceive(NotificationCenter.default.publisher(for: RemoteAPIKeyStore.didChangeNotification)) { _ in
@@ -141,7 +145,7 @@ struct RemoteTranscriptionSettingsSection: View {
                         if let url = URL(string: provider.apiKeyURL) { NSWorkspace.shared.open(url) }
                     }
                     .buttonStyle(.stPlain)
-                    .font(Typography.captionSmall)
+                    .font(Typography.caption)
                     .foregroundStyle(Color.accentBlue)
                 }
             }
@@ -149,16 +153,16 @@ struct RemoteTranscriptionSettingsSection: View {
             if keySaved {
                 HStack(spacing: 10) {
                     Label("Key saved", systemImage: "checkmark.seal.fill")
-                        .font(Typography.captionSmall)
+                        .font(Typography.caption)
                         .foregroundStyle(Color.accentSuccess)
                     Spacer()
                     Button("Replace") { keySaved = false; apiKeyInput = "" }
                         .buttonStyle(.stPlain)
-                        .font(Typography.captionSmall)
+                        .font(Typography.caption)
                         .foregroundStyle(Color.textSecondary)
                     Button("Remove", role: .destructive) { removeKey() }
                         .buttonStyle(.stPlain)
-                        .font(Typography.captionSmall)
+                        .font(Typography.caption)
                         .foregroundStyle(Color.accentError)
                 }
             } else {
@@ -173,13 +177,13 @@ struct RemoteTranscriptionSettingsSection: View {
 
             if provider == .openRouter {
                 Text("This is the same OpenRouter key used for writing polish.")
-                    .font(Typography.captionSmall)
+                    .font(Typography.caption)
                     .foregroundStyle(Color.textMuted)
             }
 
             if !statusMessage.isEmpty {
                 Text(statusMessage)
-                    .font(Typography.captionSmall)
+                    .font(Typography.caption)
                     .foregroundStyle(Color.textMuted)
             }
         }
@@ -187,9 +191,9 @@ struct RemoteTranscriptionSettingsSection: View {
 
     private var consentToggle: some View {
         HStack(alignment: .top, spacing: 10) {
-            Toggle("", isOn: $consent).labelsHidden()
+            Toggle("", isOn: $consent).labelsHidden().toggleStyle(.checkbox)
             Text("I understand my audio is uploaded to \(provider?.displayName ?? "the provider") for transcription.")
-                .font(Typography.captionSmall)
+                .font(Typography.caption)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -197,7 +201,7 @@ struct RemoteTranscriptionSettingsSection: View {
 
     private var privacyNote: some View {
         Text("Cloud transcription sends your recorded audio off your Mac. Keys are stored in the macOS Keychain and never leave your device except as the Authorization header for the request. Cloud is only used after you add a key and give consent above.")
-            .font(Typography.captionSmall)
+            .font(Typography.caption)
             .foregroundStyle(Color.textMuted)
             .fixedSize(horizontal: false, vertical: true)
     }

@@ -264,27 +264,46 @@ struct TranscribeAudioView: View {
                     .foregroundStyle(Color.textMuted)
                 if workingItemID == item.id { ProgressView().controlSize(.mini) }
                 Spacer()
-                actionButton("Raw", icon: "text.alignleft") { displayedVersion[item.id] = .raw }
-                actionButton("Polish", icon: "wand.and.stars") { polish(item) }
-                actionButton("Summary", icon: "list.bullet.rectangle") { summarize(item) }
-                actionButton("Markdown", icon: "square.and.arrow.down") { exportMarkdown(item) }
+                actionButton("Raw", icon: "text.alignleft", help: "Show the raw transcript", isActive: version == .raw) {
+                    displayedVersion[item.id] = .raw
+                }
+                actionButton("Polish", icon: "wand.and.stars", help: "Polish this transcript", isActive: version == .polished) {
+                    polish(item)
+                }
+                actionButton("Summary", icon: "list.bullet.rectangle", help: "Summarize this transcript", isActive: version == .summary) {
+                    summarize(item)
+                }
+                actionButton("Markdown", icon: "square.and.arrow.down", help: "Export as a Markdown file", isActive: false) {
+                    exportMarkdown(item)
+                }
             }
             .disabled(workingItemID != nil)
         }
         .padding(16)
     }
 
-    private func actionButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+    /// Compact row action. The version currently on screen (Raw / Polish / Summary) reads as selected.
+    private func actionButton(
+        _ title: String, icon: String, help: String, isActive: Bool, action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Text(title)
-                .font(Typography.labelSmall)
-                .foregroundStyle(Color.textSecondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .contentShape(Rectangle())
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 10))
+                Text(title)
+            }
+            .font(Typography.labelSmall)
+            .foregroundStyle(isActive ? Color.textPrimary : Color.textSecondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isActive ? Color.bgHover : Color.clear)
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.stPlain)
-        .help(title)
+        .help(help)
     }
 
     private func text(for item: HistoryItem, version: TranscriptVersion) -> String {

@@ -284,7 +284,7 @@ struct StatsCard: View {
             HStack(alignment: .top, spacing: 0) {
                 StatBlock(value: wordCount.formatted(), label: "Words transcribed")
                 statDivider
-                StatBlock(value: formatMinutes(timeSaved), label: "Time saved typing")
+                StatBlock(value: "\(timeSaved)m", label: "Time saved typing")
                 statDivider
                 StatBlock(value: "\(allTimeCount)", label: "Total transcriptions")
                 statDivider
@@ -367,10 +367,11 @@ struct StatBlock: View {
             Text(label)
                 .font(Typography.caption)
                 .foregroundStyle(Color.textMuted)
-                .lineLimit(1)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 16)
     }
 }
 
@@ -402,7 +403,7 @@ struct RecentTranscriptionRow: View {
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text([timeAgo(item.date), "\(wordCount) words", formatDuration(item.duration)]
+                Text([timeAgo(item.date), (wordCount == 1 ? "1 word" : "\(wordCount) words"), formatDuration(item.duration)]
                     .joined(separator: "  ·  "))
                     .font(Typography.caption)
                     .monospacedDigit()
@@ -429,7 +430,7 @@ struct RecentTranscriptionRow: View {
                     )
                 }
             }
-            .opacity(isHovered || showCopySuccess || isPlayingThisItem ? 1 : 0)
+            .opacity(isHovered || showCopySuccess || isPlayingThisItem ? 1 : 0.35)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)

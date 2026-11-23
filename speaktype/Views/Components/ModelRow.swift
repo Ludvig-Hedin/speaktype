@@ -120,7 +120,7 @@ struct ModelRow: View {
             }
         }
         // A plain row: the parent list draws the one card and the dividers.
-        .background(isActive ? Color.bgHover.opacity(0.45) : Color.clear)
+        .background(isActive && isDownloaded ? Color.bgHover.opacity(0.45) : Color.clear)
     }
 
     // MARK: - Subviews

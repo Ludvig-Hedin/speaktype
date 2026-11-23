@@ -19,9 +19,18 @@ struct HistoryView: View {
                 Button(role: .destructive) {
                     showDeleteAlert = true
                 } label: {
-                    Text("Clear All")
+                    HStack(spacing: 5) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 11))
+                        Text("Clear All")
+                    }
+                    .font(Typography.labelMedium)
+                    .foregroundStyle(Color.textMuted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.stSecondary)
+                .buttonStyle(.stPlain)
             }
         } content: {
             if historyService.items.isEmpty {
@@ -193,8 +202,7 @@ struct HistoryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button(action: onToggle) {
-                HStack(alignment: .top, spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
                     // Date
                     VStack(alignment: .center, spacing: 1) {
                         Text(item.date.formatted(.dateTime.day()))
@@ -217,7 +225,15 @@ struct HistoryCard: View {
                                     .font(Typography.bodyMedium)
                                     .foregroundStyle(Color.textSecondary)
                             }
-                        } else if !isExpanded {
+                        } else if isExpanded {
+                            // Same spot as the preview, so expanding only grows the text.
+                            Text(item.transcript)
+                                .font(Typography.bodyMedium)
+                                .foregroundStyle(Color.textPrimary)
+                                .lineSpacing(2)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
                             Text(item.transcript)
                                 .font(Typography.bodyMedium)
                                 .foregroundStyle(Color.textPrimary)
@@ -228,7 +244,7 @@ struct HistoryCard: View {
 
                         Text([
                             item.date.formatted(date: .omitted, time: .shortened),
-                            "\(wordCount) words",
+                            (wordCount == 1 ? "1 word" : "\(wordCount) words"),
                             formatDurationShort(item.duration),
                         ].joined(separator: "  ·  "))
                             .font(Typography.caption)
@@ -237,18 +253,25 @@ struct HistoryCard: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.textMuted)
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                        .opacity(isHovered || isExpanded ? 1 : 0.4)
-                        .padding(.top, 3)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .contentShape(Rectangle())
+                    Button(action: onToggle) {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.textMuted)
+                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                            .opacity(isHovered || isExpanded ? 1 : 0.4)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.stPlain)
+                    .padding(.top, -3)
+                    .accessibilityLabel(isExpanded ? "Collapse" : "Expand")
             }
-            .buttonStyle(.stPlain)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+            // Whole row opens it; once open, clicks are free for selecting text (chevron closes).
+            .onTapGesture { if !isExpanded { onToggle() } }
+            .accessibilityAddTraits(isExpanded ? [] : .isButton)
             .onHover { isHovered = $0 }
 
             if isExpanded {
@@ -269,13 +292,6 @@ struct HistoryCard: View {
                     .font(Typography.bodyMedium)
                     .foregroundStyle(Color.textSecondary)
                     .textSelection(.enabled)
-            } else {
-                Text(item.transcript)
-                    .font(Typography.bodyMedium)
-                    .foregroundStyle(Color.textPrimary)
-                    .textSelection(.enabled)
-                    .lineSpacing(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if let audioURL = item.audioFileURL, audioFileExists {

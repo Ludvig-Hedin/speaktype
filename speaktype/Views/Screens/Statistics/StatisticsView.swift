@@ -121,7 +121,7 @@ struct StatisticsView: View {
                     .font(Typography.headlineSmall)
                     .foregroundStyle(Color.textPrimary)
 
-                if dailyData(for: selectedPeriod).isEmpty {
+                if dailyData(for: selectedPeriod).allSatisfy({ $0.wordCount == 0 }) {
                     emptyChartView
                 } else {
                     chartView

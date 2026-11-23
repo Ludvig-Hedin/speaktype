@@ -96,7 +96,7 @@ private struct ShortcutsSection: View {
                                     .font(Typography.bodyMedium)
                                     .foregroundStyle(Color.textPrimary)
                                 Text("Click the badge to record")
-                                    .font(Typography.captionSmall)
+                                    .font(Typography.caption)
                                     .foregroundStyle(Color.textMuted)
                             }
                             Spacer()
@@ -107,7 +107,7 @@ private struct ShortcutsSection: View {
                         }
 
                         Text("Needs at least one modifier (⌃ ⌥ ⇧ ⌘) unless using F13–F19.")
-                            .font(Typography.captionSmall)
+                            .font(Typography.caption)
                             .foregroundStyle(Color.textMuted)
                     }
                     .padding(.bottom, 11)
@@ -225,7 +225,7 @@ struct SpokenLanguageSection: View {
         SettingsSection {
             SettingsSectionHeader(title: "Spoken language")
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("Language")
                         .font(Typography.bodyMedium)
@@ -268,10 +268,11 @@ struct SpokenLanguageSection: View {
                 }
 
                 Text("Auto-detect is safest. Only set a language if you always dictate in it — a mismatch can garble the result. Use a multilingual model for non-English.")
-                    .font(Typography.captionSmall)
+                    .font(Typography.caption)
                     .foregroundStyle(Color.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .settingsRowPadding()
         }
     }
 
@@ -328,6 +329,7 @@ private struct AppearanceSection: View {
                 }
                 Spacer()
             }
+            .padding(.vertical, 5)
         }
     }
 }
@@ -427,7 +429,7 @@ private struct InputDeviceSection: View {
                     .clickActionPointerCursor()
                     Spacer()
                 }
-                .padding(.top, 12)
+                .padding(.vertical, 11)
             }
         }
         .onAppear { audioRecorder.fetchAvailableDevices() }
@@ -505,7 +507,10 @@ struct SettingsSection<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .themedCard(padding: Constants.UI.cardPadding)
+        .padding(.horizontal, Constants.UI.cardPadding)
+        .padding(.top, 18)
+        .padding(.bottom, 9)
+        .themedCard(padding: 0)
         // Settings rows are switches, like System Settings — not checkboxes.
         .toggleStyle(.switch)
     }

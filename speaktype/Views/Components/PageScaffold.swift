@@ -13,9 +13,13 @@ struct PageScaffold<Content: View, Trailing: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: spacing) {
+            // Header-to-content gap is fixed so the first card never shifts between tabs;
+            // `spacing` only sets the gap between content blocks.
+            VStack(alignment: .leading, spacing: 24) {
                 PageHeader(title: title, subtitle: subtitle, subtitleHelp: subtitleHelp, trailing: trailing)
-                content()
+                VStack(alignment: .leading, spacing: spacing) {
+                    content()
+                }
             }
             .frame(maxWidth: Constants.UI.contentMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
