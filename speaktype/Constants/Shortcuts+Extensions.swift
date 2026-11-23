@@ -13,4 +13,8 @@ extension Notification.Name {
     static let recordingCancelRequested = Notification.Name("recordingCancelRequested")
     /// Show a short message in the recorder panel. userInfo["message"]: String.
     static let recordingShowMessageRequested = Notification.Name("recordingShowMessageRequested")
+    #if DEBUG
+    static let recorderDemoRequested = Notification.Name("recorderDemoRequested")
+    static let recorderDemoShowPanel = Notification.Name("recorderDemoShowPanel")
+    #endif
 }

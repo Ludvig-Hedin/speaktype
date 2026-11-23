@@ -24,6 +24,29 @@ class MiniRecorderWindowController: NSObject {
         // Remember the app the user was in; it becomes the paste target if the start is accepted.
         startCandidateApp = NSWorkspace.shared.frontmostApplication
 
+        showPanel()
+
+        // Trigger instant recording
+        NotificationCenter.default.post(name: .recordingStartRequested, object: nil)
+    }
+
+    #if DEBUG
+    /// Debug builds launched with `--recorder-demo` play every pill state (no mic, no paste).
+    func runVisualDemo() {
+        showPanel()
+        NotificationCenter.default.addObserver(
+            forName: .recorderDemoShowPanel, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.showPanel() }
+        }
+        // Give the freshly created SwiftUI view a moment to subscribe.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            NotificationCenter.default.post(name: .recorderDemoRequested, object: nil)
+        }
+    }
+    #endif
+
+    private func showPanel() {
         if panel == nil {
             setupPanel()
         }
@@ -36,23 +59,30 @@ class MiniRecorderWindowController: NSObject {
             // Force layout to ensure frame is correct
             panel.layoutIfNeeded()
 
-            // Position above dock with fixed width (panel width 300, matches NSPanel & MiniRecorderView)
+            // Bottom center of the screen the user is on, just above the Dock.
+            let canvas = MiniRecorderView.canvasSize
             if let screen = NSScreen.main {
                 let visibleFrame = screen.visibleFrame
-                let windowWidth: CGFloat = 300  // Match MiniRecorderView frame width
-                let x = visibleFrame.midX - (windowWidth / 2)
-                let y = visibleFrame.minY + 50  // 50px padding above dock
+                let x = visibleFrame.midX - (canvas.width / 2)
+                let y = visibleFrame.minY + 24
                 panel.setFrameOrigin(NSPoint(x: x, y: y))
             } else {
                 panel.center()
             }
 
-            // Show without activating to avoid pulling main app focus unnecessarily
+            // Show without activating, with a short fade so it doesn't pop.
+            hideGeneration += 1
+            panel.alphaValue = 0
             panel.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.12
+                panel.animator().alphaValue = 1
+            }
+        } else {
+            // Re-shown while fading out: cancel the pending hide.
+            hideGeneration += 1
+            panel.alphaValue = 1
         }
-
-        // Trigger instant recording
-        NotificationCenter.default.post(name: .recordingStartRequested, object: nil)
     }
 
     // Stop recording - trigger transcription and paste
@@ -77,7 +107,7 @@ class MiniRecorderWindowController: NSObject {
                 self?.handleCommit(text: text)
             },
             onCancel: { [weak self] in
-                self?.panel?.orderOut(nil)
+                self?.hidePanel()
             },
             onStartAccepted: { [weak self] in
                 guard let self else { return }
@@ -99,8 +129,9 @@ class MiniRecorderWindowController: NSObject {
             )
         )
 
+        let canvas = MiniRecorderView.canvasSize
         let p = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 50),
+            contentRect: NSRect(x: 0, y: 0, width: canvas.width, height: canvas.height),
             styleMask: [.nonactivatingPanel, .fullSizeContentView, .borderless],
             backing: .buffered,
             defer: false
@@ -133,6 +164,23 @@ class MiniRecorderWindowController: NSObject {
         self.panel = p
     }
 
+    /// Bumped on every show; a fade-out only hides the panel if nothing re-showed it.
+    private var hideGeneration = 0
+
+    private func hidePanel() {
+        guard let panel, panel.isVisible else { return }
+        hideGeneration += 1
+        let generation = hideGeneration
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.16
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self, self.hideGeneration == generation else { return }
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+        })
+    }
+
     private func handleCommit(text: String) {
         let pasteTarget = pendingPasteTarget ?? lastActiveApp
         pendingPasteTarget = nil
@@ -140,7 +188,9 @@ class MiniRecorderWindowController: NSObject {
             let result = await ClipboardService.shared.pasteText(
                 text,
                 into: pasteTarget,
-                beforePaste: { [weak self] in self?.panel?.orderOut(nil) }
+                // The pill stays up to show the checkmark. It is a non-activating panel, but
+                // make sure it can't hold key focus while ⌘V is sent to the target app.
+                beforePaste: { [weak self] in self?.panel?.resignKey() }
             )
 
             if result == .copiedOnly {

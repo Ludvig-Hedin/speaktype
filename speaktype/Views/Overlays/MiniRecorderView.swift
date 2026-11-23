@@ -92,23 +92,6 @@ struct MiniRecorderView: View {
     @State private var globalEscapeMonitor: Any?
     @State private var localEscapeMonitor: Any?
 
-    // MARK: - State for Animation
-    @State private var phase: CGFloat = 0
-
-    // Calculate bar height based on audio level and position
-    private func barHeight(for index: Int) -> CGFloat {
-        let level = CGFloat(audioRecorder.audioLevel)
-        let baseHeight: CGFloat = 4
-        let maxHeight: CGFloat = 28
-
-        // Create wave pattern that responds to audio
-        let waveOffset = sin(CGFloat(index) * 0.5 + phase) * 0.3
-        let audioMultiplier = sqrt(level) * (0.8 + waveOffset)
-
-        let height = baseHeight + (maxHeight - baseHeight) * audioMultiplier
-        return max(baseHeight, min(height, maxHeight))
-    }
-
     // Default Init for Preview
     init(
         onCommit: ((String) -> Void)? = nil,
@@ -122,107 +105,51 @@ struct MiniRecorderView: View {
         self.onStopAccepted = onStopAccepted
     }
 
-    var body: some View {
-        ZStack {
-            backgroundView
+    // MARK: - Pill states
 
-            if shouldShowLocalWarmup {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .colorScheme(.dark)
-                    Text("Warming up model...")
-                        .font(Typography.labelMedium)
-                        .foregroundColor(.white.opacity(0.9))
-                }
-                .transition(.opacity)
-            } else if isProcessing {
-                Text(statusMessage)
-                    .font(Typography.labelMedium)
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-                    .padding(.horizontal, 18)
-                    .transition(.opacity)
-            } else {
-                HStack(spacing: 12) {
-                    stopButton
+    /// What the pill shows. Derived from the recorder's existing state so the recording,
+    /// transcription and paste logic below is unchanged.
+    private enum PillState: Equatable {
+        case listening
+        case working
+        case done
+        case message(String, isError: Bool)
+    }
 
-                    // Waveform - bar visualizer style
-                    HStack(spacing: 3) {
-                        ForEach(0..<15) { index in
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.white.opacity(0.7))
-                                .frame(width: 3, height: barHeight(for: index))
-                                .animation(
-                                    .easeInOut(duration: 0.15), value: audioRecorder.audioLevel)
-                        }
-                    }
-                    .frame(height: 30)
-
-                    HStack(spacing: 8) {
-                        Menu {
-                            Button("Auto-detect") { setLanguage("auto") }
-
-                            if !quickLanguageCodes.isEmpty {
-                                Divider()
-                                ForEach(quickLanguageCodes, id: \.self) { code in
-                                    if let lang = SpokenLanguageSection.languageOptions.first(where: {
-                                        $0.code == code
-                                    }) {
-                                        Button(lang.name) { setLanguage(code) }
-                                    }
-                                }
-                            }
-
-                            Divider()
-                            Menu("More languages") {
-                                ForEach(SpokenLanguageSection.languageOptions, id: \.code) { lang in
-                                    Button(lang.name) { setLanguage(lang.code) }
-                                }
-                            }
-
-                            if !recentLanguageCodes.isEmpty {
-                                Divider()
-                                Button("Clear recents") { recentLanguagesString = "" }
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text(currentLanguageLabel)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.92))
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-
-                                DoubleChevronIcon(color: .white.opacity(0.92))
-                            }
-                            .frame(maxWidth: 74, alignment: .leading)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.white.opacity(0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                        }
-                        .menuIndicator(.hidden)
-                        .menuStyle(.borderlessButton)
-                        .clickActionPointerCursor()
-                        .fixedSize()
-                        .help(spokenLanguageHelpText)
-
-                        // Recording mode indicator
-                        Image(systemName: recordingMode == 0 ? "hand.tap.fill" : "repeat.1")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.7))
-                            .help(recordingMode == 0 ? "Hold to Record" : "Toggle to Record")
-                    }
-                }
-                .padding(.horizontal, 12)
-                .transition(.opacity)
-            }
+    private var pillState: PillState {
+        if isShowingMessage {
+            if awaitingPasteResult { return .done }
+            return .message(statusMessage, isError: Self.isErrorMessage(statusMessage))
         }
-        .frame(width: 300, height: 50)
-        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .shadow(color: .black.opacity(0.22), radius: 14, x: 0, y: 4)
+        // Dots only while text is actually being produced. Every other moment the pill is on
+        // screen (mic starting, first frame before the start request lands) shows the
+        // waveform, so a start never flashes the "working" look.
+        if isProcessing && !isListening && recordingStartTask == nil { return .working }
+        return .listening
+    }
+
+    /// Neutral notes ("No speech detected", the ⌘V hint) vs. real failures.
+    private static func isErrorMessage(_ text: String) -> Bool {
+        let neutral = ["No speech detected", "Copied."]
+        return !neutral.contains(where: { text.hasPrefix($0) })
+    }
+
+    @State private var isHovering = false
+
+    /// The panel is a fixed transparent canvas; the pill sits at its bottom center and
+    /// animates its own size, so the window never jumps.
+    static let canvasSize = CGSize(width: 420, height: 64)
+    private static let pillHeight: CGFloat = 34
+
+    private var showsControls: Bool { pillState == .listening && isHovering }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.clear
+            pill
+                .padding(.bottom, 6)
+        }
+        .frame(width: Self.canvasSize.width, height: Self.canvasSize.height, alignment: .bottom)
         .contextMenu {
             modelSelectionMenu
         }
@@ -238,6 +165,11 @@ struct MiniRecorderView: View {
         .onReceive(NotificationCenter.default.publisher(for: .recordingShowMessageRequested)) {
             handlePanelMessage($0)
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .recorderDemoRequested)) { _ in
+            runVisualDemo()
+        }
+        #endif
         .onAppear {
             initializedService()
 
@@ -267,21 +199,6 @@ struct MiniRecorderView: View {
                 NSEvent.removeMonitor(localEscapeMonitor)
             }
         }
-        .onChange(of: isListening) {
-            // Only animate when actually recording to save CPU
-            if isListening {
-                withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
-                    phase = .pi * 4
-                }
-            } else {
-                phase = 0
-            }
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
-        ) { _ in
-            // Ensure focus if needed
-        }
         .background(
             KeyEventHandlerView(onEscape: {
                 handleEscape()
@@ -289,56 +206,186 @@ struct MiniRecorderView: View {
         )
     }
 
+    #if DEBUG
+    /// Debug-only walkthrough of every pill state with fake mic levels. No microphone, no
+    /// transcription, no paste. Launch a Debug build with `--recorder-demo`.
+    private func runVisualDemo() {
+        Task { @MainActor in
+            func wait(_ s: Double) async { try? await Task.sleep(for: .seconds(s)) }
+            func speak(_ seconds: Double) async {
+                let start = Date()
+                while Date().timeIntervalSince(start) < seconds {
+                    let t = Date().timeIntervalSince(start)
+                    let syllable = abs(sin(t * 9)) * (0.55 + 0.45 * abs(sin(t * 1.7)))
+                    audioRecorder.audioLevel = Float(0.25 + 0.65 * syllable)
+                    await wait(1.0 / 30.0)
+                }
+                audioRecorder.audioLevel = 0
+            }
+            isListening = true
+            await speak(2.6)
+            isHovering = true
+            await speak(2.0)
+            isHovering = false
+            await speak(0.8)
+            isListening = false
+            isProcessing = true
+            await wait(1.4)
+            isShowingMessage = true
+            awaitingPasteResult = true
+            await wait(0.7)
+            clearMessage()
+            onCancel?()
+            await wait(1.2)
+            NotificationCenter.default.post(name: .recorderDemoShowPanel, object: nil)
+            showMessage("No speech detected", seconds: 1.6)
+            await wait(2.4)
+            NotificationCenter.default.post(name: .recorderDemoShowPanel, object: nil)
+            showMessage("Could not start the microphone", seconds: 1.8)
+        }
+    }
+    #endif
+
     // MARK: - Subviews
+
+    private var pill: some View {
+        HStack(spacing: 10) {
+            switch pillState {
+            case .listening:
+                if showsControls {
+                    stopButton
+                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                }
+                LiveWaveform(level: audioRecorder.audioLevel, isLive: isListening)
+                if showsControls {
+                    languageMenu
+                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                }
+            case .working:
+                WorkingDots()
+                    .help(statusMessage)
+            case .done:
+                Image(systemName: "checkmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .transition(.scale(scale: 0.4).combined(with: .opacity))
+            case .message(let text, let isError):
+                HStack(spacing: 7) {
+                    Image(systemName: isError ? "exclamationmark.triangle.fill" : "info.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(isError ? Color(red: 1.0, green: 0.62, blue: 0.32) : .white.opacity(0.7))
+                    Text(text)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.95))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .frame(maxWidth: Self.canvasSize.width - 60)
+                .fixedSize(horizontal: true, vertical: false)
+                .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, horizontalPadding)
+        .frame(height: Self.pillHeight)
+        .frame(minWidth: Self.pillHeight)
+        .background(pillBackground)
+        .clipShape(Capsule(style: .continuous))
+        .shadow(color: .black.opacity(0.28), radius: 10, x: 0, y: 3)
+        .contentShape(Capsule(style: .continuous))
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: pillState)
+        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showsControls)
+        .help(pillState == .listening && !showsControls ? listeningHelp : "")
+    }
+
+    private var horizontalPadding: CGFloat {
+        switch pillState {
+        case .listening: return showsControls ? 6 : 14
+        case .working, .done: return 12
+        case .message: return 14
+        }
+    }
+
+    private var listeningHelp: String {
+        recordingMode == 0
+            ? "Release the hotkey to insert text. Esc cancels."
+            : "Press the hotkey again to insert text. Esc cancels."
+    }
 
     private var stopButton: some View {
         Button {
             handleRecordingControlTap()
         } label: {
-            HStack(spacing: 6) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(red: 1.0, green: 0.2, blue: 0.2))
-                        .frame(width: 26, height: 26)
-                        .shadow(color: Color.red.opacity(0.35), radius: 3, x: 0, y: 0)
-
-                    RoundedRectangle(cornerRadius: 2.5)
-                        .fill(Color.black.opacity(0.35))
-                        .frame(width: 8, height: 8)
-                }
-
-                Text("Stop")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.95))
+            ZStack {
+                Circle()
+                    .fill(Color(red: 1.0, green: 0.27, blue: 0.27))
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(.white)
+                    .frame(width: 8, height: 8)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.white.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .frame(width: 22, height: 22)
         }
         .buttonStyle(.stPlain)
-        .help("Stop recording and transcribe")
+        .clickActionPointerCursor()
+        .help("Stop and insert text")
     }
 
-    private var backgroundView: some View {
-        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+    private var languageMenu: some View {
+        Menu {
+            Button("Auto-detect") { setLanguage("auto") }
+
+            if !quickLanguageCodes.isEmpty {
+                Divider()
+                ForEach(quickLanguageCodes, id: \.self) { code in
+                    if let lang = SpokenLanguageSection.languageOptions.first(where: {
+                        $0.code == code
+                    }) {
+                        Button(lang.name) { setLanguage(code) }
+                    }
+                }
+            }
+
+            Divider()
+            Menu("More languages") {
+                ForEach(SpokenLanguageSection.languageOptions, id: \.code) { lang in
+                    Button(lang.name) { setLanguage(lang.code) }
+                }
+            }
+
+            if !recentLanguageCodes.isEmpty {
+                Divider()
+                Button("Clear recents") { recentLanguagesString = "" }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(currentLanguageLabel)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.92))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                DoubleChevronIcon(color: .white.opacity(0.7))
+            }
+            .frame(maxWidth: 80, alignment: .leading)
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .background(Capsule(style: .continuous).fill(Color.white.opacity(0.14)))
+        }
+        .menuIndicator(.hidden)
+        .menuStyle(.borderlessButton)
+        .clickActionPointerCursor()
+        .fixedSize()
+        .help(spokenLanguageHelpText)
+    }
+
+    private var pillBackground: some View {
+        let shape = Capsule(style: .continuous)
         return ZStack {
-            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow, cornerRadius: 26)
+            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow, cornerRadius: Self.pillHeight / 2)
                 .clipShape(shape)
-
-            shape.fill(Color.black.opacity(0.72))
-
-            shape.strokeBorder(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.22),
-                        Color.white.opacity(0.06),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: 1
-            )
+            shape.fill(Color.black.opacity(0.78))
+            shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
         }
     }
 
@@ -531,6 +578,7 @@ struct MiniRecorderView: View {
     private func showMessage(_ message: String, seconds: Double) {
         debugLog(message)
         dismissTask?.cancel()
+        awaitingPasteResult = false
         isListening = false
         isProcessing = true
         isShowingMessage = true
@@ -560,7 +608,7 @@ struct MiniRecorderView: View {
         isShowingMessage = true
         awaitingPasteResult = true
         dismissTask = Task {
-            try? await Task.sleep(for: .seconds(1))
+            try? await Task.sleep(for: .seconds(0.7))
             guard !Task.isCancelled else { return }
             clearMessage()
             onCancel?()

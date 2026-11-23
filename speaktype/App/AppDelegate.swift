@@ -57,6 +57,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         miniRecorderController = MiniRecorderWindowController(
             keyboardFocusVisibility: keyboardFocusVisibility
         )
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--recorder-demo") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                self?.miniRecorderController?.runVisualDemo()
+            }
+        }
+        #endif
 
         WritingPolishUserDefaults.registerDefaults(in: .standard)
         // Transcription defaults to on-device only (privacy-safe) until the user opts into cloud.
