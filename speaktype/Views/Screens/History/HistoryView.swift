@@ -271,7 +271,6 @@ struct HistoryCard: View {
             .contentShape(Rectangle())
             // Whole row opens it; once open, clicks are free for selecting text (chevron closes).
             .onTapGesture { if !isExpanded { onToggle() } }
-            .accessibilityAddTraits(isExpanded ? [] : .isButton)
             .onHover { isHovered = $0 }
 
             if isExpanded {

@@ -306,7 +306,7 @@ struct StatsCard: View {
                 }
                 WeekBars(weeklyData: weeklyData)
             }
-            .padding(20)
+            .padding(16)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .themedCard(padding: 0)

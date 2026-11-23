@@ -264,13 +264,13 @@ struct TranscribeAudioView: View {
                     .foregroundStyle(Color.textMuted)
                 if workingItemID == item.id { ProgressView().controlSize(.mini) }
                 Spacer()
-                actionButton("Raw", icon: "text.alignleft", help: "Show the raw transcript", isActive: version == .raw) {
+                actionButton("Raw", icon: "text.alignleft", help: "Show the raw transcript", isActive: false) {
                     displayedVersion[item.id] = .raw
                 }
-                actionButton("Polish", icon: "wand.and.stars", help: "Polish this transcript", isActive: version == .polished) {
+                actionButton("Polish", icon: "wand.and.stars", help: "Polish this transcript", isActive: false) {
                     polish(item)
                 }
-                actionButton("Summary", icon: "list.bullet.rectangle", help: "Summarize this transcript", isActive: version == .summary) {
+                actionButton("Summary", icon: "list.bullet.rectangle", help: "Summarize this transcript", isActive: false) {
                     summarize(item)
                 }
                 actionButton("Markdown", icon: "square.and.arrow.down", help: "Export as a Markdown file", isActive: false) {
