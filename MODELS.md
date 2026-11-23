@@ -18,9 +18,9 @@ in Settings (Keychain); env vars are a dev convenience for shell-launched runs.
 
 ## Cleanup models — `CleanupModel.catalog`
 
-Default: `google/gemini-flash-latest` (auto-tracks current Gemini flash). All via OpenRouter,
-OpenAI-compatible `/chat/completions`, **temperature 0**, verbatim cleanup system prompt,
-per-request `provider.data_collection = "deny"` (no-train).
+Default: `anthropic/claude-haiku-5.5` via OpenRouter. Haiku runs with reasoning disabled.
+Cloud cleanup sends the dictation inside `<transcript>` tags. An implausible rewrite leaves the
+original text in place. OpenRouter requests include `provider.data_collection = "deny"`.
 
 On startup `ModelValidationService.validateOnStartup()` fetches the live `/models` list, marks
 each catalog ID resolved/unresolved (unresolved → shown "(unavailable)" and disabled), and repairs
@@ -37,6 +37,11 @@ supportsSwedish, swedishFallbackEngineID, implemented, experimental, note`.
 OpenRouter GPT Transcribe, direct OpenAI Transcribe, and Groq Whisper Large v3 Turbo. OpenRouter
 uses the same Keychain key for cleanup and transcription. Its recommended model is
 `openai/gpt-transcribe` at about $0.0045 per audio minute.
+
+Choose **Swedish + English** to send both language hints to GPT Transcribe. Other engines use
+automatic language detection for that choice. The personal dictionary in Settings stores one
+term per line and sends up to 30 terms to GPT Transcribe during cloud transcription. Full
+Whisper Large v3 is available in AI Models for on-device dictation.
 
 **Declared, adapters planned** (`implemented: false`, not offered in UI until wired):
 Parakeet-TDT-0.6B-v3 (preferred local default — needs NeMo/CoreML runtime), MAI-Transcribe-1,
