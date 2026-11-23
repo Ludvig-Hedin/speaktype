@@ -45,7 +45,7 @@ enum WritingPolishService {
         case .openRouter, .openAI:
             let model = CleanupModel.model(id: config.cleanupModelID)?.label ?? config.cleanupModelID
             if provider.hasKey() {
-                return "Cleans up via \(provider.displayName) · \(model), temperature 0."
+                return "Cleans up via \(provider.displayName) · \(model)."
             }
             return "Add a \(provider.displayName) API key below to enable cloud cleanup."
         case .ollama:
@@ -66,7 +66,7 @@ enum WritingPolishService {
 
         let provider = effectiveProvider(configuration)
 
-        // Remote cleanup (OpenRouter / OpenAI) uses the verbatim cleanup prompt + temp 0.
+        // Remote cleanup (OpenRouter / OpenAI) uses the shared transcription cleanup prompt.
         if provider.isRemote, provider.hasKey() {
             do {
                 let out = try await RemoteCleanupClient.cleanup(
@@ -75,7 +75,7 @@ enum WritingPolishService {
                     transcript: trimmed
                 )
                 let clean = sanitizeModelOutput(out).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !clean.isEmpty { return clean }
+                return isPlausibleCleanup(raw: trimmed, cleaned: clean) ? clean : rawTranscript
             } catch is CancellationError {
                 return rawTranscript
             } catch {
@@ -104,6 +104,16 @@ enum WritingPolishService {
             print("WritingPolishService: Ollama polish failed — \(error.localizedDescription)")
             return rawTranscript
         }
+    }
+
+    /// Keep the original when the result resembles a short answer or an extended response.
+    static func isPlausibleCleanup(raw: String, cleaned: String) -> Bool {
+        guard !cleaned.isEmpty, !cleaned.contains("<transcript>"), !cleaned.contains("</transcript>") else { return false }
+        let rawWords = raw.split(whereSeparator: \.isWhitespace).count
+        let cleanWords = cleaned.split(whereSeparator: \.isWhitespace).count
+        guard rawWords >= 4 else { return cleanWords <= rawWords + 4 }
+        let ratio = Double(cleanWords) / Double(rawWords)
+        return ratio >= 0.35 && cleanWords <= Int(Double(rawWords) * 1.6) + 6
     }
 
     // MARK: - Private

@@ -121,7 +121,9 @@ struct WritingPolishSettingsSection: View {
             removeFillers: writingPolishRemoveFillers,
             ollamaBaseURL: ollamaBaseURL,
             ollamaModel: ollamaModel,
-            ollamaTemperature: ollamaTemperature
+            ollamaTemperature: ollamaTemperature,
+            cleanupProvider: cleanupProvider,
+            cleanupModelID: cleanupModelID
         )
         return WritingPolishService.configurationSummary(config: c)
     }
@@ -198,7 +200,7 @@ struct WritingPolishSettingsSection: View {
 
                         cleanupKeyField
 
-                        Text("Runs at temperature 0 with a strict cleanup prompt — preserves English/Swedish, never answers the dictation. OpenRouter requests send a no-train (data_collection: deny) policy.")
+                        Text("Keeps the language of your dictation. OpenRouter requests use a no-training data policy.")
                             .font(Typography.captionSmall)
                             .foregroundStyle(Color.textMuted)
                             .fixedSize(horizontal: false, vertical: true)

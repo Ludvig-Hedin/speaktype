@@ -331,11 +331,7 @@ class ModelDownloadService: ObservableObject {
         for url in contents {
             let fileName = url.lastPathComponent
             // Check if any pattern matches
-            let matches = patterns.contains { pattern in
-                fileName.contains(pattern) || fileName.contains(pattern.replacingOccurrences(of: "/", with: "--"))
-            }
-            
-            if matches {
+            if matchesCacheName(fileName, patterns: patterns) {
                 do {
                     try fileManager.removeItem(at: url)
                     print("✅ Deleted cache: \(url.lastPathComponent)")
@@ -347,6 +343,17 @@ class ModelDownloadService: ObservableObject {
         }
         return count
     }
+
+    nonisolated static func matchesCacheName(_ fileName: String, patterns: [String]) -> Bool {
+        if patterns.contains("whisper-large-v3") {
+            // The full model's short ID is a prefix of the Turbo and quantized variants.
+            return ["whisper-large-v3", "openai_whisper-large-v3", "models--openai--whisper-large-v3"].contains(fileName)
+        }
+        return patterns.contains { pattern in
+            fileName.contains(pattern) || fileName.contains(pattern.replacingOccurrences(of: "/", with: "--"))
+        }
+    }
+
     func cancelDownload(for variant: String) {
         if let task = activeTasks[variant] {
             task.cancel()

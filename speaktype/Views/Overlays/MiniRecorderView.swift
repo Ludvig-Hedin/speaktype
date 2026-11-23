@@ -48,7 +48,7 @@ struct MiniRecorderView: View {
 
         for code in candidateCodes where code != "auto" {
             guard !orderedCodes.contains(code) else { continue }
-            guard SpokenLanguageSection.whisperLanguages.contains(where: { $0.code == code }) else {
+            guard SpokenLanguageSection.languageOptions.contains(where: { $0.code == code }) else {
                 continue
             }
             orderedCodes.append(code)
@@ -71,12 +71,16 @@ struct MiniRecorderView: View {
 
     private var currentLanguageLabel: String {
         if transcriptionLanguage == "auto" { return "Auto" }
+        if transcriptionLanguage == DictationHints.swedishEnglish { return "SV + EN" }
         return spokenLanguageDisplayName(for: transcriptionLanguage)
     }
 
     private var spokenLanguageHelpText: String {
         if transcriptionLanguage == "auto" {
             return "Spoken language hint: Auto-detect. SpeakType will try to detect the language you are speaking."
+        }
+        if transcriptionLanguage == DictationHints.swedishEnglish {
+            return "GPT Transcribe gets both Swedish and English as hints. Other models detect the language automatically."
         }
 
         return
@@ -164,7 +168,7 @@ struct MiniRecorderView: View {
                             if !quickLanguageCodes.isEmpty {
                                 Divider()
                                 ForEach(quickLanguageCodes, id: \.self) { code in
-                                    if let lang = SpokenLanguageSection.whisperLanguages.first(where: {
+                                    if let lang = SpokenLanguageSection.languageOptions.first(where: {
                                         $0.code == code
                                     }) {
                                         Button(lang.name) { setLanguage(code) }
@@ -174,7 +178,7 @@ struct MiniRecorderView: View {
 
                             Divider()
                             Menu("More languages") {
-                                ForEach(SpokenLanguageSection.whisperLanguages, id: \.code) { lang in
+                                ForEach(SpokenLanguageSection.languageOptions, id: \.code) { lang in
                                     Button(lang.name) { setLanguage(lang.code) }
                                 }
                             }
@@ -801,7 +805,7 @@ struct MiniRecorderView: View {
 
     private func spokenLanguageDisplayName(for code: String) -> String {
         if code == "auto" { return "Auto-detect" }
-        return SpokenLanguageSection.whisperLanguages.first(where: { $0.code == code })?.name ?? code
+        return SpokenLanguageSection.languageOptions.first(where: { $0.code == code })?.name ?? code
     }
 }
 

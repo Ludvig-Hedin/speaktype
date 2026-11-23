@@ -7,6 +7,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 - **Web:** Free-only launch. Pricing shows one free plan with every feature and a note that Pro comes later; price rows and FAQ answers follow. Set `NEXT_PUBLIC_PAID_PLANS_OPEN=1` to show paid plans.
 
+## [1.0.33] - 2026-11-23
+- **macOS:** GPT Transcribe can use a personal dictionary and a Swedish + English language hint. Claude Haiku 5.5 is the default for cloud text cleanup.
+- **macOS:** Full Whisper Large v3 is available to download for on-device dictation.
+
 ## [1.0.32] - 2026-11-23
 - **macOS:** Removed blue selection outlines. Focus rings appear during keyboard navigation and hide when you return to the mouse or trackpad.
 

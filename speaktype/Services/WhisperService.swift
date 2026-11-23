@@ -343,7 +343,7 @@ class WhisperService {
     private func decodingOptions(for language: String) -> DecodingOptions {
         var options = DecodingOptions()
         options.task = .transcribe
-        options.language = (language == "auto") ? nil : language
+        options.language = DictationHints.singleLanguage(language)
         return options
     }
 
