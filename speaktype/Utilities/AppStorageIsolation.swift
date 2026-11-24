@@ -7,6 +7,7 @@ nonisolated enum AppStorageIsolation {
     static let isRunningTests: Bool =
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         || NSClassFromString("XCTestCase") != nil
+        || ProcessInfo.processInfo.arguments.contains("--uitesting")
 
     /// Preferences store for history + stats. A named suite can't fail for a non-bundle name.
     static let historyDefaults: UserDefaults =

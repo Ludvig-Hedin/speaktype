@@ -245,4 +245,12 @@ final class DictationRecoveryTests: XCTestCase {
         XCTAssertFalse(Failure.rateLimited.allowsBackgroundRetry)
         XCTAssertFalse(Failure.unauthorized.allowsBackgroundRetry)
     }
+
+    /// Guards the fix for tests wiping the user's real history: a test run must never use
+    /// the app's real preferences domain or Application Support folder.
+    func testTestsUseIsolatedHistoryStorage() {
+        XCTAssertTrue(AppStorageIsolation.isRunningTests)
+        XCTAssertFalse(AppStorageIsolation.historyDefaults === UserDefaults.standard)
+        XCTAssertTrue(DictationRecoveryStore.live.directory.path.contains("/SpeakType-Tests/"))
+    }
 }

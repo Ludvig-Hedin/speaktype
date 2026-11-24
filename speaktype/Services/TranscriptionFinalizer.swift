@@ -16,7 +16,9 @@ enum TranscriptionFinalizer {
     ) async -> String {
         let configuration = WritingPolishConfiguration.loadFromUserDefaults()
         guard configuration.isEnabled else { return rawTranscript }
-        return await polishWithinBudget(rawTranscript: rawTranscript, budget: .seconds(8)) {
+        // A local Ollama model may need to load from disk after idling, so it gets more time.
+        let budget: Duration = configuration.cleanupProvider.isRemote ? .seconds(8) : .seconds(30)
+        return await polishWithinBudget(rawTranscript: rawTranscript, budget: budget) {
             if WritingPolishService.willPolish(configuration: configuration) {
                 await MainActor.run {
                     if !Task.isCancelled { onPolish() }
