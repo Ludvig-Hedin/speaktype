@@ -97,7 +97,8 @@ class ClipboardService {
     func pasteText(
         _ text: String,
         into target: NSRunningApplication?,
-        beforePaste: () -> Void = {}
+        beforePaste: () -> Void = {},
+        afterPaste: () -> Void = {}
     ) async -> PasteResult {
         // Off the main thread: `AXIsProcessTrusted()` blocks on `tccd`.
         let trusted = await Task.detached(priority: .userInitiated) {
@@ -115,6 +116,8 @@ class ClipboardService {
         beforePaste()
         await activate(target)
         paste()
+        // The keystroke is sent; the clipboard restore below runs later and is invisible.
+        afterPaste()
 
         try? await Task.sleep(for: Self.restoreDelay)
         // Only restore if nothing else has written since our paste, and never restore secrets.

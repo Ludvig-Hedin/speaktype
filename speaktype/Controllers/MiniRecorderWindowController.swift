@@ -194,12 +194,12 @@ class MiniRecorderWindowController: NSObject {
                 into: pasteTarget,
                 // The pill stays up to show the checkmark. It is a non-activating panel, but
                 // make sure it can't hold key focus while ⌘V is sent to the target app.
-                beforePaste: { [weak self] in self?.panel?.resignKey() }
+                beforePaste: { [weak self] in self?.panel?.resignKey() },
+                afterPaste: {
+                    NotificationCenter.default.post(name: .recordingPasteSucceeded, object: nil)
+                }
             )
 
-            if result == .pasted {
-                NotificationCenter.default.post(name: .recordingPasteSucceeded, object: nil)
-            }
             if result == .copiedOnly {
                 // No Accessibility: say so in the panel instead of failing silently. The text
                 // stays on the clipboard for a manual ⌘V.

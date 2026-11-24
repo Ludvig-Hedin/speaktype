@@ -141,6 +141,9 @@ struct MiniRecorderView: View {
     /// Set for a state change that happens while the panel is hidden, so the pill appears
     /// already in its new shape instead of morphing during the fade-in.
     @State private var skipNextAnimation = false
+    /// Bumped by anything that puts new content in the pill; a pending fade-out reset only
+    /// applies if nothing newer was shown meanwhile.
+    @State private var contentGeneration = 0
 
     /// The panel is a fixed transparent canvas; the pill sits at its bottom center and
     /// animates its own size, so the window never jumps.
@@ -444,10 +447,12 @@ struct MiniRecorderView: View {
     /// Hide with the fade first, then reset the content, so the pill never morphs back to
     /// the waveform while it is fading out.
     private func dismissAfterFade() {
+        let generation = contentGeneration
         onCancel?()
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(220))
-            // A new recording started during the fade: leave its state alone.
+            // Something new was shown during the fade (a recording, a message): leave it alone.
+            guard generation == contentGeneration else { return }
             guard !isListening, recordingStartTask == nil, !isStoppingRecording else { return }
             skipNextAnimation = true
             clearMessage()
@@ -593,6 +598,7 @@ struct MiniRecorderView: View {
         }
 
         onStartAccepted?()
+        contentGeneration += 1
         isHovering = false
         cancelCommit = false
         pendingStopAfterStart = false
@@ -648,6 +654,7 @@ struct MiniRecorderView: View {
     private func showMessage(_ message: String, seconds: Double) {
         debugLog(message)
         dismissTask?.cancel()
+        contentGeneration += 1
         // Coming from a hidden pill (e.g. a start error): appear already as the message.
         let fromHidden = !isListening && !isProcessing && !isShowingMessage
         if fromHidden { skipNextAnimation = true }
@@ -685,6 +692,7 @@ struct MiniRecorderView: View {
     /// the panel, or asks for the "press ⌘V" hint) without blocking a new recording.
     private func awaitPasteResult() {
         dismissTask?.cancel()
+        contentGeneration += 1
         isShowingMessage = true
         awaitingPasteResult = true
         showsPasted = false
@@ -785,8 +793,8 @@ struct MiniRecorderView: View {
         debugLog("Escape pressed - cancelling immediate commit")
 
         if isShowingMessage {
-            clearMessage()
-            onCancel?()
+            dismissTask?.cancel()
+            dismissAfterFade()
             return
         }
 
