@@ -47,6 +47,18 @@ final class SelectedModelPreferenceTests: XCTestCase {
         XCTAssertEqual(resolved, "openai_whisper-medium")
     }
 
+    func testResolveKeepsSavedModelWhileLegacyMigrationIsPending() {
+        let resolved = SelectedModelPreference.resolveSelection(
+            current: "openai_whisper-medium",
+            downloadedVariants: ["openai_whisper-large-v3_turbo"],
+            recommended: "openai_whisper-large-v3_turbo",
+            orderedVariants: AIModel.availableModels.map(\.variant),
+            preserveSavedSelection: true,
+            isActivelyDownloading: { _ in false }
+        )
+        XCTAssertEqual(resolved, "openai_whisper-medium")
+    }
+
     func testResolveUsesRecommendedWhenNothingOnDisk() {
         let resolved = SelectedModelPreference.resolveSelection(
             current: "",

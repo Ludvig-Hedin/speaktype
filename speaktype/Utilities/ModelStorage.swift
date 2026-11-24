@@ -36,27 +36,38 @@ nonisolated enum ModelStorage {
         whisperKitModelsDirectory.appendingPathComponent(variant)
     }
 
-    /// Create the model directory and kick off the one-time migration. Safe to call
-    /// repeatedly. The directory creation itself never touches Documents.
+    /// Create the model directory without accessing Documents.
     static func ensureDirectoryExists() {
         try? FileManager.default.createDirectory(
             at: whisperKitModelsDirectory, withIntermediateDirectories: true)
-        startMigrationIfNeeded()
     }
 
-    private static let migrationStarted = OSAllocatedUnfairLock(initialState: false)
+    private enum MigrationState {
+        case idle, running, finished
+    }
 
-    private static func startMigrationIfNeeded() {
-        let alreadyStarted = migrationStarted.withLock { started -> Bool in
-            defer { started = true }
-            return started
+    private static let migrationState = OSAllocatedUnfairLock(initialState: MigrationState.idle)
+
+    static var legacyMigrationFinished: Bool {
+        migrationState.withLock { $0 == .finished }
+    }
+
+    static func startMigrationIfNeeded(for mode: TranscriptionMode) {
+        guard mode != .remoteOnly else { return }
+        let shouldStart = migrationState.withLock { state in
+            guard state == .idle else { return false }
+            state = .running
+            return true
         }
-        guard !alreadyStarted else { return }
+        guard shouldStart else { return }
 
         // Detached and low priority: reading Documents can block on a pending TCC prompt
         // for as long as the user takes to answer, and nothing may wait on that.
         Task.detached(priority: .utility) {
-            guard let legacy = legacyDocumentsBase, migrateLegacyCache(from: legacy, to: downloadBase) else { return }
+            if let legacy = legacyDocumentsBase {
+                _ = migrateLegacyCache(from: legacy, to: downloadBase)
+            }
+            migrationState.withLock { $0 = .finished }
             await ModelDownloadService.shared.refreshDownloadedModels()
         }
     }

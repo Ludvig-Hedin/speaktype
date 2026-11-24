@@ -53,6 +53,9 @@ struct RemoteTranscriptionSettingsSection: View {
             .padding(.bottom, 11)
         }
         .onAppear(perform: refreshKeyState)
+        .onChange(of: mode) { _, mode in
+            ModelStorage.startMigrationIfNeeded(for: mode)
+        }
         .onReceive(NotificationCenter.default.publisher(for: RemoteAPIKeyStore.didChangeNotification)) { _ in
             refreshKeyState()
         }

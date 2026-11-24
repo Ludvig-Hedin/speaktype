@@ -15,8 +15,12 @@ enum SelectedModelPreference {
         downloadedVariants: Set<String>,
         recommended: String,
         orderedVariants: [String],
+        preserveSavedSelection: Bool = false,
         isActivelyDownloading: (String) -> Bool
     ) -> String {
+        if preserveSavedSelection && orderedVariants.contains(current) {
+            return current
+        }
         if !current.isEmpty, downloadedVariants.contains(current) {
             return current
         }
@@ -33,7 +37,9 @@ enum SelectedModelPreference {
     }
 
     @MainActor
-    static func ensureValidSelection(downloadService: ModelDownloadService) {
+    static func ensureValidSelection(
+        downloadService: ModelDownloadService, preserveSavedSelection: Bool = false
+    ) {
         let current = UserDefaults.standard.string(forKey: storageKey) ?? ""
         let downloaded = Set(
             downloadService.downloadProgress.filter { $0.value >= 1.0 }.map(\.key)
@@ -46,6 +52,7 @@ enum SelectedModelPreference {
             downloadedVariants: downloaded,
             recommended: recommended,
             orderedVariants: ordered,
+            preserveSavedSelection: preserveSavedSelection,
             isActivelyDownloading: { variant in
                 downloadService.isDownloading[variant] == true
             }

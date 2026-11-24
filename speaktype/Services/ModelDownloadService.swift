@@ -10,6 +10,7 @@ class ModelDownloadService: ObservableObject {
     @Published var isDownloading: [String: Bool] = [:]
     
     private var activeTasks: [String: Task<Void, Never>] = [:] // Track running download tasks
+    private var modelScanGeneration = 0
     
     private init() {
         // Directory creation only — no Documents access, so nothing triggers a TCC prompt.
@@ -20,6 +21,10 @@ class ModelDownloadService: ObservableObject {
     // Check which models are already downloaded and update progress dictionary
     func refreshDownloadedModels() async {
         print("🔍 Checking for already-downloaded models...")
+        modelScanGeneration += 1
+        let generation = modelScanGeneration
+        ModelStorage.startMigrationIfNeeded(for: TranscriptionModeUserDefaults.mode)
+        let preserveSavedSelection = !ModelStorage.legacyMigrationFinished
 
         // Capture the expected-size table on the main actor (it's derived from @MainActor
         // `AIModel` state), then hand it to the off-main scan as a plain Sendable value.
@@ -37,6 +42,7 @@ class ModelDownloadService: ObservableObject {
         }.value
 
         // Back on the main actor: publish results.
+        guard generation == modelScanGeneration else { return }
         self.downloadProgress = self.downloadProgress.filter { self.isDownloading[$0.key] == true }
 
         for variant in foundModels where self.isDownloading[variant] != true {
@@ -50,7 +56,9 @@ class ModelDownloadService: ObservableObject {
             print("✅ Found \(foundModels.count) usable model(s)")
         }
 
-        SelectedModelPreference.ensureValidSelection(downloadService: self)
+        SelectedModelPreference.ensureValidSelection(
+            downloadService: self, preserveSavedSelection: preserveSavedSelection
+        )
     }
 
     /// Enumerate the WhisperKit cache on disk and return the set of complete model variants.
