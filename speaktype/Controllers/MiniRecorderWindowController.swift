@@ -79,9 +79,13 @@ class MiniRecorderWindowController: NSObject {
                 panel.animator().alphaValue = 1
             }
         } else {
-            // Re-shown while fading out: cancel the pending hide.
+            // Re-shown while fading out: cancel the pending hide and fade back in from where
+            // the fade-out is, so a running animation can't end at 0.
             hideGeneration += 1
-            panel.alphaValue = 1
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.08
+                panel.animator().alphaValue = 1
+            }
         }
     }
 
@@ -149,7 +153,7 @@ class MiniRecorderWindowController: NSObject {
         }
         p.titleVisibility = .hidden
         p.titlebarAppearsTransparent = true
-        p.isMovableByWindowBackground = true
+        p.isMovableByWindowBackground = false
         p.hasShadow = false  // Disable system shadow to avoid transparency artifacts (View has its own shadow)
 
         // Window Behavior
@@ -193,6 +197,9 @@ class MiniRecorderWindowController: NSObject {
                 beforePaste: { [weak self] in self?.panel?.resignKey() }
             )
 
+            if result == .pasted {
+                NotificationCenter.default.post(name: .recordingPasteSucceeded, object: nil)
+            }
             if result == .copiedOnly {
                 // No Accessibility: say so in the panel instead of failing silently. The text
                 // stays on the clipboard for a manual ⌘V.

@@ -13,6 +13,8 @@ extension Notification.Name {
     static let recordingCancelRequested = Notification.Name("recordingCancelRequested")
     /// Show a short message in the recorder panel. userInfo["message"]: String.
     static let recordingShowMessageRequested = Notification.Name("recordingShowMessageRequested")
+    /// The text really landed in the target app (drives the recorder's checkmark).
+    static let recordingPasteSucceeded = Notification.Name("recordingPasteSucceeded")
     #if DEBUG
     static let recorderDemoRequested = Notification.Name("recorderDemoRequested")
     static let recorderDemoShowPanel = Notification.Name("recorderDemoShowPanel")

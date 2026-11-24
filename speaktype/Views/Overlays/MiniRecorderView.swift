@@ -118,7 +118,8 @@ struct MiniRecorderView: View {
 
     private var pillState: PillState {
         if isShowingMessage {
-            if awaitingPasteResult { return .done }
+            if showsPasted { return .done }
+            if awaitingPasteResult { return .working }
             return .message(statusMessage, isError: Self.isErrorMessage(statusMessage))
         }
         // Dots only while text is actually being produced. Every other moment the pill is on
@@ -135,6 +136,11 @@ struct MiniRecorderView: View {
     }
 
     @State private var isHovering = false
+    /// The paste was confirmed; the checkmark is showing.
+    @State private var showsPasted = false
+    /// Set for a state change that happens while the panel is hidden, so the pill appears
+    /// already in its new shape instead of morphing during the fade-in.
+    @State private var skipNextAnimation = false
 
     /// The panel is a fixed transparent canvas; the pill sits at its bottom center and
     /// animates its own size, so the window never jumps.
@@ -164,6 +170,12 @@ struct MiniRecorderView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .recordingShowMessageRequested)) {
             handlePanelMessage($0)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .recordingPasteSucceeded)) { _ in
+            handlePasteSucceeded()
+        }
+        .onChange(of: pillState) { _, state in
+            announce(state)
         }
         #if DEBUG
         .onReceive(NotificationCenter.default.publisher(for: .recorderDemoRequested)) { _ in
@@ -222,26 +234,24 @@ struct MiniRecorderView: View {
                 }
                 audioRecorder.audioLevel = 0
             }
+            // Hover is not simulated here: the test moves the real mouse over the pill.
             isListening = true
-            await speak(2.6)
-            isHovering = true
-            await speak(2.0)
-            isHovering = false
-            await speak(0.8)
+            await speak(5.0)
             isListening = false
             isProcessing = true
             await wait(1.4)
-            isShowingMessage = true
-            awaitingPasteResult = true
-            await wait(0.7)
-            clearMessage()
-            onCancel?()
-            await wait(1.2)
+            awaitPasteResult()
+            await wait(0.3)
+            handlePasteSucceeded()
+            await wait(2.0)
             NotificationCenter.default.post(name: .recorderDemoShowPanel, object: nil)
             showMessage("No speech detected", seconds: 1.6)
             await wait(2.4)
             NotificationCenter.default.post(name: .recorderDemoShowPanel, object: nil)
             showMessage("Could not start the microphone", seconds: 1.8)
+            await wait(2.6)
+            NotificationCenter.default.post(name: .recorderDemoShowPanel, object: nil)
+            showMessage(MiniRecorderWindowController.accessibilityPasteMessage, seconds: 2.4)
         }
     }
     #endif
@@ -254,16 +264,18 @@ struct MiniRecorderView: View {
             case .listening:
                 if showsControls {
                     stopButton
-                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                        .transition(Self.contentTransition)
                 }
                 LiveWaveform(level: audioRecorder.audioLevel, isLive: isListening)
+                    .transition(Self.contentTransition)
                 if showsControls {
                     languageMenu
-                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                        .transition(Self.contentTransition)
                 }
             case .working:
                 WorkingDots()
                     .help(statusMessage)
+                    .transition(Self.contentTransition)
             case .done:
                 Image(systemName: "checkmark")
                     .font(.system(size: 13, weight: .semibold))
@@ -277,32 +289,35 @@ struct MiniRecorderView: View {
                     Text(text)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.white.opacity(0.95))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
                 }
-                .frame(maxWidth: Self.canvasSize.width - 60)
-                .fixedSize(horizontal: true, vertical: false)
-                .transition(.opacity)
+                // Short notes hug their text on one line; long ones wrap to two lines at a
+                // readable width instead of stretching the pill across the screen.
+                .frame(width: text.count > 44 ? 300 : nil)
+                .fixedSize(horizontal: text.count <= 44, vertical: true)
+                .padding(.vertical, 7)
+                .help(text)
+                .transition(Self.contentTransition)
             }
         }
         .padding(.horizontal, horizontalPadding)
-        .frame(height: Self.pillHeight)
-        .frame(minWidth: Self.pillHeight)
+        .frame(minWidth: Self.pillHeight, minHeight: Self.pillHeight)
         .background(pillBackground)
-        .clipShape(Capsule(style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Self.pillHeight / 2, style: .continuous))
         .shadow(color: .black.opacity(0.28), radius: 10, x: 0, y: 3)
-        .contentShape(Capsule(style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: Self.pillHeight / 2, style: .continuous))
         .onHover { hovering in
             isHovering = hovering
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: pillState)
+        .animation(skipNextAnimation ? nil : .spring(response: 0.32, dampingFraction: 0.82), value: pillState)
         .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showsControls)
         .help(pillState == .listening && !showsControls ? listeningHelp : "")
     }
 
     private var horizontalPadding: CGFloat {
         switch pillState {
-        case .listening: return showsControls ? 6 : 14
+        case .listening: return showsControls ? 6 : 14  // controls are 22 pt, edges match
         case .working, .done: return 12
         case .message: return 14
         }
@@ -330,6 +345,7 @@ struct MiniRecorderView: View {
         .buttonStyle(.stPlain)
         .clickActionPointerCursor()
         .help("Stop and insert text")
+        .accessibilityLabel("Stop and insert text")
     }
 
     private var languageMenu: some View {
@@ -368,24 +384,77 @@ struct MiniRecorderView: View {
                 DoubleChevronIcon(color: .white.opacity(0.7))
             }
             .frame(maxWidth: 80, alignment: .leading)
-            .padding(.horizontal, 8)
-            .frame(height: 22)
-            .background(Capsule(style: .continuous).fill(Color.white.opacity(0.14)))
         }
         .menuIndicator(.hidden)
         .menuStyle(.borderlessButton)
-        .clickActionPointerCursor()
         .fixedSize()
+        .padding(.horizontal, 9)
+        .frame(height: 22)
+        .background(Capsule(style: .continuous).fill(Color.white.opacity(0.16)))
+        .contentShape(Capsule(style: .continuous))
+        .clickActionPointerCursor()
         .help(spokenLanguageHelpText)
+        .accessibilityLabel("Language: \(currentLanguageLabel)")
     }
 
+    private var isErrorState: Bool {
+        if case .message(_, let isError) = pillState { return isError }
+        return false
+    }
+
+    private static let errorTint = Color(red: 1.0, green: 0.55, blue: 0.25)
+
     private var pillBackground: some View {
-        let shape = Capsule(style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Self.pillHeight / 2, style: .continuous)
         return ZStack {
             VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow, cornerRadius: Self.pillHeight / 2)
                 .clipShape(shape)
             shape.fill(Color.black.opacity(0.78))
-            shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+            if isErrorState {
+                shape.fill(Self.errorTint.opacity(0.16))
+            }
+            shape.strokeBorder(
+                isErrorState ? Self.errorTint.opacity(0.7) : Color.white.opacity(0.14),
+                lineWidth: isErrorState ? 1 : 0.5)
+        }
+    }
+
+    /// Quick crossfade between the pill's contents: the old content leaves fast, the new one
+    /// arrives a beat later, so two states never sit on top of each other.
+    private static let contentTransition = AnyTransition.asymmetric(
+        insertion: .opacity.animation(.easeOut(duration: 0.16).delay(0.06)),
+        removal: .opacity.animation(.easeIn(duration: 0.06)))
+
+    /// VoiceOver hears what the pill shows.
+    private func announce(_ state: PillState) {
+        let text: String
+        switch state {
+        case .listening: text = isListening ? "Listening" : ""
+        case .working: text = "Writing"
+        case .done: text = "Inserted"
+        case .message(let message, _): text = message
+        }
+        guard !text.isEmpty else { return }
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+    }
+
+    /// Hide with the fade first, then reset the content, so the pill never morphs back to
+    /// the waveform while it is fading out.
+    private func dismissAfterFade() {
+        onCancel?()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(220))
+            // A new recording started during the fade: leave its state alone.
+            guard !isListening, recordingStartTask == nil, !isStoppingRecording else { return }
+            skipNextAnimation = true
+            clearMessage()
+            showsPasted = false
+            isHovering = false
+            try? await Task.sleep(for: .milliseconds(30))
+            skipNextAnimation = false
         }
     }
 
@@ -524,6 +593,7 @@ struct MiniRecorderView: View {
         }
 
         onStartAccepted?()
+        isHovering = false
         cancelCommit = false
         pendingStopAfterStart = false
         isProcessing = true
@@ -578,16 +648,25 @@ struct MiniRecorderView: View {
     private func showMessage(_ message: String, seconds: Double) {
         debugLog(message)
         dismissTask?.cancel()
+        // Coming from a hidden pill (e.g. a start error): appear already as the message.
+        let fromHidden = !isListening && !isProcessing && !isShowingMessage
+        if fromHidden { skipNextAnimation = true }
         awaitingPasteResult = false
+        showsPasted = false
         isListening = false
         isProcessing = true
         isShowingMessage = true
         statusMessage = message
+        if fromHidden {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(30))
+                skipNextAnimation = false
+            }
+        }
         dismissTask = Task {
             try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
-            clearMessage()
-            onCancel?()
+            dismissAfterFade()
         }
     }
 
@@ -595,6 +674,7 @@ struct MiniRecorderView: View {
         dismissTask?.cancel()
         dismissTask = nil
         awaitingPasteResult = false
+        showsPasted = false
         guard isShowingMessage else { return }
         isShowingMessage = false
         isProcessing = false
@@ -607,11 +687,24 @@ struct MiniRecorderView: View {
         dismissTask?.cancel()
         isShowingMessage = true
         awaitingPasteResult = true
+        showsPasted = false
+        // Fallback if no paste result ever arrives: close quietly.
         dismissTask = Task {
-            try? await Task.sleep(for: .seconds(0.7))
+            try? await Task.sleep(for: .seconds(4))
             guard !Task.isCancelled else { return }
-            clearMessage()
-            onCancel?()
+            dismissAfterFade()
+        }
+    }
+
+    /// The text landed: show the checkmark for a moment, then fade out.
+    private func handlePasteSucceeded() {
+        guard awaitingPasteResult else { return }
+        dismissTask?.cancel()
+        showsPasted = true
+        dismissTask = Task {
+            try? await Task.sleep(for: .seconds(1.0))
+            guard !Task.isCancelled else { return }
+            dismissAfterFade()
         }
     }
 
