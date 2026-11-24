@@ -13,14 +13,10 @@ Visual version with logos and app sketches: `output/brand-plan-2026-11-24/index.
 ## Positioning (proposal)
 "Wispr Flow feel, nothing leaves your Mac." Three wedges: craft/feel (native Swift, instant, polished pill), bilingual Swedish + English dictation, never lose a word (local-first recovery). No account, no word caps.
 
-## Name directions (owner to pick)
-| Name | Feel | Free domain found | Note |
-|---|---|---|---|
-| Tyst | calm, dark, precise | gettyst.com | hard to pronounce for non-Swedes |
-| Ordna | warm, editorial | useordna.com | "ord" + "ordna": messy speech becomes tidy text |
-| Mumla | playful, bold | getmumla.com | easiest internationally |
+## Name and logo (owner feedback 2026-11-24)
+First round (Swedish names Tyst / Ordna / Mumla, each with its own palette, serif or mascot) was rejected outright. Owner wants: an English name, a clean, very simple minimal monochrome mark, no mascot or chat bubble, no lime/neon, no serif in the app. The app keeps its clean SF Pro look. The only liked idea: sound-wave bars where the last bar becomes a text cursor.
 
-Rejected because other dictation apps use them: Viska, Sotto, Dikta. Short .app/.com domains for all three are registered.
+Second round candidates (no dictation app found under these names, 2026-11-24): Caret, Typist (gettypist.com / usetypist.com free), Quiet (quiettype.app free). Taken by other dictation apps: Utter, Steno, Typeless, Viska, Sotto, Dikta.
 
 MIT license requires keeping the original copyright notice; credit "based on SpeakType by Karan Singh" in About and README.
 
