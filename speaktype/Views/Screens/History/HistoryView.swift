@@ -10,102 +10,78 @@ struct HistoryView: View {
     @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Header
-                HStack(alignment: .center) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("History")
-                            .font(Typography.displayLarge)
-                            .foregroundStyle(Color.textPrimary)
-                        
-                        if !historyService.items.isEmpty {
-                            Text("\(historyService.items.count) transcriptions")
-                                .font(Typography.bodySmall)
-                                .foregroundStyle(Color.textSecondary)
-                        }
+        PageScaffold(
+            title: "History",
+            subtitle: historyService.items.isEmpty ? nil : "\(historyService.items.count) transcriptions",
+            spacing: 24
+        ) {
+            if !historyService.items.isEmpty {
+                Button(role: .destructive) {
+                    showDeleteAlert = true
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 11))
+                        Text("Clear All")
                     }
-                    
-                    Spacer()
-                    
-                    if !historyService.items.isEmpty {
-                        Button(role: .destructive) {
-                            showDeleteAlert = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 12))
-                                Text("Clear All")
-                            }
-                            .font(Typography.labelSmall)
-                            .foregroundStyle(Color.textMuted)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.bgHover)
-                            .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
-                        }
-                        .buttonStyle(.stPlain)
-                    }
+                    .font(Typography.labelMedium)
+                    .foregroundStyle(Color.textMuted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
-            
-                
-                if historyService.items.isEmpty {
-                    // Empty state
-                    VStack(spacing: 20) {
-                        Image(systemName: "clock.badge.questionmark")
-                            .font(.system(size: 56))
-                            .foregroundStyle(Color.textMuted.opacity(0.4))
-                        
-                        VStack(spacing: 8) {
-                            Text("No transcriptions yet")
-                                .font(Typography.displaySmall)
-                                .foregroundStyle(Color.textPrimary)
-                            
-                            Text("Press \(selectedHotkey.configuredLabel) to start recording")
-                                .font(Typography.bodyMedium)
-                                .foregroundStyle(Color.textSecondary)
+                .buttonStyle(.stPlain)
+            }
+        } content: {
+            if historyService.items.isEmpty {
+                VStack(spacing: 6) {
+                    Text("No transcriptions yet")
+                        .font(Typography.bodyMedium)
+                        .foregroundStyle(Color.textPrimary)
+                    Text("Press \(selectedHotkey.configuredLabel) to start recording")
+                        .font(Typography.bodySmall)
+                        .foregroundStyle(Color.textMuted)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 48)
+                .themedCard(padding: 0)
+            } else {
+                // One list, hairline rows — not a stack of separate cards.
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(historyService.items.enumerated()), id: \.element.id) { index, item in
+                        if index > 0 {
+                            RowDivider().padding(.horizontal, 16)
                         }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.top, 100)
-                } else {
-                    // History items as individual cards
-                    VStack(spacing: 16) {
-                        ForEach(historyService.items) { item in
-                            HistoryCard(
-                                item: item,
-                                isExpanded: expandedItemId == item.id,
-                                onToggle: {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                        if expandedItemId == item.id {
-                                            expandedItemId = nil
-                                            audioPlayer.stop()
+                        HistoryCard(
+                            item: item,
+                            isExpanded: expandedItemId == item.id,
+                            onToggle: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                    if expandedItemId == item.id {
+                                        expandedItemId = nil
+                                        audioPlayer.stop()
+                                    } else {
+                                        expandedItemId = item.id
+                                        if let audioURL = item.audioFileURL,
+                                           FileManager.default.fileExists(atPath: audioURL.path) {
+                                            audioPlayer.loadAudio(from: audioURL)
                                         } else {
-                                            expandedItemId = item.id
-                                            if let audioURL = item.audioFileURL,
-                                               FileManager.default.fileExists(atPath: audioURL.path) {
-                                                audioPlayer.loadAudio(from: audioURL)
-                                            } else {
-                                                audioPlayer.reset()
-                                            }
+                                            audioPlayer.reset()
                                         }
                                     }
-                                },
-                                onCopy: { copyToClipboard(text: item.transcript) },
-                                onDelete: { itemPendingDeletion = item },
-                                onRetry: {
-                                    Task { await historyService.retryTranscription(id: item.id) }
-                                },
-                                isRetrying: historyService.retryingItemIDs.contains(item.id),
-                                audioPlayer: audioPlayer
-                            )
-                        }
+                                }
+                            },
+                            onCopy: { copyToClipboard(text: item.transcript) },
+                            onDelete: { itemPendingDeletion = item },
+                            onRetry: {
+                                Task { await historyService.retryTranscription(id: item.id) }
+                            },
+                            isRetrying: historyService.retryingItemIDs.contains(item.id),
+                            audioPlayer: audioPlayer
+                        )
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
                 }
+                .themedCard(padding: 0)
             }
         }
         .overlay(alignment: .bottom) {
@@ -200,7 +176,7 @@ struct HistoryView: View {
     }
 }
 
-// MARK: - History Card Component
+// MARK: - History Row Component
 
 struct HistoryCard: View {
     let item: HistoryItem
@@ -211,271 +187,182 @@ struct HistoryCard: View {
     let onRetry: () -> Void
     let isRetrying: Bool
     @ObservedObject var audioPlayer: AudioPlayerService
+    @State private var isHovered = false
+
+    private let dateColumnWidth: CGFloat = 40
 
     private var audioFileExists: Bool {
         guard let audioURL = item.audioFileURL else { return false }
         return FileManager.default.fileExists(atPath: audioURL.path)
     }
-    
+
     var wordCount: Int {
         item.transcript.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Main row
-            Button(action: onToggle) {
-                HStack(spacing: 16) {
-                    // Date badge
-                    VStack(alignment: .center, spacing: 2) {
+            HStack(alignment: .top, spacing: 16) {
+                    // Date
+                    VStack(alignment: .center, spacing: 1) {
                         Text(item.date.formatted(.dateTime.day()))
-                            .font(Typography.statValueM)
+                            .font(Typography.headlineMedium)
+                            .monospacedDigit()
                             .foregroundStyle(Color.textPrimary)
                         Text(item.date.formatted(.dateTime.month(.abbreviated)))
                             .font(Typography.captionSmall)
                             .foregroundStyle(Color.textMuted)
-                            .textCase(.uppercase)
                     }
-                    .frame(width: 48)
-                    
-                    // Content
-                    VStack(alignment: .leading, spacing: 8) {
-                        // Transcript preview
+                    .frame(width: dateColumnWidth)
+
+                    VStack(alignment: .leading, spacing: 6) {
                         if item.isFailed {
                             HStack(spacing: 6) {
                                 Image(systemName: "exclamationmark.triangle")
-                                    .font(.system(size: 12))
+                                    .font(.system(size: 11))
                                     .foregroundStyle(Color.accentWarning)
                                 Text("Transcription failed")
                                     .font(Typography.bodyMedium)
                                     .foregroundStyle(Color.textSecondary)
                             }
+                        } else if isExpanded {
+                            // Same spot as the preview, so expanding only grows the text.
+                            Text(item.transcript)
+                                .font(Typography.bodyMedium)
+                                .foregroundStyle(Color.textPrimary)
+                                .lineSpacing(2)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
                             Text(item.transcript)
                                 .font(Typography.bodyMedium)
                                 .foregroundStyle(Color.textPrimary)
                                 .lineLimit(2)
-                                .lineSpacing(4)
+                                .lineSpacing(2)
+                                .multilineTextAlignment(.leading)
                         }
-                        
-                        // Metadata
-                        HStack(spacing: 12) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "clock")
-                                    .font(.system(size: 10))
-                                Text(item.date.formatted(date: .omitted, time: .shortened))
-                            }
-                            .font(Typography.captionSmall)
+
+                        Text([
+                            item.date.formatted(date: .omitted, time: .shortened),
+                            (wordCount == 1 ? "1 word" : "\(wordCount) words"),
+                            formatDurationShort(item.duration),
+                        ].joined(separator: "  ·  "))
+                            .font(Typography.caption)
+                            .monospacedDigit()
                             .foregroundStyle(Color.textMuted)
-                            
-                            Text("•")
-                                .font(Typography.captionSmall)
-                                .foregroundStyle(Color.textMuted.opacity(0.5))
-                            
-                            HStack(spacing: 4) {
-                                Image(systemName: "text.word.spacing")
-                                    .font(.system(size: 10))
-                                Text("\(wordCount) words")
-                            }
-                            .font(Typography.captionSmall)
-                            .foregroundStyle(Color.textMuted)
-                            
-                            Text("•")
-                                .font(Typography.captionSmall)
-                                .foregroundStyle(Color.textMuted.opacity(0.5))
-                            
-                            HStack(spacing: 4) {
-                                Image(systemName: "waveform")
-                                    .font(.system(size: 10))
-                                Text(formatDurationShort(item.duration))
-                            }
-                            .font(Typography.captionSmall)
-                            .foregroundStyle(Color.textMuted)
-                        }
                     }
-                    
-                    Spacer()
-                    
-                    // Expand indicator
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.textMuted)
-                }
-                .padding(20)
-                .contentShape(Rectangle())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button(action: onToggle) {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.textMuted)
+                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                            .opacity(isHovered || isExpanded ? 1 : 0.4)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.stPlain)
+                    .padding(.top, -3)
+                    .accessibilityLabel(isExpanded ? "Collapse" : "Expand")
             }
-            .buttonStyle(.stPlain)
-            
-            // Expanded content
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+            // Whole row opens it; once open, clicks are free for selecting text (chevron closes).
+            .onTapGesture { if !isExpanded { onToggle() } }
+            .onHover { isHovered = $0 }
+
             if isExpanded {
-                VStack(alignment: .leading, spacing: 20) {
-                    Divider()
-                        .padding(.horizontal, 20)
-                    
-                    VStack(alignment: .leading, spacing: 16) {
-                        // Full transcript (or why it failed)
-                        if let failureReason = item.failureReason {
-                            Text(failureReason)
-                                .font(Typography.bodyMedium)
-                                .foregroundStyle(Color.textSecondary)
-                                .textSelection(.enabled)
-                        } else {
-                            Text(item.transcript)
-                                .font(Typography.bodyLarge)
-                                .foregroundStyle(Color.textPrimary)
-                                .textSelection(.enabled)
-                                .lineSpacing(6)
-                        }
-                        
-                        // Actions row
-                        HStack(spacing: 12) {
-                            if item.isFailed {
-                                Button(action: onRetry) {
-                                    HStack(spacing: 6) {
-                                        if isRetrying {
-                                            ProgressView()
-                                                .controlSize(.small)
-                                        } else {
-                                            Image(systemName: "arrow.clockwise")
-                                                .font(.system(size: 12))
-                                        }
-                                        Text(isRetrying ? "Retrying…" : "Retry")
-                                            .font(Typography.labelMedium)
-                                    }
-                                    .foregroundStyle(Color.textSecondary)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(Color.bgHover)
-                                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
-                                }
-                                .buttonStyle(.stPlain)
-                                .disabled(isRetrying || !audioFileExists)
-                            } else {
-                            Button(action: onCopy) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "doc.on.doc")
-                                        .font(.system(size: 12))
-                                    Text("Copy")
-                                        .font(Typography.labelMedium)
-                                }
-                                .foregroundStyle(Color.textSecondary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(Color.bgHover)
-                                .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
-                            }
-                            .buttonStyle(.stPlain)
-                            }
-                            
-                            Button(role: .destructive, action: onDelete) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "trash")
-                                        .font(.system(size: 12))
-                                    Text("Delete")
-                                        .font(Typography.labelMedium)
-                                }
-                                .foregroundStyle(Color.textSecondary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(Color.bgHover)
-                                .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
-                            }
-                            .buttonStyle(.stPlain)
-                            
-                            if let audioURL = item.audioFileURL, audioFileExists {
-                                Button(action: {
-                                    if audioPlayer.isPlaying {
-                                        audioPlayer.pause()
-                                    } else {
-                                        audioPlayer.play()
-                                    }
-                                }) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
-                                            .font(.system(size: 12))
-                                        Text(audioPlayer.isPlaying ? "Pause" : "Play Audio")
-                                            .font(Typography.labelMedium)
-                                    }
-                                    .foregroundStyle(Color.textSecondary)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(Color.bgHover)
-                                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
-                                }
-                                .buttonStyle(.stPlain)
-                                
-                                Button(action: {
-                                    NSWorkspace.shared.activateFileViewerSelecting([audioURL])
-                                }) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "folder")
-                                            .font(.system(size: 12))
-                                        Text("Show in Finder")
-                                            .font(Typography.labelMedium)
-                                    }
-                                    .foregroundStyle(Color.textSecondary)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(Color.bgHover)
-                                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
-                                }
-                                .buttonStyle(.stPlain)
-                            } else if item.audioFileURL != nil {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "exclamationmark.triangle")
-                                        .font(.system(size: 12))
-                                    Text("Audio file missing")
-                                        .font(Typography.labelMedium)
-                                }
-                                .foregroundStyle(Color.textMuted)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(Color.bgHover.opacity(0.8))
-                                .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous))
-                            }
-                        }
-                        
-                        // Audio waveform (if available)
-                        if let audioURL = item.audioFileURL, audioFileExists {
-                            VStack(spacing: 12) {
-                                Divider()
-                                
-                                WaveformView(
-                                    audioURL: audioURL,
-                                    currentTime: $audioPlayer.currentTime,
-                                    duration: $audioPlayer.duration
-                                )
-                                .frame(height: 60)
-                            }
-                        }
-                        
-                        // Metadata
-                        if item.modelUsed != nil {
-                            Divider()
-                            
-                            HStack(spacing: 12) {
-                                if let model = item.modelUsed {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "cpu")
-                                            .font(.system(size: 11))
-                                        Text(model)
-                                    }
-                                    .font(Typography.captionSmall)
-                                    .foregroundStyle(Color.textMuted)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 20)
-                }
+                expandedContent
+                    .padding(.leading, 16 + dateColumnWidth + 16)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 16)
             }
         }
-        // One card system — same themed glass chrome as everywhere else (no inner padding;
-        // the row/expanded content manage their own).
-        .themedCard(padding: 0)
+        .background(isHovered && !isExpanded ? Color.bgHover.opacity(0.4) : Color.clear)
     }
-    
+
+    @ViewBuilder
+    private var expandedContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let failureReason = item.failureReason {
+                Text(failureReason)
+                    .font(Typography.bodyMedium)
+                    .foregroundStyle(Color.textSecondary)
+                    .textSelection(.enabled)
+            }
+
+            if let audioURL = item.audioFileURL, audioFileExists {
+                WaveformView(
+                    audioURL: audioURL,
+                    currentTime: $audioPlayer.currentTime,
+                    duration: $audioPlayer.duration
+                )
+                .frame(height: 44)
+            }
+
+            HStack(spacing: 8) {
+                if item.isFailed {
+                    Button(action: onRetry) {
+                        HStack(spacing: 6) {
+                            if isRetrying {
+                                ProgressView().controlSize(.mini)
+                            }
+                            Text(isRetrying ? "Retrying…" : "Retry")
+                        }
+                    }
+                    .buttonStyle(.stSecondary)
+                    .disabled(isRetrying || !audioFileExists)
+                } else {
+                    Button("Copy", action: onCopy)
+                        .buttonStyle(.stSecondary)
+                }
+
+                if let audioURL = item.audioFileURL, audioFileExists {
+                    Button(audioPlayer.isPlaying ? "Pause" : "Play Audio") {
+                        if audioPlayer.isPlaying {
+                            audioPlayer.pause()
+                        } else {
+                            audioPlayer.play()
+                        }
+                    }
+                    .buttonStyle(.stSecondary)
+
+                    Button("Show in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([audioURL])
+                    }
+                    .buttonStyle(.stSecondary)
+                } else if item.audioFileURL != nil {
+                    Text("Audio file missing")
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.textMuted)
+                }
+
+                Spacer(minLength: 8)
+
+                if let model = item.modelUsed {
+                    Text(model)
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.textMuted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.textMuted)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.stPlain)
+                .help("Delete")
+                .accessibilityLabel("Delete")
+            }
+        }
+    }
+
     private func formatDurationShort(_ duration: TimeInterval) -> String {
         let seconds = Int(duration)
         if seconds < 60 {

@@ -19,132 +19,39 @@ struct TranscribeAudioView: View {
     @State private var actionError: String?
     
     var body: some View {
-        VStack(spacing: 24) {
-            // Header
-            VStack(spacing: 12) {
-                Text("Transcribe Audio")
-                    .font(Typography.displayLarge)
-                    .foregroundStyle(Color.textPrimary)
-                
-                Text("Upload an audio or video file to transcribe")
-                    .font(Typography.bodyMedium)
+        PageScaffold(
+            title: "Transcribe Audio",
+            subtitle: "Upload an audio or video file to transcribe",
+            spacing: 24
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                dropZone
+
+                Toggle("Polish new transcripts", isOn: $polishNewTranscripts)
+                    .font(Typography.bodySmall)
                     .foregroundStyle(Color.textSecondary)
-            }
-            .padding(.top, 32)
-            
-            // Main Drop Zone / Action Area
-            ZStack {
-                RoundedRectangle(cornerRadius: Constants.UI.radiusCard, style: .continuous)
-                    .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [8]))
-                    .foregroundStyle(Color.border)
-                    .frame(maxWidth: .infinity, maxHeight: 360)
-                    .contentShape(Rectangle())
-                    .clickActionPointerCursor()
-                    .onTapGesture {
-                        showFileImporter = true
-                    }
-                    .onDrop(of: [.audio, .movie, .fileURL], isTargeted: nil) { providers in
-                        validateAndTranscribe(providers: providers)
-                        return true
-                    }
-                
-                VStack(spacing: 20) {
-                    Image(systemName: "arrow.down.doc")
-                        .font(.system(size: 40))
-                        .foregroundStyle(Color.textMuted)
-                    
-                    Text("Drop audio or video file here")
-                        .font(Typography.headlineSmall)
-                        .foregroundStyle(Color.textPrimary)
-                    
-                    Button(action: {
-                        showFileImporter = true
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "square.and.arrow.up")
-                            Text("Upload Audio File")
-                        }
-                    }
-                    .buttonStyle(.stSecondary)
-                    
-                    Text("or")
-                        .font(Typography.bodySmall)
-                        .foregroundStyle(Color.textMuted)
-                    
-                    if audioRecorder.isRecording {
-                        Button(action: {
-                            Task {
-                                if let url = await audioRecorder.stopRecording() {
-                                    startTranscription(url: url, ownsFile: true)
-                                }
-                            }
-                        }) {
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: 8, height: 8)
-                                Text("Stop Recording")
-                            }
-                            .font(Typography.bodyMedium)
-                            .frame(minWidth: 140)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 12)
-                            .background(Color.accentError)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous))
-                        }
-                        .buttonStyle(.stPlain)
-                        .frame(width: 170, height: 42)
-                    } else if isTranscribing {
-                        VStack(spacing: 8) {
-                            ProgressView()
-                            Text(transcribingStatusText)
-                                .font(Typography.bodySmall)
-                                .foregroundStyle(Color.textSecondary)
-                        }
-                    } else {
-                        Button(action: {
-                            Task { _ = await audioRecorder.startRecording() }
-                        }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "mic.fill")
-                                Text("Start Recording")
-                            }
-                        }
-                        .buttonStyle(.stAction)
-                        .frame(width: 170, height: 42)
-                    }
-                }
-            }
-            .padding(.horizontal, 24)
+                    .toggleStyle(.checkbox)
 
-            Toggle("Polish new transcripts", isOn: $polishNewTranscripts)
-                .font(Typography.bodyMedium)
-                .toggleStyle(.checkbox)
-                .padding(.horizontal, 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            
-            // Transcription Result
-            if !historyService.items.isEmpty {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(historyService.items.filter { !$0.isFailed }) { item in
-                            transcriptCard(item)
-                        }
-                    }
-                    .padding(.horizontal, 24)
+                if let actionError {
+                    Text(actionError)
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.accentError)
                 }
             }
 
-            if let actionError {
-                Text(actionError)
-                    .font(Typography.captionSmall)
-                    .foregroundStyle(Color.accentError)
+            let transcripts = historyService.items.filter { !$0.isFailed }
+            if !transcripts.isEmpty {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(transcripts.enumerated()), id: \.element.id) { index, item in
+                        if index > 0 {
+                            RowDivider().padding(.horizontal, 16)
+                        }
+                        transcriptCard(item)
+                    }
+                }
+                .themedCard(padding: 0)
             }
-            
-            Spacer()
         }
-        .background(Color.clear)
         .fileImporter(
             isPresented: $showFileImporter,
             allowedContentTypes: [.audio, .movie],
@@ -167,6 +74,78 @@ struct TranscribeAudioView: View {
                 }
                 }
             }
+        }
+    }
+
+    // MARK: - Drop zone
+
+    private var dropZone: some View {
+        VStack(spacing: 16) {
+            Text("Drop audio or video file here")
+                .font(Typography.bodyMedium)
+                .foregroundStyle(Color.textSecondary)
+
+            HStack(spacing: 10) {
+                Button(action: { showFileImporter = true }) {
+                    Text("Upload Audio File")
+                }
+                .buttonStyle(.stSecondary)
+
+                Text("or")
+                    .font(Typography.bodySmall)
+                    .foregroundStyle(Color.textMuted)
+
+                if audioRecorder.isRecording {
+                    Button(action: {
+                        Task {
+                            if let url = await audioRecorder.stopRecording() {
+                                startTranscription(url: url, ownsFile: true)
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Circle().fill(Color.white).frame(width: 7, height: 7)
+                            Text("Stop Recording")
+                        }
+                        .font(Typography.labelMedium.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(
+                            Color.accentError,
+                            in: RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous)
+                        )
+                    }
+                    .buttonStyle(.stPlain)
+                } else if isTranscribing {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(transcribingStatusText)
+                            .font(Typography.bodySmall)
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                } else {
+                    Button(action: {
+                        Task { _ = await audioRecorder.startRecording() }
+                    }) {
+                        Text("Start Recording")
+                    }
+                    .buttonStyle(.stAction)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 180)
+        .background(
+            RoundedRectangle(cornerRadius: Constants.UI.radiusCard, style: .continuous)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [6, 5]))
+                .foregroundStyle(Color.border)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { showFileImporter = true }
+        .onDrop(of: [.audio, .movie, .fileURL], isTargeted: nil) { providers in
+            validateAndTranscribe(providers: providers)
+            return true
         }
     }
     
@@ -271,37 +250,60 @@ struct TranscribeAudioView: View {
     private func transcriptCard(_ item: HistoryItem) -> some View {
         let version = displayedVersion[item.id] ?? (item.polishedTranscript == nil ? .raw : .polished)
         let text = text(for: item, version: version)
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(item.date.formatted(date: .abbreviated, time: .shortened))
-                    .font(Typography.captionSmall)
-                    .foregroundStyle(Color.textMuted)
-                Spacer()
-                if workingItemID == item.id { ProgressView().controlSize(.small) }
-            }
-
+        VStack(alignment: .leading, spacing: 10) {
             Text(text)
                 .font(Typography.bodyMedium)
                 .foregroundStyle(Color.textPrimary)
+                .lineSpacing(2)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 8) {
-                actionButton("Raw", icon: "text.alignleft") { displayedVersion[item.id] = .raw }
-                actionButton("Polish", icon: "wand.and.stars") { polish(item) }
-                actionButton("Summary", icon: "list.bullet.rectangle") { summarize(item) }
-                actionButton("Markdown", icon: "square.and.arrow.down") { exportMarkdown(item) }
+            HStack(spacing: 6) {
+                Text(item.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(Typography.caption)
+                    .foregroundStyle(Color.textMuted)
+                if workingItemID == item.id { ProgressView().controlSize(.mini) }
                 Spacer()
+                actionButton("Raw", icon: "text.alignleft", help: "Show the raw transcript", isActive: false) {
+                    displayedVersion[item.id] = .raw
+                }
+                actionButton("Polish", icon: "wand.and.stars", help: "Polish this transcript", isActive: false) {
+                    polish(item)
+                }
+                actionButton("Summary", icon: "list.bullet.rectangle", help: "Summarize this transcript", isActive: false) {
+                    summarize(item)
+                }
+                actionButton("Markdown", icon: "square.and.arrow.down", help: "Export as a Markdown file", isActive: false) {
+                    exportMarkdown(item)
+                }
             }
             .disabled(workingItemID != nil)
         }
-        .themedCard()
+        .padding(16)
     }
 
-    private func actionButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Label(title, systemImage: icon).frame(minWidth: 92) }
-            .buttonStyle(.stSecondary)
-            .frame(height: 36)
+    /// Compact row action. The version currently on screen (Raw / Polish / Summary) reads as selected.
+    private func actionButton(
+        _ title: String, icon: String, help: String, isActive: Bool, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 10))
+                Text(title)
+            }
+            .font(Typography.labelSmall)
+            .foregroundStyle(isActive ? Color.textPrimary : Color.textSecondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isActive ? Color.bgHover : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.stPlain)
+        .help(help)
     }
 
     private func text(for item: HistoryItem, version: TranscriptVersion) -> String {

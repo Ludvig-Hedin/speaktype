@@ -78,7 +78,7 @@ struct WritingPolishSettingsSection: View {
                         if let url = URL(string: urlStr) { NSWorkspace.shared.open(url) }
                     }
                     .buttonStyle(.stPlain)
-                    .font(Typography.captionSmall)
+                    .font(Typography.caption)
                     .foregroundStyle(Color.accentBlue)
                 }
             }
@@ -86,14 +86,14 @@ struct WritingPolishSettingsSection: View {
             if cleanupKeySaved {
                 HStack(spacing: 10) {
                     Label("Key saved", systemImage: "checkmark.seal.fill")
-                        .font(Typography.captionSmall)
+                        .font(Typography.caption)
                         .foregroundStyle(Color.accentSuccess)
                     Spacer()
                     Button("Replace") { cleanupKeySaved = false; cleanupKeyInput = "" }
-                        .buttonStyle(.stPlain).font(Typography.captionSmall)
+                        .buttonStyle(.stPlain).font(Typography.caption)
                         .foregroundStyle(Color.textSecondary)
                     Button("Remove", role: .destructive) { removeCleanupKey() }
-                        .buttonStyle(.stPlain).font(Typography.captionSmall)
+                        .buttonStyle(.stPlain).font(Typography.caption)
                         .foregroundStyle(Color.accentError)
                 }
             } else {
@@ -108,7 +108,7 @@ struct WritingPolishSettingsSection: View {
 
             if !cleanupKeyStatus.isEmpty {
                 Text(cleanupKeyStatus)
-                    .font(Typography.captionSmall)
+                    .font(Typography.caption)
                     .foregroundStyle(Color.textMuted)
             }
         }
@@ -139,23 +139,24 @@ struct WritingPolishSettingsSection: View {
             )
 
             VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text("Polish speech into clear writing")
-                        .font(Typography.bodyMedium)
-                        .foregroundStyle(Color.textPrimary)
-                    Spacer()
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Polish speech into clear writing")
+                            .font(Typography.bodyMedium)
+                            .foregroundStyle(Color.textPrimary)
+                        Text(configSummary)
+                            .font(Typography.caption)
+                            .foregroundStyle(Color.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
                     Toggle("", isOn: $writingPolishEnabled)
                         .labelsHidden()
                 }
                 .clickActionPointerCursor()
 
-                Text(configSummary)
-                    .font(Typography.captionSmall)
-                    .foregroundStyle(Color.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-
                 // Cleanup engine (Part 1): OpenRouter (default) / OpenAI / Local Ollama.
-                Divider().overlay(Color.border.opacity(0.4))
+                RowDivider()
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Cleanup engine")
                         .font(Typography.labelMedium)
@@ -193,7 +194,7 @@ struct WritingPolishSettingsSection: View {
                                 }
                                 .menuCapsule()
                             }
-                            .menuStyle(.borderlessButton)
+                            .appMenuStyle()
                             .fixedSize()
                             .clickActionPointerCursor()
                         }
@@ -201,12 +202,12 @@ struct WritingPolishSettingsSection: View {
                         cleanupKeyField
 
                         Text("Keeps the language of your dictation. OpenRouter requests use a no-training data policy.")
-                            .font(Typography.captionSmall)
+                            .font(Typography.caption)
                             .foregroundStyle(Color.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
                         Text("Local cleanup uses your Ollama settings below. It also serves as the offline fallback when a cloud engine is unreachable.")
-                            .font(Typography.captionSmall)
+                            .font(Typography.caption)
                             .foregroundStyle(Color.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -248,7 +249,7 @@ struct WritingPolishSettingsSection: View {
 
                     if let ping = ollamaPingResult {
                         Text(ping)
-                            .font(Typography.captionSmall)
+                            .font(Typography.caption)
                             .foregroundStyle(
                                 ping.hasPrefix("OK") ? Color.accentSuccess : Color.textSecondary
                             )
@@ -270,7 +271,7 @@ struct WritingPolishSettingsSection: View {
                             .textFieldStyle(.app)
                             .disabled(!writingPolishEnabled)
                         Text("Override the catalog with any tag Ollama knows, e.g. llama3.2:3b.")
-                            .font(Typography.captionSmall)
+                            .font(Typography.caption)
                             .foregroundStyle(Color.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -282,13 +283,13 @@ struct WritingPolishSettingsSection: View {
                                 .foregroundStyle(Color.textPrimary)
                             Spacer()
                             Text(String(format: "%.2f", ollamaTemperature))
-                                .font(Typography.captionSmall)
+                                .font(Typography.caption)
                                 .foregroundStyle(Color.textMuted)
                         }
                         Slider(value: $ollamaTemperature, in: 0 ... 1, step: 0.05)
                             .disabled(!writingPolishEnabled)
                         Text("Lower = stick closer to your words; slightly higher can read smoother.")
-                            .font(Typography.captionSmall)
+                            .font(Typography.caption)
                             .foregroundStyle(Color.textMuted)
                     }
                 }
@@ -323,13 +324,13 @@ struct WritingPolishSettingsSection: View {
                             }
                             .menuCapsule()
                         }
-                        .menuStyle(.borderlessButton)
+                        .appMenuStyle()
                         .clickActionPointerCursor()
                         .disabled(!writingPolishEnabled)
                     }
 
                     Text(selectedPreset.menuDescription)
-                        .font(Typography.captionSmall)
+                        .font(Typography.caption)
                         .foregroundStyle(Color.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -345,15 +346,19 @@ struct WritingPolishSettingsSection: View {
                 }
                 .clickActionPointerCursor()
 
+                RowDivider()
+
                 Text(cleanupProvider.isRemote
                     ? "Writing polish uses your selected cloud provider. If cleanup fails, you still get the raw transcript."
                     : "Writing polish calls your Ollama server on this Mac. If Ollama is down or the model is missing, you still get the raw transcript."
                 )
-                .font(Typography.captionSmall)
+                .font(Typography.caption)
                 .foregroundStyle(Color.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
                 .stCompactUI()
             }
+            .padding(.top, 4)
+            .padding(.bottom, 11)
         }
         .onAppear {
             if cleanupProvider == .openAI {

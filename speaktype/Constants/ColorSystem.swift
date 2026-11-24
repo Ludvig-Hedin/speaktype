@@ -92,6 +92,16 @@ extension Color {
                     : NSColor(hex: "E5E5EA")  // systemGray5 (light)
             }))
 
+    /// Selected segment inside a `bgHover` track (Hold/Toggle, Week/Month/Year).
+    static let segmentSelected = Color(
+        nsColor: NSColor(
+            name: "segmentSelected",
+            dynamicProvider: { appearance in
+                appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                    ? NSColor(hex: "48484A")  // systemGray3 (dark)
+                    : NSColor(hex: "FFFFFF")
+            }))
+
     // MARK: - Borders
 
     static let border = Color(
@@ -297,31 +307,27 @@ struct ThemedCardModifier: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         return content
             .padding(padding)
-            .background {
-                ZStack {
-                    shape.fill(.ultraThinMaterial)
-                    shape.fill(
-                        colorScheme == .dark
-                            ? Color.white.opacity(0.04)
-                            : Color.white.opacity(0.72)
-                    )
-                }
-            }
+            // Flat surface: a whisper of fill + one hairline. No material, no shadow —
+            // on a white page those read as noise rather than depth.
+            .background(
+                shape.fill(
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.035)
+                        : Color.black.opacity(0.018)
+                )
+            )
             .clipShape(shape)
-            // Single hairline — no gradient rim. Reads "system chrome", not "AI card".
             .overlay(
                 shape.strokeBorder(
-                    Color.border.opacity(colorScheme == .dark ? 0.5 : 0.6),
+                    Color.border.opacity(colorScheme == .dark ? 0.55 : 0.7),
                     lineWidth: 0.5
                 )
             )
-            // One soft shadow.
-            .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.06), radius: 10, x: 0, y: 4)
     }
 }
 
 extension View {
-    /// Glass-tinted card: material + neutral tint + hairline — reads “system chrome”, not flat dashboard.
+    /// The app's one card: faint fill + single hairline, no shadow.
     func themedCard(
         padding: CGFloat = Constants.UI.cardPadding,
         cornerRadius: CGFloat = Constants.UI.radiusCard
@@ -352,14 +358,10 @@ struct STButtonSecondary: ButtonStyle {
         configuration.label
             .font(Typography.labelMedium)
             .foregroundStyle(Color.textPrimary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(.thinMaterial, in: Capsule(style: .continuous))
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(Color.border.opacity(0.5), lineWidth: 0.5)
-            )
-            .opacity(configuration.isPressed ? 0.85 : 1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .controlChrome()
+            .opacity(configuration.isPressed ? 0.75 : 1)
             .modifier(ClickActionPointerCursorModifier())
     }
 }
@@ -370,11 +372,11 @@ struct STButtonAction: ButtonStyle {
         configuration.label
             .font(Typography.labelMedium.weight(.semibold))
             .foregroundStyle(Color.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
             .background(
                 Color.accentBlue,
-                in: RoundedRectangle(cornerRadius: Constants.UI.radiusControl, style: .continuous)
+                in: RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous)
             )
             .opacity(configuration.isPressed ? 0.86 : 1)
             .modifier(ClickActionPointerCursorModifier())
@@ -394,6 +396,23 @@ struct STButtonGhost: ButtonStyle {
             )
             .modifier(ClickActionPointerCursorModifier())
     }
+}
+
+/// Shared chrome for secondary buttons and menu fields: card fill, one hairline, small radius.
+struct ControlChrome: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Constants.UI.radiusSmall, style: .continuous)
+        content
+            .background(shape.fill(colorScheme == .dark ? Color.white.opacity(0.07) : Color.bgCard))
+            .overlay(shape.strokeBorder(Color.border.opacity(colorScheme == .dark ? 0.8 : 1), lineWidth: 0.5))
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0 : 0.04), radius: 0.5, y: 0.5)
+    }
+}
+
+extension View {
+    func controlChrome() -> some View { modifier(ControlChrome()) }
 }
 
 /// Plain label with pointing-hand cursor (replaces `.plain` for clickable controls).

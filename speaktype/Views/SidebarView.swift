@@ -51,15 +51,15 @@ struct SidebarView: View {
 // MARK: - Constants
 
 private enum SidebarConstants {
-    static let width: CGFloat = 260
-    static let topInset: CGFloat = 52
-    static let horizontalPadding: CGFloat = 20
-    static let itemHorizontalPadding: CGFloat = 14
-    static let headerBottomPadding: CGFloat = 28
+    static let width: CGFloat = 220
+    static let topInset: CGFloat = 48
+    static let horizontalPadding: CGFloat = 22
+    static let itemHorizontalPadding: CGFloat = 12
+    static let headerBottomPadding: CGFloat = 20
     static let itemSpacing: CGFloat = 2
     static let bottomPadding: CGFloat = 20
-    static let iconSize: CGFloat = 17
-    static let itemVerticalPadding: CGFloat = 10
+    static let iconSize: CGFloat = 14
+    static let itemVerticalPadding: CGFloat = 7
     static let itemCornerRadius: CGFloat = Constants.UI.sidebarItemCornerRadius
 }
 
@@ -71,8 +71,8 @@ private struct SidebarHeader: View {
             Image("AppLogo")
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: 26, height: 26)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .frame(width: 22, height: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             Text("SpeakType")
                 .font(Typography.sidebarLogo)
@@ -93,11 +93,11 @@ struct SidebarButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Image(systemName: item.icon)
                     .font(.system(size: SidebarConstants.iconSize))
                     .foregroundStyle(isSelected ? Color.textPrimary : Color.textMuted)
-                    .frame(width: 20)
+                    .frame(width: 18)
 
                 Text(item.rawValue)
                     .font(isSelected ? Typography.sidebarItemActive : Typography.sidebarItem)
@@ -105,7 +105,7 @@ struct SidebarButton: View {
 
                 Spacer()
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
             .padding(.vertical, SidebarConstants.itemVerticalPadding)
             .background(
                 RoundedRectangle(cornerRadius: SidebarConstants.itemCornerRadius, style: .continuous)

@@ -26,12 +26,18 @@ enum Constants {
         /// Controls: buttons, menus, rows, permission items.
         static let radiusControl: CGFloat = 10.0
         /// Large surfaces: cards, panels, sheets — continuous corners.
-        static let radiusCard: CGFloat = 16.0
+        static let radiusCard: CGFloat = 12.0
 
         /// Legacy aliases (kept so existing call sites compile) — map onto the scale above.
         static let cornerRadius: CGFloat = radiusControl
         static let cardCornerRadius: CGFloat = radiusCard
-        static let sidebarItemCornerRadius: CGFloat = radiusControl
+        static let sidebarItemCornerRadius: CGFloat = radiusSmall
+
+        /// Content column: every screen reads as one centered column (Linear / Voicenotes),
+        /// never edge-to-edge cards on a wide window.
+        static let contentMaxWidth: CGFloat = 760
+        static let pageTopPadding: CGFloat = 40
+        static let pageHorizontalPadding: CGFloat = 32
 
         // Spacing scale — strict 4/8 grid.
         static let space1: CGFloat = 4.0
