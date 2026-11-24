@@ -4,8 +4,7 @@ import Foundation
 ///
 /// These slugs are a STARTING POINT — OpenRouter IDs move monthly. `ModelValidationService`
 /// fetches the live `/models` list on startup, marks unresolved slugs, and the picker disables
-/// them. The built-in default is `google/gemini-flash-latest`, which auto-tracks Google's
-/// current flash so it never goes stale.
+/// them. The default is pinned to the Haiku version evaluated for mixed-language cleanup.
 struct CleanupModel: Identifiable, Equatable, Hashable {
     let id: String            // provider model_id
     let provider: CleanupProvider
@@ -14,14 +13,14 @@ struct CleanupModel: Identifiable, Equatable, Hashable {
 
     var displayName: String { label }
 
-    /// Default cleanup model — resolves live; auto-tracks the current Gemini flash.
-    static let defaultModelID = "google/gemini-flash-latest"
+    static let defaultModelID = "anthropic/claude-haiku-5.5"
 
-    /// Ordered catalog. First the safe "latest" aliases, then the user's requested slugs
-    /// (some may not resolve today — the validator will flag/disable those).
+    /// Ordered catalog. The first available entry can serve as the fallback.
     static let catalog: [CleanupModel] = [
+        CleanupModel(id: defaultModelID, provider: .openRouter,
+                     label: "Claude Haiku 5.5", note: "Recommended for Swedish and English"),
         CleanupModel(id: "google/gemini-flash-latest", provider: .openRouter,
-                     label: "Gemini Flash (latest) — default", note: "Best Swedish + latency balance"),
+                     label: "Gemini Flash (latest)", note: "Fast multilingual cleanup"),
         CleanupModel(id: "google/gemini-3.5-flash", provider: .openRouter,
                      label: "Gemini 3.5 Flash", note: "Pinned Gemini flash"),
         CleanupModel(id: "qwen/qwen3.6-flash", provider: .openRouter,

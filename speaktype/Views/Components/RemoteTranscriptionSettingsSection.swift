@@ -9,6 +9,7 @@ struct RemoteTranscriptionSettingsSection: View {
     @AppStorage(TranscriptionModeUserDefaults.remoteProviderKey) private var providerRaw = ""
     @AppStorage(TranscriptionModeUserDefaults.remoteModelKey) private var modelId = ""
     @AppStorage(TranscriptionModeUserDefaults.consentKey) private var consent = false
+    @AppStorage(DictationHints.dictionaryKey) private var dictionary = ""
 
     @State private var apiKeyInput = ""
     @State private var keySaved = false
@@ -41,6 +42,9 @@ struct RemoteTranscriptionSettingsSection: View {
                         modelPicker
                         apiKeyField
                         consentToggle
+                        if RemoteTranscriptionModel.model(id: resolvedModelId)?.supportsDictationHints == true {
+                            dictionaryField
+                        }
                     }
                     privacyNote
                 }
@@ -49,6 +53,9 @@ struct RemoteTranscriptionSettingsSection: View {
             .padding(.bottom, 11)
         }
         .onAppear(perform: refreshKeyState)
+        .onChange(of: mode) { _, mode in
+            ModelStorage.startMigrationIfNeeded(for: mode)
+        }
         .onReceive(NotificationCenter.default.publisher(for: RemoteAPIKeyStore.didChangeNotification)) { _ in
             refreshKeyState()
         }
@@ -204,6 +211,31 @@ struct RemoteTranscriptionSettingsSection: View {
             .font(Typography.caption)
             .foregroundStyle(Color.textMuted)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var dictionaryField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Personal dictionary")
+                .font(Typography.labelMedium)
+                .foregroundStyle(Color.textSecondary)
+            TextEditor(text: $dictionary)
+                .font(Typography.bodySmall)
+                .foregroundStyle(Color.textPrimary)
+                .scrollContentBackground(.hidden)
+                .padding(4)
+                .frame(height: 82)
+                .background(Color.bgCard, in: RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(Color.border.opacity(0.5))
+                        .allowsHitTesting(false)
+                }
+                .accessibilityLabel("Personal dictionary")
+                .accessibilityIdentifier("dictationDictionary")
+            Text("Add names and terms, one per line. Up to \(DictationHints.maximumTerms) entries are shared with GPT Transcribe only when you use it for cloud transcription.")
+                .font(Typography.caption)
+                .foregroundStyle(Color.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     // MARK: - Actions

@@ -187,14 +187,11 @@ class WhisperService {
         }
 
         do {
-            // Resolves to Application Support, or the legacy Documents location for users
-            // who downloaded models before the move (so an upgrade never orphans a model).
-            let modelFolderPath = ModelStorage.modelDirectory(for: variant).path
-
             // Use WhisperKitConfig with optimized settings
             let config = WhisperKitConfig(
                 model: variant,
-                modelFolder: modelFolderPath,
+                modelFolder: ModelStorage.modelDirectory(for: variant).path,
+                tokenizerFolder: ModelStorage.downloadBase,
                 computeOptions: ModelComputeOptions(),  // Uses GPU + Neural Engine
                 verbose: false,
                 logLevel: .error,
@@ -343,7 +340,7 @@ class WhisperService {
     private func decodingOptions(for language: String) -> DecodingOptions {
         var options = DecodingOptions()
         options.task = .transcribe
-        options.language = (language == "auto") ? nil : language
+        options.language = DictationHints.singleLanguage(language)
         return options
     }
 

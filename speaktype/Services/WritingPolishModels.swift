@@ -10,7 +10,7 @@ enum WritingPolishUserDefaults {
     static let ollamaModelKey = "writingPolishOllamaModel"
     static let ollamaTemperatureKey = "writingPolishOllamaTemperature"
 
-    // Cleanup provider selection (Part 1). Default = OpenRouter + latest Gemini flash.
+    // Cleanup provider and default model selection.
     static let cleanupProviderKey = "cleanupProvider"
     static let cleanupModelKey = "cleanupModelId"
     /// Below this much free RAM, a local (Ollama) cleanup auto-falls back to a configured cloud provider.

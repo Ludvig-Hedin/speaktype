@@ -211,11 +211,11 @@ struct SpokenLanguageSection: View {
     @AppStorage("recentTranscriptionLanguages") private var recentLanguagesString: String = ""
 
     private var recentLanguageCodes: [String] {
-        recentLanguagesString.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+        recentLanguagesString.split(separator: ",").map(String.init).filter { $0 != DictationHints.swedishEnglish }
     }
 
     private func updateRecentLanguages(code: String) {
-        guard code != "auto" else { return }
+        guard code != "auto", code != DictationHints.swedishEnglish else { return }
         var recents = recentLanguageCodes.filter { $0 != code }
         recents.insert(code, at: 0)
         recentLanguagesString = recents.prefix(5).joined(separator: ",")
@@ -236,7 +236,7 @@ struct SpokenLanguageSection: View {
                         if !recentLanguageCodes.isEmpty {
                             Divider()
                             ForEach(recentLanguageCodes, id: \.self) { code in
-                                if let lang = Self.whisperLanguages.first(where: { $0.code == code }) {
+                                if let lang = Self.languageOptions.first(where: { $0.code == code }) {
                                     Button(lang.name) {
                                         transcriptionLanguage = code
                                         updateRecentLanguages(code: code)
@@ -245,7 +245,7 @@ struct SpokenLanguageSection: View {
                             }
                         }
                         Divider()
-                        ForEach(Self.whisperLanguages, id: \.code) { lang in
+                        ForEach(Self.languageOptions, id: \.code) { lang in
                             Button(lang.name) {
                                 transcriptionLanguage = lang.code
                                 updateRecentLanguages(code: lang.code)
@@ -267,7 +267,7 @@ struct SpokenLanguageSection: View {
                     .clickActionPointerCursor()
                 }
 
-                Text("Auto-detect is safest. Only set a language if you always dictate in it — a mismatch can garble the result. Use a multilingual model for non-English.")
+                Text("Choose Swedish + English for mixed dictation with GPT Transcribe. Other models use Auto-detect for this option.")
                     .font(Typography.caption)
                     .foregroundStyle(Color.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -278,10 +278,11 @@ struct SpokenLanguageSection: View {
 
     private func displayName(for code: String) -> String {
         if code == "auto" { return "Auto-detect" }
-        return Self.whisperLanguages.first(where: { $0.code == code })?.name ?? code
+        return Self.languageOptions.first(where: { $0.code == code })?.name ?? code
     }
 
-    static let whisperLanguages: [(code: String, name: String)] = [
+    static let languageOptions: [(code: String, name: String)] = [
+        (DictationHints.swedishEnglish, DictationHints.swedishEnglishLabel),
         ("af", "Afrikaans"), ("sq", "Albanian"), ("am", "Amharic"), ("ar", "Arabic"),
         ("hy", "Armenian"), ("as", "Assamese"), ("az", "Azerbaijani"), ("ba", "Bashkir"),
         ("eu", "Basque"), ("be", "Belarusian"), ("bn", "Bengali"), ("bs", "Bosnian"),

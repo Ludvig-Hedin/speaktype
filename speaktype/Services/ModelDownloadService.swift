@@ -10,6 +10,7 @@ class ModelDownloadService: ObservableObject {
     @Published var isDownloading: [String: Bool] = [:]
     
     private var activeTasks: [String: Task<Void, Never>] = [:] // Track running download tasks
+    private var modelScanGeneration = 0
     
     private init() {
         // Directory creation only — no Documents access, so nothing triggers a TCC prompt.
@@ -20,6 +21,10 @@ class ModelDownloadService: ObservableObject {
     // Check which models are already downloaded and update progress dictionary
     func refreshDownloadedModels() async {
         print("🔍 Checking for already-downloaded models...")
+        modelScanGeneration += 1
+        let generation = modelScanGeneration
+        ModelStorage.startMigrationIfNeeded(for: TranscriptionModeUserDefaults.mode)
+        let preserveSavedSelection = !ModelStorage.legacyMigrationFinished
 
         // Capture the expected-size table on the main actor (it's derived from @MainActor
         // `AIModel` state), then hand it to the off-main scan as a plain Sendable value.
@@ -37,9 +42,10 @@ class ModelDownloadService: ObservableObject {
         }.value
 
         // Back on the main actor: publish results.
-        self.downloadProgress.removeAll()
+        guard generation == modelScanGeneration else { return }
+        self.downloadProgress = self.downloadProgress.filter { self.isDownloading[$0.key] == true }
 
-        for variant in foundModels {
+        for variant in foundModels where self.isDownloading[variant] != true {
             self.downloadProgress[variant] = 1.0
             print("✅ Marked as downloaded: \(variant)")
         }
@@ -50,34 +56,25 @@ class ModelDownloadService: ObservableObject {
             print("✅ Found \(foundModels.count) usable model(s)")
         }
 
-        SelectedModelPreference.ensureValidSelection(downloadService: self)
+        SelectedModelPreference.ensureValidSelection(
+            downloadService: self, preserveSavedSelection: preserveSavedSelection
+        )
     }
 
     /// Enumerate the WhisperKit cache on disk and return the set of complete model variants.
     /// `nonisolated` + only Sendable inputs so it is safe to run off the main actor via
     /// `Task.detached` — all the blocking FileManager work stays off the main thread.
-    nonisolated static func scanDownloadedModels(expectedSizes: [String: Int64]) -> Set<String> {
+    nonisolated static func scanDownloadedModels(
+        expectedSizes: [String: Int64],
+        in directory: URL = ModelStorage.whisperKitModelsDirectory
+    ) -> Set<String> {
         var foundModels = Set<String>()
 
-        // NOTE: WhisperKit.fetchAvailableModels() returns ALL remote models, not local ones.
-        // We ONLY rely on disk-based verification to check what's actually downloaded.
+        // Only scan application storage. The legacy migration may be waiting for macOS permission.
         let fileManager = FileManager.default
-        // Application Support first, then the legacy Documents location (only while it
-        // still exists) so upgrading users keep the models they already downloaded.
-        let searchDirectories = ModelStorage.modelSearchDirectories()
-
-        var contents: [URL] = []
-        for whisperKitPath in searchDirectories {
-            guard let entries = try? fileManager.contentsOfDirectory(at: whisperKitPath, includingPropertiesForKeys: [.isDirectoryKey]) else {
-                continue
-            }
-            print("📁 Found \(entries.count) items in WhisperKit cache at \(whisperKitPath.path)")
-            contents.append(contentsOf: entries)
-        }
-
-        guard !contents.isEmpty else {
-            print("ℹ️ No WhisperKit cache contents found in \(searchDirectories.map(\.path))")
-            print("   Models will be downloaded on first use.")
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.isDirectoryKey]
+        ) else {
             return foundModels
         }
 
@@ -121,6 +118,21 @@ class ModelDownloadService: ObservableObject {
 
         return foundModels
     }
+
+    private func downloadModelFiles(variant: String) async throws {
+        // WhisperKit downloads model weights and tokenizer files separately.
+        if let tokenizerVariant = ModelVariant.allCases.first(where: {
+            variant == "openai_whisper-\($0)" || variant.hasPrefix("openai_whisper-\($0)_")
+        }) {
+            _ = try await loadTokenizer(for: tokenizerVariant, tokenizerFolder: ModelStorage.downloadBase)
+        }
+        try Task.checkCancellation()
+        _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.downloadBase) { progress in
+            DispatchQueue.main.async {
+                self.downloadProgress[variant] = progress.fractionCompleted
+            }
+        }
+    }
     
     // Asynchronous download using WhisperKit
     func downloadModel(variant: String) {
@@ -132,29 +144,9 @@ class ModelDownloadService: ObservableObject {
         print("Starting WhisperKit download for: \(variant)")
         
         let task = Task {
-            // Debug: List what WhisperKit sees
-            // Note: WhisperKit API might differ, but let's try to see if we can get info.
-            // If fetchAvailableModels exists.
-            
             do {
-                // Determine model variant enum/string
-                // Note: WhisperKit.download(variant:from:) is the likely API.
-                // We use the "variant" string to fetch.
-                // Assuming `WhisperKit.download(variant: variant)` acts as the fetcher.
-                // Progress callback mock (since we might not have exact API signature yet):
-                
-                // Actual API (hypothetical based on search):
-                // let model = try await WhisperKit(model: variant) 
-                // OR
-                // try await WhisperKit.download(variant: variant) { progress in ... }
-                
-                // likely: download(variant:progressCallback:) - 'from' usually has a default
-                let _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.downloadBase, progressCallback: { progress in
-                    DispatchQueue.main.async {
-                        self.downloadProgress[variant] = progress.fractionCompleted
-                    }
-                })
-                
+                try await downloadModelFiles(variant: variant)
+
                 // Check if task was cancelled before declaring success
                 if Task.isCancelled { return }
                 
@@ -195,12 +187,8 @@ class ModelDownloadService: ObservableObject {
                      
                      // Retry download once
                      do {
-                         let _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.downloadBase, progressCallback: { progress in
-                             DispatchQueue.main.async {
-                                 self.downloadProgress[variant] = progress.fractionCompleted
-                             }
-                         })
-                         
+                         try await downloadModelFiles(variant: variant)
+
                          if Task.isCancelled { return }
                          
                          print("✅ Model downloaded successfully after cleanup")
@@ -256,70 +244,33 @@ class ModelDownloadService: ObservableObject {
     nonisolated static func purgeModelCaches(variant: String) -> String {
         let fileManager = FileManager.default
         // Documents is intentionally excluded: models no longer live there, and enumerating
-        // it would raise a TCC prompt. `ModelStorage.migrateFromDocumentsIfNeeded()` is the
-        // only code that ever touches the legacy Documents location, and only once.
+        // it would raise a TCC prompt. Only the one-time migration reads that location.
         let searchDirs: [FileManager.SearchPathDirectory] = [.applicationSupportDirectory, .cachesDirectory]
 
-        // Parse variant: "openai/whisper-medium" or "openai_whisper-medium"
-        let variantParts = variant.split(separator: "/")
-        let modelName = variantParts.last ?? Substring(variant)
-
-        // Also search for underscore version: openai_whisper-medium
-        let underscoreVariant = variant.replacingOccurrences(of: "/", with: "_")
-
-        var deletedCount = 0
-        var checkedPaths: [String] = []
-
-        print("🗑️ Searching for model caches matching: '\(modelName)' or '\(underscoreVariant)'")
-
-        // 1. Check Standard macOS Paths
-        for searchDir in searchDirs {
-            guard let baseDir = fileManager.urls(for: searchDir, in: .userDomainMask).first else { continue }
-
-            // Check ./huggingface/models (HuggingFace cache)
-            let hfModelsDir = baseDir.appendingPathComponent("huggingface/models")
-            checkedPaths.append(hfModelsDir.path)
-            deletedCount += cleanupDirectory(hfModelsDir, matchAny: [String(modelName), underscoreVariant])
-
-            // Check ./huggingface/hub (Alternative HF structure)
-            let hfHubDir = baseDir.appendingPathComponent("huggingface/hub")
-            checkedPaths.append(hfHubDir.path)
-            deletedCount += cleanupDirectory(hfHubDir, matchAny: [String(modelName), underscoreVariant])
-
-            // Skip the old SpeakType-specific directory (no longer used)
-
-            // Check root directory (sometimes models are here)
-            deletedCount += cleanupDirectory(baseDir, matchAny: [String(modelName), underscoreVariant])
-        }
-
-        // 2. Check ~/.cache (Common for Python/Unix HF tools)
         let homeDir = fileManager.homeDirectoryForCurrentUser
-        let dotCacheModels = homeDir.appendingPathComponent(".cache/huggingface/models")
-        checkedPaths.append(dotCacheModels.path)
-        deletedCount += cleanupDirectory(dotCacheModels, matchAny: [String(modelName), underscoreVariant])
-
-        let dotCacheHub = homeDir.appendingPathComponent(".cache/huggingface/hub")
-        checkedPaths.append(dotCacheHub.path)
-        deletedCount += cleanupDirectory(dotCacheHub, matchAny: [String(modelName), underscoreVariant])
-
-        // 3. Check Temporary Directory
         let tempDir = fileManager.temporaryDirectory
-        let tempHf = tempDir.appendingPathComponent("huggingface")
-        checkedPaths.append(tempHf.path)
-        deletedCount += cleanupDirectory(tempHf, matchAny: [String(modelName), underscoreVariant])
-        deletedCount += cleanupDirectory(tempDir, matchAny: [String(modelName), underscoreVariant])
+        let standardDirectories = searchDirs.flatMap { directory -> [URL] in
+            guard let base = fileManager.urls(for: directory, in: .userDomainMask).first else { return [] }
+            return [base.appendingPathComponent("huggingface/models"),
+                    base.appendingPathComponent("huggingface/hub"), base]
+        }
+        let directories = standardDirectories + [
+            homeDir.appendingPathComponent(".cache/huggingface/models"),
+            homeDir.appendingPathComponent(".cache/huggingface/hub"),
+            tempDir.appendingPathComponent("huggingface"),
+            tempDir,
+            ModelStorage.whisperKitModelsDirectory,
+        ]
+        let deletedCount = purgeModelCaches(variant: variant, in: directories)
+        if deletedCount > 0 { return "Deleted \(deletedCount) items" }
+        return "No cached files found for '\(variant)'"
+    }
 
-        // 4. Check the canonical model directory in Application Support
-        let whisperKitModels = ModelStorage.whisperKitModelsDirectory
-        checkedPaths.append(whisperKitModels.path)
-        deletedCount += cleanupDirectory(whisperKitModels, matchAny: [String(modelName), underscoreVariant])
-
-        print("🗑️ Cleanup complete. Deleted \(deletedCount) items from \(checkedPaths.count) locations")
-
-        if deletedCount > 0 {
-            return "Deleted \(deletedCount) items"
-        } else {
-            return "No match for '\(modelName)' in \(checkedPaths.count) locations. checked: \(checkedPaths.map { $0.replacingOccurrences(of: homeDir.path, with: "~") }.joined(separator: ", "))"
+    nonisolated static func purgeModelCaches(variant: String, in directories: [URL]) -> Int {
+        let modelName = variant.split(separator: "/").last.map(String.init) ?? variant
+        let underscoreVariant = variant.replacingOccurrences(of: "/", with: "_")
+        return directories.reduce(0) {
+            $0 + cleanupDirectory($1, matchAny: [modelName, underscoreVariant])
         }
     }
 
@@ -331,11 +282,7 @@ class ModelDownloadService: ObservableObject {
         for url in contents {
             let fileName = url.lastPathComponent
             // Check if any pattern matches
-            let matches = patterns.contains { pattern in
-                fileName.contains(pattern) || fileName.contains(pattern.replacingOccurrences(of: "/", with: "--"))
-            }
-            
-            if matches {
+            if matchesCacheName(fileName, patterns: patterns) {
                 do {
                     try fileManager.removeItem(at: url)
                     print("✅ Deleted cache: \(url.lastPathComponent)")
@@ -347,6 +294,17 @@ class ModelDownloadService: ObservableObject {
         }
         return count
     }
+
+    nonisolated private static func matchesCacheName(_ fileName: String, patterns: [String]) -> Bool {
+        if patterns.contains("openai_whisper-large-v3") || patterns.contains("whisper-large-v3") {
+            // The full model's short ID is a prefix of the Turbo and quantized variants.
+            return ["whisper-large-v3", "openai_whisper-large-v3", "models--openai--whisper-large-v3"].contains(fileName)
+        }
+        return patterns.contains { pattern in
+            fileName.contains(pattern) || fileName.contains(pattern.replacingOccurrences(of: "/", with: "--"))
+        }
+    }
+
     func cancelDownload(for variant: String) {
         if let task = activeTasks[variant] {
             task.cancel()

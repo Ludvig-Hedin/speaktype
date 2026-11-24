@@ -27,13 +27,24 @@ struct AIModel: Identifiable, Equatable {
         AIModel(
             name: "Whisper Large v3 Turbo",
             variant: "openai_whisper-large-v3_turbo",
-            details: "Multilingual • Best Accuracy • Optimized",
+            details: "Multilingual • Optimized",
             rating: "Excellent",
             size: "1.6 GB",
             speed: 7.0,  // Optimized but still large
             accuracy: 9.5,  // ~4% WER
             expectedSizeBytes: 1_400_000_000,
             minimumRAMGB: 8
+        ),
+        AIModel(
+            name: "Whisper Large v3",
+            variant: "openai_whisper-large-v3",
+            details: "Multilingual • Highest Accuracy",
+            rating: "Excellent",
+            size: "3.1 GB",
+            speed: 5.0,
+            accuracy: 10.0,
+            expectedSizeBytes: 2_900_000_000,
+            minimumRAMGB: 16
         ),
         AIModel(
             name: "Whisper Medium",

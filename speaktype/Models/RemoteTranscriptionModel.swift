@@ -77,6 +77,10 @@ struct RemoteTranscriptionModel: Identifiable, Equatable, Hashable {
     let note: String          // short descriptor for the picker
     let pricePerMinuteUSD: Double?
 
+    var supportsDictationHints: Bool {
+        id == "openai/gpt-transcribe" || id == "gpt-transcribe"
+    }
+
     /// Estimated USD cost for a clip of the given length.
     func costEstimate(durationSeconds: TimeInterval) -> Double? {
         guard let price = pricePerMinuteUSD, durationSeconds > 0 else { return nil }
@@ -96,6 +100,11 @@ struct RemoteTranscriptionModel: Identifiable, Equatable, Hashable {
             pricePerMinuteUSD: nil
         ),
         // OpenAI — https://openai.com/api/pricing
+        RemoteTranscriptionModel(
+            id: "gpt-transcribe", provider: .openAI,
+            name: "GPT Transcribe", note: "Recommended · names and mixed languages",
+            pricePerMinuteUSD: 0.0045
+        ),
         RemoteTranscriptionModel(
             id: "gpt-4o-mini-transcribe", provider: .openAI,
             name: "GPT-4o mini Transcribe", note: "Fast · cheapest OpenAI",

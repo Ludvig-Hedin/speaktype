@@ -7,6 +7,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 - **Web:** Free-only launch. Pricing shows one free plan with every feature and a note that Pro comes later; price rows and FAQ answers follow. Set `NEXT_PUBLIC_PAID_PLANS_OPEN=1` to show paid plans.
 
+## [1.0.35] - 2026-11-24
+- **macOS:** GPT Transcribe can use a personal dictionary and a Swedish + English language hint. Claude Haiku 5.5 is the default for cloud text cleanup.
+- **macOS:** Full Whisper Large v3 is available to download for on-device dictation.
+
 ## [1.0.34] - 2026-11-24
 - **macOS, design:** Calmer, less cluttered app. Every screen is one centered column with a quieter title. Lists are one card with thin dividers instead of a box per item, and cards are flat (no shadows). Dashboard shows one row of stats with this week's bars; recent items keep Copy and Play quietly on the right. Settings is a single column with switches instead of checkboxes, and dropdowns no longer show two arrows. History rows open in place without jumping. Narrower sidebar. Fix: the Transcribe Audio screen no longer shows up blank.
 

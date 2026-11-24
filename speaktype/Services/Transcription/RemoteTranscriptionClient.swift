@@ -45,25 +45,17 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
 
     func transcribeDetailed(audioFile: URL, language: String) async throws -> TranscriptionOutcome {
         guard let key = RemoteAPIKeyStore.read(for: provider) else { throw ClientError.missingAPIKey }
-        guard let url = provider.transcriptionURL else { throw ClientError.badURL }
 
         // Reading the WAV is blocking file I/O; keep it off the main actor.
         let audioData = try await Task.detached(priority: .userInitiated) {
             try Data(contentsOf: audioFile)
         }.value
-        let boundary = "Boundary-\(UUID().uuidString)"
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 120
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Self.multipartBody(
-            boundary: boundary,
+        let request = try makeRequest(
+            key: key,
             audioData: audioData,
             filename: audioFile.lastPathComponent,
-            modelId: model.id,
-            language: language
+            language: language,
+            dictionary: UserDefaults.standard.string(forKey: DictationHints.dictionaryKey) ?? ""
         )
 
         let start = Date()
@@ -130,8 +122,54 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
 
     // MARK: - Helpers
 
+    func makeRequest(key: String, audioData: Data, filename: String, language: String, dictionary: String) throws -> URLRequest {
+        guard let url = provider.transcriptionURL else { throw ClientError.badURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+
+        var fields = [("model", model.id), ("response_format", "json")]
+        let languages = model.supportsDictationHints ? DictationHints.languages(for: language) : []
+        let keywords = model.supportsDictationHints ? DictationHints.keywords(in: dictionary) : []
+        if model.supportsDictationHints && provider == .openRouter && (!languages.isEmpty || !keywords.isEmpty) {
+            let format = URL(fileURLWithPath: filename).pathExtension.lowercased()
+            if ["wav", "mp3", "flac", "m4a", "ogg", "webm", "aac"].contains(format) {
+                // OpenRouter forwards native options on its JSON endpoint under the serving provider's slug.
+                var options: [String: [String]] = [:]
+                if !languages.isEmpty { options["languages"] = languages }
+                if !keywords.isEmpty { options["keywords"] = keywords }
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = try JSONSerialization.data(withJSONObject: [
+                    "model": model.id,
+                    "input_audio": ["data": audioData.base64EncodedString(), "format": format],
+                    "provider": ["options": ["openai": options]],
+                ])
+                return request
+            }
+            // Keep the multipart import path for audio extensions the JSON API doesn't list.
+            var context: [String] = []
+            if language == DictationHints.swedishEnglish {
+                context.append("The audio may mix Swedish and English.")
+            }
+            if !keywords.isEmpty { context.append("Possible terms: \(keywords.joined(separator: ", ")).") }
+            if !context.isEmpty { fields.append(("prompt", context.joined(separator: " "))) }
+            if let single = DictationHints.singleLanguage(language) { fields.append(("language", single)) }
+        } else if model.supportsDictationHints && provider == .openAI {
+            fields += languages.map { ("languages[]", $0) }
+            fields += keywords.map { ("keywords[]", $0) }
+        } else if let single = DictationHints.singleLanguage(language) {
+            fields.append(("language", single))
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Self.multipartBody(boundary: boundary, audioData: audioData, filename: filename, fields: fields)
+        return request
+    }
+
     private static func multipartBody(
-        boundary: String, audioData: Data, filename: String, modelId: String, language: String
+        boundary: String, audioData: Data, filename: String, fields: [(String, String)]
     ) -> Data {
         var body = Data()
         func field(_ name: String, _ value: String) {
@@ -148,11 +186,7 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
         body.append(audioData)
         body.append("\r\n".data(using: .utf8)!)
 
-        field("model", modelId)
-        field("response_format", "json")
-        if language != "auto", !language.isEmpty {
-            field("language", language)
-        }
+        for (name, value) in fields { field(name, value) }
 
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         return body
