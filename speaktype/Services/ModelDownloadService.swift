@@ -37,9 +37,9 @@ class ModelDownloadService: ObservableObject {
         }.value
 
         // Back on the main actor: publish results.
-        self.downloadProgress.removeAll()
+        self.downloadProgress = self.downloadProgress.filter { self.isDownloading[$0.key] == true }
 
-        for variant in foundModels {
+        for variant in foundModels where self.isDownloading[variant] != true {
             self.downloadProgress[variant] = 1.0
             print("✅ Marked as downloaded: \(variant)")
         }
@@ -56,28 +56,17 @@ class ModelDownloadService: ObservableObject {
     /// Enumerate the WhisperKit cache on disk and return the set of complete model variants.
     /// `nonisolated` + only Sendable inputs so it is safe to run off the main actor via
     /// `Task.detached` — all the blocking FileManager work stays off the main thread.
-    nonisolated static func scanDownloadedModels(expectedSizes: [String: Int64]) -> Set<String> {
+    nonisolated static func scanDownloadedModels(
+        expectedSizes: [String: Int64],
+        in directory: URL = ModelStorage.whisperKitModelsDirectory
+    ) -> Set<String> {
         var foundModels = Set<String>()
 
-        // NOTE: WhisperKit.fetchAvailableModels() returns ALL remote models, not local ones.
-        // We ONLY rely on disk-based verification to check what's actually downloaded.
+        // Only scan application storage. The legacy migration may be waiting for macOS permission.
         let fileManager = FileManager.default
-        // Application Support first, then the legacy Documents location (only while it
-        // still exists) so upgrading users keep the models they already downloaded.
-        let searchDirectories = ModelStorage.modelSearchDirectories()
-
-        var contents: [URL] = []
-        for whisperKitPath in searchDirectories {
-            guard let entries = try? fileManager.contentsOfDirectory(at: whisperKitPath, includingPropertiesForKeys: [.isDirectoryKey]) else {
-                continue
-            }
-            print("📁 Found \(entries.count) items in WhisperKit cache at \(whisperKitPath.path)")
-            contents.append(contentsOf: entries)
-        }
-
-        guard !contents.isEmpty else {
-            print("ℹ️ No WhisperKit cache contents found in \(searchDirectories.map(\.path))")
-            print("   Models will be downloaded on first use.")
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.isDirectoryKey]
+        ) else {
             return foundModels
         }
 
@@ -121,6 +110,21 @@ class ModelDownloadService: ObservableObject {
 
         return foundModels
     }
+
+    private func downloadModelFiles(variant: String) async throws {
+        // WhisperKit downloads model weights and tokenizer files separately.
+        if let tokenizerVariant = ModelVariant.allCases.first(where: {
+            variant == "openai_whisper-\($0)" || variant.hasPrefix("openai_whisper-\($0)_")
+        }) {
+            _ = try await loadTokenizer(for: tokenizerVariant, tokenizerFolder: ModelStorage.downloadBase)
+        }
+        try Task.checkCancellation()
+        _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.downloadBase) { progress in
+            DispatchQueue.main.async {
+                self.downloadProgress[variant] = progress.fractionCompleted
+            }
+        }
+    }
     
     // Asynchronous download using WhisperKit
     func downloadModel(variant: String) {
@@ -132,29 +136,9 @@ class ModelDownloadService: ObservableObject {
         print("Starting WhisperKit download for: \(variant)")
         
         let task = Task {
-            // Debug: List what WhisperKit sees
-            // Note: WhisperKit API might differ, but let's try to see if we can get info.
-            // If fetchAvailableModels exists.
-            
             do {
-                // Determine model variant enum/string
-                // Note: WhisperKit.download(variant:from:) is the likely API.
-                // We use the "variant" string to fetch.
-                // Assuming `WhisperKit.download(variant: variant)` acts as the fetcher.
-                // Progress callback mock (since we might not have exact API signature yet):
-                
-                // Actual API (hypothetical based on search):
-                // let model = try await WhisperKit(model: variant) 
-                // OR
-                // try await WhisperKit.download(variant: variant) { progress in ... }
-                
-                // likely: download(variant:progressCallback:) - 'from' usually has a default
-                let _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.downloadBase, progressCallback: { progress in
-                    DispatchQueue.main.async {
-                        self.downloadProgress[variant] = progress.fractionCompleted
-                    }
-                })
-                
+                try await downloadModelFiles(variant: variant)
+
                 // Check if task was cancelled before declaring success
                 if Task.isCancelled { return }
                 
@@ -195,12 +179,8 @@ class ModelDownloadService: ObservableObject {
                      
                      // Retry download once
                      do {
-                         let _ = try await WhisperKit.download(variant: variant, downloadBase: ModelStorage.downloadBase, progressCallback: { progress in
-                             DispatchQueue.main.async {
-                                 self.downloadProgress[variant] = progress.fractionCompleted
-                             }
-                         })
-                         
+                         try await downloadModelFiles(variant: variant)
+
                          if Task.isCancelled { return }
                          
                          print("✅ Model downloaded successfully after cleanup")
@@ -256,8 +236,7 @@ class ModelDownloadService: ObservableObject {
     nonisolated static func purgeModelCaches(variant: String) -> String {
         let fileManager = FileManager.default
         // Documents is intentionally excluded: models no longer live there, and enumerating
-        // it would raise a TCC prompt. `ModelStorage.migrateFromDocumentsIfNeeded()` is the
-        // only code that ever touches the legacy Documents location, and only once.
+        // it would raise a TCC prompt. Only the one-time migration reads that location.
         let searchDirs: [FileManager.SearchPathDirectory] = [.applicationSupportDirectory, .cachesDirectory]
 
         let homeDir = fileManager.homeDirectoryForCurrentUser

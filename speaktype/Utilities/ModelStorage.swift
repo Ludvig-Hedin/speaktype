@@ -27,41 +27,13 @@ nonisolated enum ModelStorage {
         downloadBase.appendingPathComponent("models/argmaxinc/whisperkit-coreml")
     }
 
-    /// The pre-1.0.30 location. Only referenced for migration and as a read fallback.
-    static var legacyDocumentsBase: URL? {
+    private static var legacyDocumentsBase: URL? {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
             .appendingPathComponent("huggingface")
     }
 
-    static var legacyWhisperKitModelsDirectory: URL? {
-        legacyDocumentsBase?.appendingPathComponent("models/argmaxinc/whisperkit-coreml")
-    }
-
-    /// Directories to search for an already-downloaded model, best first.
-    ///
-    /// The legacy Documents directory is included only while it still exists, so a fresh
-    /// install never touches Documents and never triggers its TCC prompt. Once
-    /// `migrateFromDocumentsIfNeeded()` succeeds the legacy entry disappears for good.
-    static func modelSearchDirectories() -> [URL] {
-        var directories = [whisperKitModelsDirectory]
-        if let legacy = legacyWhisperKitModelsDirectory,
-            FileManager.default.fileExists(atPath: legacy.path)
-        {
-            directories.append(legacy)
-        }
-        return directories
-    }
-
-    /// Resolve where a given variant actually lives on disk, preferring the new location.
-    /// Falls back to the new location when the model isn't downloaded yet.
     static func modelDirectory(for variant: String) -> URL {
-        let canonical = whisperKitModelsDirectory.appendingPathComponent(variant)
-        if FileManager.default.fileExists(atPath: canonical.path) { return canonical }
-        if let legacy = legacyWhisperKitModelsDirectory?.appendingPathComponent(variant),
-           FileManager.default.fileExists(atPath: legacy.path) {
-            return legacy
-        }
-        return canonical
+        whisperKitModelsDirectory.appendingPathComponent(variant)
     }
 
     /// Create the model directory and kick off the one-time migration. Safe to call
@@ -74,12 +46,7 @@ nonisolated enum ModelStorage {
 
     private static let migrationStarted = OSAllocatedUnfairLock(initialState: false)
 
-    /// Run `migrateFromDocumentsIfNeeded()` once per process, off the main thread.
-    ///
-    /// Anchored here rather than in `AppDelegate` because this runs whenever
-    /// `ModelDownloadService` is first touched, which is guaranteed; the launch-time tasks
-    /// in `applicationDidFinishLaunching` are not reliably scheduled.
-    static func startMigrationIfNeeded() {
+    private static func startMigrationIfNeeded() {
         let alreadyStarted = migrationStarted.withLock { started -> Bool in
             defer { started = true }
             return started
@@ -89,51 +56,51 @@ nonisolated enum ModelStorage {
         // Detached and low priority: reading Documents can block on a pending TCC prompt
         // for as long as the user takes to answer, and nothing may wait on that.
         Task.detached(priority: .utility) {
-            migrateFromDocumentsIfNeeded()
+            guard let legacy = legacyDocumentsBase, migrateLegacyCache(from: legacy, to: downloadBase) else { return }
+            await ModelDownloadService.shared.refreshDownloadedModels()
         }
     }
 
-    /// Move models downloaded by an older build out of `~/Documents/huggingface`.
-    ///
-    /// Runs off the main actor (blocking file I/O). Reading Documents may still raise one
-    /// final TCC prompt on the first launch after upgrading — after that the folder is gone
-    /// and nothing under Documents is ever touched again. Only migrates when the legacy
-    /// directory already exists, so a fresh install never touches Documents at all.
-    static func migrateFromDocumentsIfNeeded() {
+    /// Move old model weights and copy cached tokenizers so local dictation can load
+    /// both from Application Support. Existing destinations and unrelated files are kept.
+    static func migrateLegacyCache(from legacy: URL, to current: URL) -> Bool {
         let fileManager = FileManager.default
-        guard let legacyBase = legacyDocumentsBase,
-            fileManager.fileExists(atPath: legacyBase.path)
-        else { return }
+        guard fileManager.fileExists(atPath: legacy.path) else { return false }
 
-        let legacyModels = legacyBase.appendingPathComponent("models/argmaxinc/whisperkit-coreml")
-        guard let variants = try? fileManager.contentsOfDirectory(atPath: legacyModels.path) else {
-            // A read failure does not prove the legacy cache is empty. Keep it and retry later.
-            return
-        }
+        var migrated = false
+        for (path, prefix, copy) in [
+            ("models/openai", "whisper-", true),
+            ("models/argmaxinc/whisperkit-coreml", "openai_whisper-", false),
+        ] {
+            let sourceDirectory = legacy.appendingPathComponent(path)
+            let destinationDirectory = current.appendingPathComponent(path)
+            guard let entries = try? fileManager.contentsOfDirectory(atPath: sourceDirectory.path),
+                entries.contains(where: { $0.hasPrefix(prefix) })
+            else { continue }
 
-        ensureDirectoryExists()
-        let destinationRoot = whisperKitModelsDirectory
-
-        var allMoved = true
-        for variant in variants where !variant.hasPrefix(".") {
-            let source = legacyModels.appendingPathComponent(variant)
-            let destination = destinationRoot.appendingPathComponent(variant)
-            if fileManager.fileExists(atPath: destination.path) {
-                // A destination may be a partial download. Preserve both copies on collision.
-                allMoved = false
+            do {
+                try fileManager.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
+            } catch {
+                print("Could not create local Whisper cache: \(error)")
                 continue
             }
-            do {
-                try fileManager.moveItem(at: source, to: destination)
-                print("📦 Migrated model \(variant) out of ~/Documents")
-            } catch {
-                print("⚠️ Could not migrate model \(variant): \(error)")
-                allMoved = false
+
+            for entry in entries where entry.hasPrefix(prefix) {
+                let source = sourceDirectory.appendingPathComponent(entry)
+                let destination = destinationDirectory.appendingPathComponent(entry)
+                guard !fileManager.fileExists(atPath: destination.path) else { continue }
+                do {
+                    if copy {
+                        try fileManager.copyItem(at: source, to: destination)
+                    } else {
+                        try fileManager.moveItem(at: source, to: destination)
+                    }
+                    migrated = true
+                } catch {
+                    print("Could not migrate \(entry): \(error)")
+                }
             }
         }
-
-        // Only delete the legacy tree once everything is safely relocated — otherwise leave
-        // it in place and retry next launch rather than destroying an unmigrated model.
-        _ = allMoved
+        return migrated
     }
 }

@@ -187,16 +187,11 @@ class WhisperService {
         }
 
         do {
-            // Resolves to Application Support, or the legacy Documents location for users
-            // who downloaded models before the move (so an upgrade never orphans a model).
-            let modelFolderPath = await Task.detached(priority: .userInitiated) {
-                ModelStorage.modelDirectory(for: variant).path
-            }.value
-
             // Use WhisperKitConfig with optimized settings
             let config = WhisperKitConfig(
                 model: variant,
-                modelFolder: modelFolderPath,
+                modelFolder: ModelStorage.modelDirectory(for: variant).path,
+                tokenizerFolder: ModelStorage.downloadBase,
                 computeOptions: ModelComputeOptions(),  // Uses GPU + Neural Engine
                 verbose: false,
                 logLevel: .error,
