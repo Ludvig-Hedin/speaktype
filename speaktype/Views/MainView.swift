@@ -32,6 +32,7 @@ struct MainView: View {
         .onAppear {
             #if DEBUG
                 // Dev-only: `-uiPreviewTab Settings` opens a section directly (screenshot checks).
+                DebugScreenshotScroller.startIfRequested()
                 if let tab = UserDefaults.standard.string(forKey: "uiPreviewTab"),
                     let item = SidebarItem(rawValue: tab)
                 {
