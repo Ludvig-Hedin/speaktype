@@ -7,6 +7,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 - **Web:** Free-only launch. Pricing shows one free plan with every feature and a note that Pro comes later; price rows and FAQ answers follow. Set `NEXT_PUBLIC_PAID_PLANS_OPEN=1` to show paid plans.
 
+## [1.0.38] - 2026-11-24
+- **macOS, recorder:** Hovering the pill while you speak shows a grey X (cancel, same as Esc: nothing is pasted and the audio stays in History) and a white checkmark (finish and paste), like Wispr Flow. The language button is gone from the pill; pick the language in Settings. The pill now shows its own dark tooltips above it ("Cancel", "Finish and paste", what it is working on), because macOS never showed tooltips there.
+
 ## [1.0.37] - 2026-11-24
 - **macOS:** The standard title bar supports native window dragging, tiling, double-click actions, and full screen.
 - **Dictation:** Finished audio is saved locally before transcription. Escape stops insertion and keeps audio in History. If text is ready, the recorder offers Copy. Temporary cloud errors are retried when online and update the original History entry.
