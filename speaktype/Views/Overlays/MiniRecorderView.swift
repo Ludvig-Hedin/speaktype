@@ -20,11 +20,16 @@ struct MiniRecorderView: View {
     /// Pill is showing a transient message (error, "No speech detected", paste hint).
     @State private var isShowingMessage = false
     @State private var awaitingPasteResult = false
+    @State private var recoveryText: String?
     @State private var dismissTask: Task<Void, Never>?
     /// Route decided once at record start (see `startRecording`).
     @State private var usesLocalRoute = true
     @State private var routeIsRemote = false
     @State private var routeProviderLabel: String?
+    @State private var capturedLanguage = "auto"
+    @State private var retryRoute: DictationRetryRoute?
+    var onCancelPaste: (() -> Void)?
+    var onEscapeCaptureChanged: ((Bool) -> Void)?
     var onCommit: ((String) -> Void)?
     var onCancel: (() -> Void)?
     /// The recorder accepted a start request (used to pick the paste target).
@@ -89,6 +94,7 @@ struct MiniRecorderView: View {
 
     // MARK: - State for Escape key cancellation
     @State private var cancelCommit = false
+    @State private var savedTranscript: String?
     @State private var globalEscapeMonitor: Any?
     @State private var localEscapeMonitor: Any?
 
@@ -96,11 +102,15 @@ struct MiniRecorderView: View {
     init(
         onCommit: ((String) -> Void)? = nil,
         onCancel: (() -> Void)? = nil,
+        onCancelPaste: (() -> Void)? = nil,
+        onEscapeCaptureChanged: ((Bool) -> Void)? = nil,
         onStartAccepted: (() -> Void)? = nil,
         onStopAccepted: (() -> Void)? = nil
     ) {
         self.onCommit = onCommit
         self.onCancel = onCancel
+        self.onCancelPaste = onCancelPaste
+        self.onEscapeCaptureChanged = onEscapeCaptureChanged
         self.onStartAccepted = onStartAccepted
         self.onStopAccepted = onStopAccepted
     }
@@ -113,7 +123,7 @@ struct MiniRecorderView: View {
         case listening
         case working
         case done
-        case message(String, isError: Bool)
+        case message(String, isError: Bool, copyText: String?)
     }
 
     private var pillState: PillState {
@@ -121,7 +131,7 @@ struct MiniRecorderView: View {
         if isShowingMessage {
             if showsPasted { return .done }
             if awaitingPasteResult { return .working }
-            return .message(statusMessage, isError: Self.isErrorMessage(statusMessage))
+            return .message(statusMessage, isError: Self.isErrorMessage(statusMessage), copyText: recoveryText)
         }
         // Dots only while text is actually being produced. Every other moment the pill is on
         // screen (mic starting, first frame before the start request lands) shows the
@@ -132,7 +142,7 @@ struct MiniRecorderView: View {
 
     /// Neutral notes ("No speech detected", the ⌘V hint) vs. real failures.
     private static func isErrorMessage(_ text: String) -> Bool {
-        let neutral = ["No speech detected", "Copied."]
+        let neutral = ["No speech detected", "Copied.", "Dictation stopped", "Transcript saved"]
         return !neutral.contains(where: { text.hasPrefix($0) })
     }
 
@@ -156,6 +166,10 @@ struct MiniRecorderView: View {
 
     private var showsControls: Bool { pillState == .listening && isHovering }
 
+    private var capturesEscape: Bool {
+        isListening || (isProcessing && (!isShowingMessage || (awaitingPasteResult && !showsPasted)))
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.clear
@@ -171,6 +185,12 @@ struct MiniRecorderView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .recordingStopRequested)) { _ in
             stopAndTranscribe()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .recordingEscapeRequested)) { _ in
+            handleEscape()
+        }
+        .onChange(of: capturesEscape) { _, capture in
+            onEscapeCaptureChanged?(capture)
         }
         .onReceive(NotificationCenter.default.publisher(for: .recordingCancelRequested)) { _ in
             cancelRecording()
@@ -194,17 +214,17 @@ struct MiniRecorderView: View {
 
             // Set up Escape key monitors
             globalEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
-                if event.keyCode == 53 {
+                if event.keyCode == 53, !event.isARepeat {
                     Task { @MainActor in self.handleEscape() }
                 }
             }
             localEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                guard event.keyCode == 53 else { return event }
+                guard event.keyCode == 53, !event.isARepeat else { return event }
                 // Local monitors run on the main thread. Only take Escape while the recorder is
                 // actually recording or transcribing, so other SpeakType windows (sheets,
                 // menus, fields) keep their normal Escape behavior.
                 let shouldSwallow = MainActor.assumeIsolated {
-                    self.isListening || (self.isProcessing && !self.isShowingMessage)
+                    self.capturesEscape
                 }
                 Task { @MainActor in self.handleEscape() }
                 return shouldSwallow ? nil : event
@@ -288,7 +308,7 @@ struct MiniRecorderView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.95))
                     .transition(.scale(scale: 0.4).combined(with: .opacity))
-            case .message(let text, let isError):
+            case .message(let text, let isError, let copyText):
                 HStack(spacing: 7) {
                     Image(systemName: isError ? "exclamationmark.triangle.fill" : "info.circle")
                         .font(.system(size: 11, weight: .semibold))
@@ -298,6 +318,18 @@ struct MiniRecorderView: View {
                         .foregroundStyle(.white.opacity(0.95))
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
+                    if let copyText {
+                        Button("Copy") {
+                            ClipboardService.shared.copy(text: copyText)
+                            showMessage("Copied. Press ⌘V to paste.", seconds: 3)
+                        }
+                        .buttonStyle(.stPlain)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(.white.opacity(0.16), in: Capsule())
+                    }
                 }
                 // Short notes hug their text on one line; long ones wrap to two lines at a
                 // readable width instead of stretching the pill across the screen.
@@ -332,8 +364,8 @@ struct MiniRecorderView: View {
 
     private var listeningHelp: String {
         recordingMode == 0
-            ? "Release the hotkey to insert text. Esc cancels."
-            : "Press the hotkey again to insert text. Esc cancels."
+            ? "Release the hotkey to insert text. Esc stops and saves."
+            : "Press the hotkey again to insert text. Esc stops and saves."
     }
 
     private var stopButton: some View {
@@ -405,7 +437,7 @@ struct MiniRecorderView: View {
     }
 
     private var isErrorState: Bool {
-        if case .message(_, let isError) = pillState { return isError }
+        if case .message(_, let isError, _) = pillState { return isError }
         return false
     }
 
@@ -439,7 +471,7 @@ struct MiniRecorderView: View {
         case .listening: text = isListening ? "Listening" : ""
         case .working: text = "Writing"
         case .done: text = "Inserted"
-        case .message(let message, _): text = message
+        case .message(let message, _, _): text = message
         }
         guard !text.isEmpty else { return }
         NSAccessibility.post(
@@ -526,6 +558,7 @@ struct MiniRecorderView: View {
     }
 
     private func cancelRecording() {
+        guard !cancelCommit, !isStoppingRecording else { return }
         cancelCommit = true
         recordingStartTask?.cancel()
         recordingStartTask = nil
@@ -552,16 +585,13 @@ struct MiniRecorderView: View {
     }
 
     private func startRecording() {
-        // A new press pre-empts a message state (error, "No speech detected", paste hint).
-        if isShowingMessage {
-            clearMessage()
-        }
-
         guard !isStoppingRecording else {
             debugLog("Audio recorder is still stopping, ignoring start request")
-            onCancel?()
             return
         }
+
+        // A new press pre-empts a message state (error, "No speech detected", paste hint).
+        if isShowingMessage { clearMessage() }
 
         guard !isProcessing else {
             debugLog("Already processing, ignoring start request")
@@ -584,9 +614,13 @@ struct MiniRecorderView: View {
         let route = TranscriptionCoordinator.willUseRemoteNextTranscript()
         routeIsRemote = route.isRemote
         routeProviderLabel = route.providerLabel
-        usesLocalRoute = TranscriptionModeUserDefaults.mode != .remoteOnly && !route.isRemote
+        let mode = TranscriptionModeUserDefaults.mode
+        retryRoute = DictationRetryRoute.current
+        capturedLanguage = transcriptionLanguage
+        let localModelReady = (ModelDownloadService.shared.downloadProgress[selectedModel] ?? 0) >= 1
+        usesLocalRoute = mode != .remoteOnly && !route.isRemote && (retryRoute == nil || localModelReady)
 
-        if TranscriptionModeUserDefaults.mode == .remoteOnly && !route.isRemote {
+        if mode == .remoteOnly && retryRoute == nil {
             showStartError("Enable audio upload in Settings to use cloud transcription")
             return
         }
@@ -609,6 +643,7 @@ struct MiniRecorderView: View {
         frozenState = nil
         isHovering = false
         cancelCommit = false
+        savedTranscript = nil
         pendingStopAfterStart = false
         isProcessing = true
         statusMessage = "Starting microphone…"
@@ -659,7 +694,7 @@ struct MiniRecorderView: View {
 
     /// Show a status message in the pill, then close the panel. One cancellable timer: a new
     /// start or Escape cancels it, and a newer message replaces it.
-    private func showMessage(_ message: String, seconds: Double) {
+    private func showMessage(_ message: String, seconds: Double, copyText: String? = nil) {
         debugLog(message)
         dismissTask?.cancel()
         contentGeneration += 1
@@ -672,6 +707,7 @@ struct MiniRecorderView: View {
         isListening = false
         isProcessing = true
         isShowingMessage = true
+        recoveryText = copyText
         statusMessage = message
         if fromHidden {
             Task { @MainActor in
@@ -691,6 +727,7 @@ struct MiniRecorderView: View {
         dismissTask = nil
         awaitingPasteResult = false
         showsPasted = false
+        recoveryText = nil
         guard isShowingMessage else { return }
         isShowingMessage = false
         isProcessing = false
@@ -730,7 +767,7 @@ struct MiniRecorderView: View {
         guard awaitingPasteResult,
             let message = notification.userInfo?["message"] as? String
         else { return }
-        showMessage(message, seconds: 3)
+        showMessage(message, seconds: 8, copyText: savedTranscript)
     }
 
     private func stopAndTranscribe() {
@@ -754,74 +791,76 @@ struct MiniRecorderView: View {
             return
         }
 
-        // A local route needs a local model. Cloud-only does not.
-        guard TranscriptionModeUserDefaults.mode == .remoteOnly || !selectedModel.isEmpty else {
-            debugLog("No model selected - cannot transcribe")
-            isStoppingRecording = true
-            Task {
-                _ = await audioRecorder.stopRecording(discardOutput: true)
-                isStoppingRecording = false
-            }
-            showMessage("No AI model selected. Go to Settings → AI Models to download one.", seconds: 3)
-            return
-        }
-
-        onStopAccepted?()
-        transcriptionTask?.cancel()
+        if !cancelCommit { onStopAccepted?() }
         isStoppingRecording = true
         isListening = false
         isProcessing = true
         statusMessage = "Transcribing..."
+        let language = capturedLanguage
+        let route = retryRoute
         transcriptionTask = Task {
             let url = await audioRecorder.stopRecording()
+            guard let url else {
+                isStoppingRecording = false
+                showMessage("No audio was recorded", seconds: 4)
+                return
+            }
+
+            let duration = await getAudioDuration(url: url)
+            let peak = await audioRecorder.lastRecordingPeakLevel()
+            let shouldProcess = !cancelCommit
+            let history = HistoryService.shared
+            let id: UUID
+            do {
+                id = try history.beginDictation(
+                    audioURL: url, duration: duration, language: language, processing: shouldProcess)
+            } catch {
+                isStoppingRecording = false
+                showMessage("Could not save to History. Audio kept on this Mac.", seconds: 7)
+                return
+            }
             isStoppingRecording = false
-            debugLog("stopRecording returned: \(url?.lastPathComponent ?? "nil")")
-
-            guard let url = url else {
-                debugLog("No recording URL, cancelling")
-                isListening = false
-                isProcessing = false
-                onCancel?()
+            guard shouldProcess else {
+                showMessage("Dictation stopped. Audio saved in History.", seconds: 6)
                 return
             }
-
-            // Escape during the stop: discard without transcribing.
-            guard !Task.isCancelled, !cancelCommit else {
-                try? FileManager.default.removeItem(at: url)
+            defer { history.finishDictation(id: id) }
+            if let peak, peak < AudioRecordingService.speechPeakThreshold {
+                history.failDictation(id: id, reason: "No speech detected")
+                showMessage("No speech detected", seconds: 1.5)
                 return
             }
-
-            // Always use the final full-recording transcription for committed output.
-            // Chunk stitching caused repeated phrases at boundaries across languages.
-            await processRecording(url: url)
+            await processRecording(url: url, id: id, language: language, retryRoute: route)
         }
     }
 
     private func handleEscape() {
-        guard isListening || isProcessing || isWarmingUp || whisperService.isLoading else { return }
-
-        debugLog("Escape pressed - cancelling immediate commit")
+        guard isListening || isProcessing else { return }
 
         if isShowingMessage {
-            dismissTask?.cancel()
-            dismissAfterFade()
-            // A paste already in flight must not flash a checkmark inside the fade.
-            awaitingPasteResult = false
+            if awaitingPasteResult && !showsPasted {
+                onCancelPaste?()
+                showMessage("Transcript saved in History", seconds: 8, copyText: savedTranscript)
+            } else {
+                dismissAfterFade()
+            }
             return
         }
 
+        if cancelCommit { return }
         cancelCommit = true
-        recordingStartTask?.cancel()
-        recordingStartTask = nil
-        pendingStopAfterStart = false
-
-        if isListening || audioRecorder.isRecording {
-            cancelRecording()
-        } else {
+        if recordingStartTask != nil {
+            // Finish opening the writer, then save whatever the microphone captured.
+            pendingStopAfterStart = true
+        } else if isListening {
+            stopAndTranscribe()
+        } else if !isStoppingRecording {
             transcriptionTask?.cancel()
-            transcriptionTask = nil
-            dismissAfterFade()
-            isProcessing = false
+            if let savedTranscript {
+                showMessage("Transcript saved in History", seconds: 8, copyText: savedTranscript)
+            } else {
+                showMessage("Dictation stopped. Audio saved in History.", seconds: 6)
+            }
         }
     }
 
@@ -831,127 +870,58 @@ struct MiniRecorderView: View {
         AppLogger.transcription.debug("\(message, privacy: .public)")
     }
 
-    /// Keep the audio and record the failure in History so the user can retry later.
-    private func saveFailedRecording(url: URL, reason: String) async {
-        let duration = await getAudioDuration(url: url)
-        HistoryService.shared.addFailedItem(
-            audioFileURL: url, duration: duration, errorMessage: reason)
-    }
-
-    /// Recordings shorter than this with no detected speech are treated as accidental taps and
-    /// discarded instead of filling History with failed items.
-    private static let minimumRetainedSilentRecording: TimeInterval = 1.0
-
-    private func processRecording(url: URL) async {
-        debugLog("processRecording started with url: \(url.lastPathComponent)")
-
-        // No voice in the take: don't spend a model call (or invent "Thank you."). Only when
-        // the level was actually measured, and the audio always stays in History for Retry.
-        if let peak = await audioRecorder.lastRecordingPeakLevel(),
-            peak < AudioRecordingService.speechPeakThreshold
-        {
-            debugLog("Silent take (peak \(peak)) - skipping transcription")
-            let duration = await getAudioDuration(url: url)
-            HistoryService.shared.addFailedItem(
-                audioFileURL: url, duration: duration, errorMessage: "No speech detected")
-            showMessage("No speech detected", seconds: 1.5)
-            return
-        }
-
+    private func processRecording(
+        url: URL, id: UUID, language: String, retryRoute: DictationRetryRoute?
+    ) async {
+        let history = HistoryService.shared
         do {
-            // Only warm up the on-device model when the next transcription will run locally.
-            if usesLocalRoute,
-                !whisperService.isInitialized || whisperService.currentModelVariant != selectedModel
-            {
-                debugLog("Loading model: \(selectedModel)")
-                statusMessage = "Warming up model. First use is slower..."
-                do {
-                    try await whisperService.loadModel(variant: selectedModel)
-                    debugLog("Model loaded successfully")
-                } catch {
-                    debugLog("Model load failed: \(error.localizedDescription)")
-                    guard !cancelCommit else {
-                        try? FileManager.default.removeItem(at: url)
-                        return
-                    }
-                    await saveFailedRecording(
-                        url: url, reason: "Model load failed: \(error.localizedDescription)")
-                    showMessage("Model load failed", seconds: 2)
-                    return
-                }
-            }
-
-            debugLog("Starting transcription...")
-            // Do not update visible status after the user cancels.
-            if !cancelCommit {
-                statusMessage = routeIsRemote ? "Transcribing via \(routeProviderLabel ?? "cloud")…" : "Transcribing..."
-            }
-            let outcome = try await TranscriptionCoordinator.transcribe(audioFile: url, language: transcriptionLanguage)
+            statusMessage = routeIsRemote ? "Transcribing via \(routeProviderLabel ?? "cloud")…" : "Transcribing..."
+            let outcome = try await TranscriptionCoordinator.transcribe(
+                audioFile: url, language: language,
+                allowRemote: retryRoute != nil && retryRoute == DictationRetryRoute.current)
             try Task.checkCancellation()
-            guard !cancelCommit else {
-                try? FileManager.default.removeItem(at: url)
+            guard history.containsDictation(id: id) else {
+                dismissAfterFade()
+                isProcessing = false
                 return
             }
-            let text = outcome.text
-            AppLogger.transcription.debug("Transcription result: \(String(text.prefix(50)), privacy: .private)")
-
-            guard !text.isEmpty else {
-                debugLog("Empty text")
-                let duration = await getAudioDuration(url: url)
-                if duration >= Self.minimumRetainedSilentRecording {
-                    HistoryService.shared.addFailedItem(
-                        audioFileURL: url, duration: duration, errorMessage: "No speech detected")
-                } else {
-                    try? FileManager.default.removeItem(at: url)
-                }
+            let raw = HistoryService.cleanedTranscript(outcome.text)
+            guard !raw.isEmpty else {
+                history.failDictation(id: id, reason: "No speech detected")
                 showMessage("No speech detected", seconds: 1.5)
                 return
             }
 
-            let shouldPolish = TranscriptionFinalizer.willPolishNextTranscript()
-            if shouldPolish, !cancelCommit {
-                statusMessage = "Polishing..."
-            }
-            let finalText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: text)
+            savedTranscript = raw
+            var textSaved = history.saveDictationText(id: id, transcript: raw, raw: raw, outcome: outcome)
+            if TranscriptionFinalizer.willPolishNextTranscript() { statusMessage = "Polishing..." }
+            let polished = HistoryService.cleanedTranscript(
+                await TranscriptionFinalizer.finalizeTranscript(rawTranscript: raw))
             try Task.checkCancellation()
-            guard !cancelCommit else {
-                try? FileManager.default.removeItem(at: url)
-                return
-            }
-            AppLogger.transcription.debug("Final text: \(String(finalText.prefix(50)), privacy: .private)")
-
-            // Paste first so the text lands without waiting on disk work, then save. The paste
-            // flow is asynchronous, so the history entry exists before any keystroke is sent.
-            onCommit?(finalText)
-            awaitPasteResult()
-
-            let duration = await getAudioDuration(url: url)
-            HistoryService.shared.addItem(
-                transcript: finalText,
-                duration: duration,
-                audioFileURL: url,
-                modelUsed: outcome.modelLabel,
-                transcriptionTime: outcome.transcriptionTime,
-                provider: outcome.provider.rawValue,
-                estimatedCostUSD: outcome.estimatedCostUSD,
-                rawTranscript: text,
-                polishedTranscript: finalText == text ? nil : finalText
-            )
-            debugLog("Committed and saved to history")
-        } catch is CancellationError {
-            debugLog("Transcription cancelled")
-            try? FileManager.default.removeItem(at: url)
-            isProcessing = false
-        } catch {
-            debugLog("Error: \(error.localizedDescription)")
-            guard !cancelCommit else {
-                try? FileManager.default.removeItem(at: url)
+            guard history.containsDictation(id: id) else {
+                dismissAfterFade()
                 isProcessing = false
                 return
             }
-            // Never throw away what the user said: keep the audio as a failed History item.
-            await saveFailedRecording(url: url, reason: error.localizedDescription)
-            showMessage(error.localizedDescription, seconds: 2)
+
+            if !polished.isEmpty, polished != raw {
+                savedTranscript = polished
+                textSaved = history.saveDictationText(id: id, transcript: polished, raw: raw, outcome: outcome)
+            }
+            let finalText = savedTranscript ?? raw
+            guard textSaved else {
+                showMessage("Could not save the transcript", seconds: 10, copyText: finalText)
+                return
+            }
+
+            awaitPasteResult()
+            onCommit?(finalText)
+        } catch is CancellationError {
+            history.failDictation(id: id, reason: "Dictation stopped")
+        } catch {
+            guard !Task.isCancelled else { return }
+            let message = history.recordDictationError(error, id: id, retryRoute: retryRoute)
+            showMessage(message, seconds: 6)
         }
     }
 
@@ -1117,7 +1087,7 @@ struct KeyEventHandlerView: NSViewRepresentable {
         }
 
         override func keyDown(with event: NSEvent) {
-            if event.keyCode == 53 {  // Escape key
+            if event.keyCode == 53, !event.isARepeat {  // Escape key
                 onEscape?()
             } else {
                 super.keyDown(with: event)

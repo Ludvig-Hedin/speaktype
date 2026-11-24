@@ -142,3 +142,40 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(service.items.first?.transcript, "First point.\n\n- one\n- two")
     }
 }
+
+final class DictationRecoveryTests: XCTestCase {
+    func testInterruptedDictationCanBeRecoveredOnRelaunch() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = DictationRecoveryStore(directory: directory)
+        let item = HistoryItem(
+            id: UUID(), date: Date(), transcript: "", duration: 3,
+            audioFileURL: directory.appendingPathComponent("recording.wav"),
+            failureReason: "Recording saved", recordingLanguage: "sv")
+        try store.write(item)
+        let restored = try XCTUnwrap(store.load().first)
+        XCTAssertEqual(restored.id, item.id)
+        XCTAssertEqual(restored.audioFileURL, item.audioFileURL)
+        XCTAssertEqual(restored.recordingLanguage, "sv")
+        XCTAssertTrue(restored.isFailed)
+
+        var completed = item
+        completed.transcript = "Sparad text"
+        completed.failureReason = nil
+        try store.write(completed)
+        XCTAssertEqual(store.load().count, 1)
+        XCTAssertEqual(store.load().first?.transcript, "Sparad text")
+
+        try store.remove(id: item.id)
+        XCTAssertTrue(store.load().isEmpty)
+    }
+
+    func testOnlyTransientCloudErrorsAreQueued() {
+        typealias Failure = RemoteTranscriptionClient.ClientError
+        XCTAssertTrue(Failure.network("Connection lost", transient: true).allowsBackgroundRetry)
+        XCTAssertTrue(Failure.httpStatus(503).allowsBackgroundRetry)
+        XCTAssertFalse(Failure.network("Bad certificate", transient: false).allowsBackgroundRetry)
+        XCTAssertFalse(Failure.rateLimited.allowsBackgroundRetry)
+        XCTAssertFalse(Failure.unauthorized.allowsBackgroundRetry)
+    }
+}

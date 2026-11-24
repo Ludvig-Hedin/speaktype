@@ -10,6 +10,8 @@ class MiniRecorderWindowController: NSObject {
     /// where the current transcript gets pasted.
     private var startCandidateApp: NSRunningApplication?
     private var lastActiveApp: NSRunningApplication?
+    private(set) var capturesEscape = false
+    private var pasteTask: Task<Void, Never>?
     private var pendingPasteTarget: NSRunningApplication?
 
     static let accessibilityPasteMessage =
@@ -113,8 +115,12 @@ class MiniRecorderWindowController: NSObject {
             onCancel: { [weak self] in
                 self?.hidePanel()
             },
+            onCancelPaste: { [weak self] in self?.pasteTask?.cancel() },
+            onEscapeCaptureChanged: { [weak self] capture in self?.capturesEscape = capture },
             onStartAccepted: { [weak self] in
                 guard let self else { return }
+                self.pasteTask?.cancel()
+                self.pendingPasteTarget = nil
                 self.lastActiveApp = self.startCandidateApp
             },
             onStopAccepted: { [weak self] in
@@ -188,7 +194,8 @@ class MiniRecorderWindowController: NSObject {
     private func handleCommit(text: String) {
         let pasteTarget = pendingPasteTarget ?? lastActiveApp
         pendingPasteTarget = nil
-        Task { @MainActor in
+        pasteTask?.cancel()
+        pasteTask = Task { @MainActor in
             let result = await ClipboardService.shared.pasteText(
                 text,
                 into: pasteTarget,
@@ -200,7 +207,7 @@ class MiniRecorderWindowController: NSObject {
                 }
             )
 
-            if result == .copiedOnly {
+            if result == .copiedOnly && !Task.isCancelled {
                 // No Accessibility: say so in the panel instead of failing silently. The text
                 // stays on the clipboard for a manual ⌘V.
                 NotificationCenter.default.post(

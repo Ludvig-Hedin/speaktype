@@ -40,6 +40,7 @@ class ClipboardService {
 
     enum PasteResult {
         case pasted
+        case cancelled
         /// Accessibility is off: the text is on the clipboard for a manual ⌘V.
         case copiedOnly
     }
@@ -105,16 +106,18 @@ class ClipboardService {
             AXIsProcessTrusted()
         }.value
 
+        guard !Task.isCancelled else { return .cancelled }
         guard trusted else {
             copy(text: text)
             return .copiedOnly
         }
 
-        let previous = snapshot()
-        let ourChangeCount = copy(text: text, transient: true)
-
         beforePaste()
         await activate(target)
+        guard !Task.isCancelled else { return .cancelled }
+
+        let previous = snapshot()
+        let ourChangeCount = copy(text: text, transient: true)
         paste()
         // The keystroke is sent; the clipboard restore below runs later and is invisible.
         afterPaste()
@@ -138,7 +141,7 @@ class ClipboardService {
 
         app.activate()
         let deadline = Date().addingTimeInterval(Self.activationTimeout)
-        while Date() < deadline {
+        while !Task.isCancelled && Date() < deadline {
             try? await Task.sleep(for: .milliseconds(20))
             if isFrontmost() { break }
         }

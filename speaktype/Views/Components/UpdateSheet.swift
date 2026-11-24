@@ -107,7 +107,7 @@ struct UpdateSheet: View {
             if !updateService.isInstalling {
                 HStack(spacing: 8) {
                     Toggle(isOn: $autoUpdate) {
-                        Text("Automatically download and install updates in the future")
+                        Text("Check for updates automatically")
                             .font(Typography.bodySmall)
                             .foregroundStyle(.secondary)
                     }

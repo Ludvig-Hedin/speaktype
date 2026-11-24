@@ -9,6 +9,7 @@ class UpdateService: ObservableObject {
     @Published var availableUpdate: AppVersion?
     @Published var isCheckingForUpdates = false
     @Published var lastCheckDate: Date?
+    @Published var manualCheckMessage: String?
 
     // Install progress state
     @Published var isInstalling = false
@@ -24,6 +25,7 @@ class UpdateService: ObservableObject {
     private let lastCheckDateKey = "lastUpdateCheckDate"
     private let skippedVersionKey = "skippedVersion"
     private let autoUpdateKey = "autoUpdate"
+    private var manualCheckRequested = false
     private let lastReminderDateKey = "lastUpdateReminderDate"
 
     private init() {
@@ -34,28 +36,43 @@ class UpdateService: ObservableObject {
 
     /// Check for updates from server
     func checkForUpdates(silent: Bool = false) async {
+        if !silent {
+            manualCheckMessage = nil
+            manualCheckRequested = true
+        }
         guard !isCheckingForUpdates else { return }
 
-        await MainActor.run { isCheckingForUpdates = true }
+        isCheckingForUpdates = true
+        defer {
+            isCheckingForUpdates = false
+            manualCheckRequested = false
+        }
 
         do {
             var request = URLRequest(url: UpdateConfiguration.latestReleaseAPIURL)
             request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
             request.setValue("SpeakType/\(AppVersion.currentVersion)", forHTTPHeaderField: "User-Agent")
 
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
             let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+            guard release.assets.contains(where: { $0.name.lowercased().hasSuffix(".dmg") }) else {
+                throw URLError(.fileDoesNotExist)
+            }
             let releaseVersion = AppVersion(from: release)
             let currentVersion = AppVersion.currentVersion
 
             await MainActor.run {
+                let manual = self.manualCheckRequested
                 if AppVersion.isNewerVersion(releaseVersion.version, than: currentVersion) {
                     let skipped = self.isVersionSkipped(releaseVersion.version)
-                    if !silent || !skipped {
+                    if manual || !skipped {
                         self.availableUpdate = releaseVersion
                         // Silent checks only raise the window on the reminder schedule so
                         // users aren’t nagged on every launch; manual “Check for Updates” always prompts.
-                        if silent {
+                        if !manual {
                             if self.shouldShowReminder() {
                                 self.showUpdateWindowPublisher.send(releaseVersion)
                             }
@@ -67,14 +84,14 @@ class UpdateService: ObservableObject {
                     }
                 } else {
                     self.availableUpdate = nil
+                    if manual { self.manualCheckMessage = "SpeakType is up to date." }
                 }
-                self.isCheckingForUpdates = false
                 self.lastCheckDate = Date()
                 self.saveLastCheckDate()
             }
         } catch {
             print("Failed to check for updates: \(error)")
-            await MainActor.run { self.isCheckingForUpdates = false }
+            if manualCheckRequested { manualCheckMessage = "Could not check for updates. Try again in a moment." }
         }
     }
 

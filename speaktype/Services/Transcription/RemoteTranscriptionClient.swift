@@ -9,6 +9,7 @@ import Foundation
 struct RemoteTranscriptionClient: TranscriptionProvider {
     let provider: RemoteProvider
     let model: RemoteTranscriptionModel
+    var requiredRetryRoute: DictationRetryRoute?
 
     var kind: TranscriptionProviderKind { provider.providerKind }
 
@@ -18,8 +19,17 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
         case unauthorized
         case rateLimited
         case httpStatus(Int)
+        case settingsChanged
         case emptyResponse
-        case network(String)
+        case network(String, transient: Bool)
+
+        var allowsBackgroundRetry: Bool {
+            switch self {
+            case .network(_, let transient): return transient
+            case .httpStatus(let code): return (500...599).contains(code)
+            default: return false
+            }
+        }
 
         // Descriptions are deliberately scrubbed — never echo the key, auth header, or raw provider body.
         var errorDescription: String? {
@@ -29,8 +39,9 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
             case .unauthorized: return "Invalid or expired API key."
             case .rateLimited: return "Provider rate limit reached — try again shortly."
             case .httpStatus(let code): return "Transcription service error (HTTP \(code))."
+            case .settingsChanged: return "Transcription settings changed — retry from History."
             case .emptyResponse: return "The provider returned no transcript."
-            case .network(let msg): return "Network error: \(msg)"
+            case .network(let msg, _): return "Network error: \(msg)"
             }
         }
     }
@@ -93,6 +104,10 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
         var attempt = 0
         while true {
             do {
+                try Task.checkCancellation()
+                if let requiredRetryRoute, requiredRetryRoute != DictationRetryRoute.current {
+                    throw ClientError.settingsChanged
+                }
                 let data = try await send(request)
                 guard let text = Self.parseText(from: data) else {
                     throw ClientError.emptyResponse
@@ -121,10 +136,14 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
             throw CancellationError()
         } catch {
             try Task.checkCancellation()
-            let clientError = ClientError.network(error.localizedDescription)
-            if let urlError = error as? URLError,
-                [.timedOut, .networkConnectionLost].contains(urlError.code)
-            {
+            let code = (error as? URLError)?.code
+            let transientCodes: [URLError.Code] = [
+                .notConnectedToInternet, .networkConnectionLost, .timedOut,
+                .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
+            ]
+            let clientError = ClientError.network(
+                error.localizedDescription, transient: code.map(transientCodes.contains) ?? false)
+            if code == .timedOut || code == .networkConnectionLost {
                 throw RetryableError(finalError: clientError)
             }
             throw clientError

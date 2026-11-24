@@ -12,11 +12,14 @@ enum TranscriptionCoordinator {
         }
     }
 
-    static func transcribe(audioFile: URL, language: String) async throws -> TranscriptionOutcome {
-        let chain = resolveChain()
+    static func transcribe(
+        audioFile: URL, language: String, allowRemote: Bool = true
+    ) async throws -> TranscriptionOutcome {
+        let chain = resolveChain().filter { allowRemote || !$0.isRemote }
         guard !chain.isEmpty else { throw CoordinatorError.noProviderAvailable }
 
         var lastError: Error?
+        var retryableCloudError: RemoteTranscriptionClient.ClientError?
         for kind in chain {
             guard let provider = makeProvider(kind) else { continue }
             do {
@@ -26,10 +29,14 @@ enum TranscriptionCoordinator {
             } catch {
                 try Task.checkCancellation()
                 print("Transcription via \(kind.rawValue) failed, trying fallback: \(error.localizedDescription)")
+                if let cloud = error as? RemoteTranscriptionClient.ClientError, cloud.allowsBackgroundRetry {
+                    retryableCloudError = cloud
+                }
                 lastError = error
                 continue
             }
         }
+        if let retryableCloudError { throw retryableCloudError }
         throw lastError ?? CoordinatorError.noProviderAvailable
     }
 

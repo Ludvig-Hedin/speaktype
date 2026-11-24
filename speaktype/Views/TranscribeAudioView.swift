@@ -17,6 +17,8 @@ struct TranscribeAudioView: View {
     @State private var workingItemID: UUID?
     @State private var displayedVersion: [UUID: TranscriptVersion] = [:]
     @State private var actionError: String?
+    @State private var recordingRoute: DictationRetryRoute?
+    @State private var recordingLanguage = "auto"
     
     var body: some View {
         PageScaffold(
@@ -91,7 +93,9 @@ struct TranscribeAudioView: View {
                     Button(action: {
                         Task {
                             if let url = await audioRecorder.stopRecording() {
-                                startTranscription(url: url, ownsFile: true)
+                                startTranscription(url: url, ownsFile: true, fromMicrophone: true)
+                            } else {
+                                actionError = "No audio was recorded"
                             }
                         }
                     }) {
@@ -118,7 +122,14 @@ struct TranscribeAudioView: View {
                     }
                 } else {
                     Button(action: {
-                        Task { _ = await audioRecorder.startRecording() }
+                        actionError = nil
+                        recordingRoute = DictationRetryRoute.current
+                        recordingLanguage = transcriptionLanguage
+                        Task {
+                            if await !audioRecorder.startRecording() {
+                                actionError = "Could not start the microphone"
+                            }
+                        }
                     }) {
                         Text("Start Recording")
                     }
@@ -198,18 +209,49 @@ struct TranscribeAudioView: View {
         }
     }
     
-    private func startTranscription(url: URL, ownsFile: Bool) {
+    private func startTranscription(url: URL, ownsFile: Bool, fromMicrophone: Bool = false) {
+        let language = fromMicrophone ? recordingLanguage : transcriptionLanguage
+        let retryRoute = fromMicrophone ? recordingRoute : nil
         Task {
+            actionError = nil
             isTranscribing = true
+            var recordingID: UUID?
+            defer {
+                if let recordingID { historyService.finishDictation(id: recordingID) }
+                isTranscribing = false
+            }
             transcribingStatusText = "Transcribing..."
             do {
-                let outcome = try await TranscriptionCoordinator.transcribe(audioFile: url, language: transcriptionLanguage)
+                if fromMicrophone {
+                    let duration = (try? await getAudioDuration(url: url)) ?? 0
+                    recordingID = try historyService.beginDictation(audioURL: url, duration: duration, language: language)
+                }
+                let outcome = try await TranscriptionCoordinator.transcribe(
+                    audioFile: url, language: language,
+                    allowRemote: !fromMicrophone || (retryRoute != nil && retryRoute == DictationRetryRoute.current))
                 if polishNewTranscripts {
                     await MainActor.run { transcribingStatusText = "Polishing..." }
                 }
                 let rawTranscript = outcome.text
                 guard !rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     throw RemoteTranscriptionClient.ClientError.emptyResponse
+                }
+                if let recordingID {
+                    let raw = HistoryService.cleanedTranscript(rawTranscript)
+                    guard !raw.isEmpty else {
+                        historyService.failDictation(id: recordingID, reason: "No speech detected")
+                        actionError = "No speech detected"
+                        return
+                    }
+                    var saved = historyService.saveDictationText(id: recordingID, transcript: raw, raw: raw, outcome: outcome)
+                    if polishNewTranscripts {
+                        let final = HistoryService.cleanedTranscript(await TranscriptionFinalizer.polishTranscriptOnDemand(raw))
+                        if !final.isEmpty, final != raw {
+                            saved = historyService.saveDictationText(id: recordingID, transcript: final, raw: raw, outcome: outcome)
+                        }
+                    }
+                    if !saved { actionError = "Could not save the transcript" }
+                    return
                 }
                 transcribedText = polishNewTranscripts
                     ? await TranscriptionFinalizer.polishTranscriptOnDemand(rawTranscript)
@@ -224,10 +266,15 @@ struct TranscribeAudioView: View {
                     rawTranscript: rawTranscript,
                     polishedTranscript: polishNewTranscripts ? transcribedText : nil)
             } catch {
-                if ownsFile { try? FileManager.default.removeItem(at: url) }
-                transcribedText = "Error: \(error.localizedDescription)"
+                if let recordingID {
+                    actionError = historyService.recordDictationError(error, id: recordingID, retryRoute: retryRoute)
+                } else if fromMicrophone {
+                    actionError = "Could not save to History. Audio kept on this Mac."
+                } else {
+                    if ownsFile { try? FileManager.default.removeItem(at: url) }
+                    actionError = error.localizedDescription
+                }
             }
-            isTranscribing = false
         }
     }
     

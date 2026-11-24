@@ -18,6 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var localKeyDownMonitor: Any?
     private var globalKeyUpMonitor: Any?
     private var localKeyUpMonitor: Any?
+    private var scheduledUpdateChecks: Task<Void, Never>?
     private weak var updateWindow: NSWindow?
     /// Last app other than SpeakType that was frontmost — the target for "Paste last
     /// transcript", since opening the menu bar window can make SpeakType frontmost.
@@ -117,7 +118,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in await PermissionService.shared.refresh() }
         }
 
-        checkForUpdatesOnLaunch()
+        HistoryService.shared.resumeQueuedDictations()
 
         UpdateService.shared.showUpdateWindowPublisher
             .receive(on: DispatchQueue.main)
@@ -125,6 +126,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.showUpdateWindow()
             }
             .store(in: &cancellables)
+
+        startScheduledUpdateChecks()
 
         // Scan disk for Core ML models, sync `selectedModelVariant`, then warm WhisperKit so the first hotkey is responsive.
         Task(priority: .userInitiated) {
@@ -143,6 +146,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        scheduledUpdateChecks?.cancel()
         keyboardFocusVisibility.stopMonitoring()
     }
 
@@ -293,7 +297,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupSuppressingHotkeyEventTap() {
         guard hotkeyEventTap == nil else { return }
 
-        let eventMask = (1 << CGEventType.flagsChanged.rawValue)
+        let eventMask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)
         let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon else {
                 return Unmanaged.passUnretained(event)
@@ -325,7 +329,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyEventTapSource = runLoopSource
     }
 
-    // MARK: - Event Tap (CGEvent level — only for Fn/Globe suppression)
+    // MARK: - Event Tap (Fn/Globe and active dictation Escape)
 
     private func handleHotkeyEventTap(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
@@ -333,6 +337,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 CGEvent.tapEnable(tap: hotkeyEventTap, enable: true)
             }
             return Unmanaged.passUnretained(event)
+        }
+
+        if type == .keyDown, event.getIntegerValueField(.keyboardEventKeycode) == 53,
+           miniRecorderController?.capturesEscape == true {
+            if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+                DispatchQueue.main.async { [weak self] in
+                    self?.isHotkeyPressed = false
+                    NotificationCenter.default.post(name: .recordingEscapeRequested, object: nil)
+                }
+            }
+            return nil
         }
 
         guard type == .flagsChanged else {
@@ -414,6 +429,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
         }
+
+        // The recorder owns Escape so a normal hold-to-talk take can be recovered.
+        guard event.keyCode != 53 else { return }
 
         // Cancel hold-mode recording if another key is pressed
         // (only for modifier-only hotkeys, since keyDown IS the trigger for the others)
@@ -550,13 +568,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Update Checking
 
-    private func checkForUpdatesOnLaunch() {
-        let updateService = UpdateService.shared
-        let autoUpdate = UserDefaults.standard.bool(forKey: "autoUpdate")
-        guard autoUpdate && updateService.shouldCheckForUpdates() else { return }
-
-        Task {
-            await updateService.checkForUpdates(silent: true)
+    private func startScheduledUpdateChecks() {
+        scheduledUpdateChecks = Task(priority: .utility) {
+            let updates = UpdateService.shared
+            while !Task.isCancelled {
+                if updates.isAutoUpdateEnabled, updates.shouldCheckForUpdates(),
+                   !AudioRecordingService.shared.isRecordingOrStarting,
+                   HistoryService.shared.retryingItemIDs.isEmpty {
+                    await updates.checkForUpdates(silent: true)
+                }
+                try? await Task.sleep(for: .seconds(3600))
+            }
         }
     }
 

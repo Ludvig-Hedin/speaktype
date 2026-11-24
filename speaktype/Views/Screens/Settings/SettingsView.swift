@@ -383,6 +383,15 @@ private struct UpdatesSection: View {
                     .disabled(updateService.isCheckingForUpdates)
                 }
                 .settingsRowPadding()
+
+                if let message = updateService.manualCheckMessage {
+                    Text(message)
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                }
             }
         }
     }

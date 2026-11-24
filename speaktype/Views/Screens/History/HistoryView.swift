@@ -221,7 +221,7 @@ struct HistoryCard: View {
                                 Image(systemName: "exclamationmark.triangle")
                                     .font(.system(size: 11))
                                     .foregroundStyle(Color.accentWarning)
-                                Text("Transcription failed")
+                                Text(savedAudioTitle)
                                     .font(Typography.bodyMedium)
                                     .foregroundStyle(Color.textSecondary)
                             }
@@ -281,6 +281,12 @@ struct HistoryCard: View {
             }
         }
         .background(isHovered && !isExpanded ? Color.bgHover.opacity(0.4) : Color.clear)
+    }
+
+    private var savedAudioTitle: String {
+        if isRetrying { return "Transcribing…" }
+        if item.queuedRetry != nil { return "Waiting to retry" }
+        return item.recordingLanguage == nil ? "Transcription failed" : "Audio saved"
     }
 
     @ViewBuilder

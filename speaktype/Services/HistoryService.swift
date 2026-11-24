@@ -30,6 +30,9 @@ nonisolated struct HistoryItem: Identifiable, Codable, Hashable {
     /// Optional so older persisted JSON decodes unchanged (nil = a normal, successful item).
     var failureReason: String? = nil
 
+    var recordingLanguage: String? = nil
+    var queuedRetry: DictationRetry? = nil
+
     var isFailed: Bool { failureReason != nil }
 
     func hash(into hasher: inout Hasher) {
@@ -52,9 +55,125 @@ class HistoryService: ObservableObject {
     private let saveKey = "history_items"
     private let statsSaveKey = "history_stats_entries"
     
+    private let recoveryStore = DictationRecoveryStore.live
+    private var durableIDs: Set<UUID> = []
+    private var retryWorker: Task<Void, Never>?
+
     private init() {
         loadStats()
         loadHistory()
+        let restored = recoveryStore.load()
+        durableIDs = Set(restored.map(\.id))
+        items.removeAll { durableIDs.contains($0.id) }
+        items = (items + restored).sorted { $0.date > $1.date }
+        for item in restored where !item.isFailed && !statsEntries.contains(where: { $0.id == item.id }) {
+            recordStats(for: item)
+        }
+    }
+
+    /// Create a recoverable entry before transcription begins. While processing, the
+    /// same entry is reserved so History cannot start a duplicate transcription.
+    func beginDictation(audioURL: URL, duration: TimeInterval, language: String, processing: Bool = true) throws -> UUID {
+        var item = HistoryItem(
+            id: UUID(), date: .now, transcript: "", duration: duration, audioFileURL: audioURL,
+            failureReason: processing ? "Recording saved — retry to transcribe" : "Dictation stopped",
+            recordingLanguage: language)
+        do {
+            try recoveryStore.write(item)
+            durableIDs.insert(item.id)
+        } catch {
+            item.failureReason = "Could not save recovery information"
+            items.insert(item, at: 0)
+            saveHistory()
+            throw error
+        }
+        if processing { retryingItemIDs.insert(item.id) }
+        items.insert(item, at: 0)
+        return item.id
+    }
+
+    func finishDictation(id: UUID) {
+        retryingItemIDs.remove(id)
+    }
+
+    func containsDictation(id: UUID) -> Bool {
+        items.contains { $0.id == id }
+    }
+
+    /// Checkpoint raw text before polish, then replace it in place if polish succeeds.
+    @discardableResult
+    func saveDictationText(id: UUID, transcript: String, raw: String, outcome: TranscriptionOutcome) -> Bool {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return false }
+        var item = items[index]
+        item.transcript = transcript
+        item.rawTranscript = raw
+        item.polishedTranscript = transcript == raw ? nil : transcript
+        item.modelUsed = outcome.modelLabel
+        item.transcriptionTime = outcome.transcriptionTime
+        item.provider = outcome.provider.rawValue
+        item.estimatedCostUSD = outcome.estimatedCostUSD
+        item.failureReason = nil
+        item.queuedRetry = nil
+        let saved = persist(item, at: index)
+        recordStats(for: item)
+        return saved
+    }
+
+    func failDictation(id: UUID, reason: String, retry: DictationRetry? = nil) {
+        guard let index = items.firstIndex(where: { $0.id == id }), items[index].isFailed else { return }
+        var item = items[index]
+        item.failureReason = reason
+        item.queuedRetry = retry
+        _ = persist(item, at: index)
+        if retry != nil { resumeQueuedDictations() }
+    }
+
+    func recordDictationError(_ error: Error, id: UUID, retryRoute: DictationRetryRoute?) -> String {
+        let transient = (error as? RemoteTranscriptionClient.ClientError)?.allowsBackgroundRetry == true
+        let offlineWithoutEngine = !NetworkReachability.shared.isOnline
+            && error is TranscriptionCoordinator.CoordinatorError
+        if let retryRoute, retryRoute == DictationRetryRoute.current, transient || offlineWithoutEngine {
+            let retry = DictationRetry(route: retryRoute, nextAttempt: .now.addingTimeInterval(5))
+            failDictation(id: id, reason: "Waiting to retry transcription", retry: retry)
+            return "Audio saved. SpeakType will retry."
+        }
+        failDictation(id: id, reason: error.localizedDescription)
+        return "Audio saved. Retry in History."
+    }
+
+    func resumeQueuedDictations() {
+        guard retryWorker == nil, items.contains(where: { $0.queuedRetry != nil }) else { return }
+        retryWorker = Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            defer { self.retryWorker = nil }
+            while !Task.isCancelled {
+                let queued = self.items.filter { $0.queuedRetry != nil }
+                guard !queued.isEmpty else { return }
+                if NetworkReachability.shared.isOnline,
+                   !AudioRecordingService.shared.isRecordingOrStarting,
+                   self.retryingItemIDs.isEmpty,
+                   let item = queued.last(where: { ($0.queuedRetry?.nextAttempt ?? .distantFuture) <= .now }) {
+                    await self.retryTranscription(id: item.id, automatically: true)
+                }
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+    }
+
+    @discardableResult
+    private func persist(_ item: HistoryItem, at index: Int) -> Bool {
+        if durableIDs.contains(item.id) {
+            do {
+                try recoveryStore.write(item)
+            } catch {
+                AppLogger.warning("Could not update saved dictation", category: AppLogger.transcription)
+                items[index] = item
+                return false
+            }
+        }
+        items[index] = item
+        if !durableIDs.contains(item.id) { saveHistory() }
+        return true
     }
     
     /// Serial background queue for JSON encoding + UserDefaults writes, so saving a long
@@ -124,77 +243,76 @@ class HistoryService: ObservableObject {
         return newItem.id
     }
 
-    /// Re-run transcription (and optional polish) for a failed item and update it in place.
-    func retryTranscription(id: UUID) async {
+    /// Background retries only use the same cloud configuration. A manual retry is
+    /// explicit and can use the current settings, e.g. after fixing a missing key.
+    func retryTranscription(id: UUID, automatically: Bool = false) async {
         guard !retryingItemIDs.contains(id),
-            let item = items.first(where: { $0.id == id }), item.isFailed,
-            let audioURL = item.audioFileURL
-        else { return }
+              let item = items.first(where: { $0.id == id }), item.isFailed,
+              let audioURL = item.audioFileURL else { return }
 
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
-            markFailed(id: id, reason: "Audio file missing")
+            failDictation(id: id, reason: "Audio file missing")
             return
+        }
+
+        if automatically {
+            guard let queued = item.queuedRetry, queued.route == DictationRetryRoute.current else {
+                failDictation(id: id, reason: "Transcription settings changed — retry from History")
+                return
+            }
         }
 
         retryingItemIDs.insert(id)
         defer { retryingItemIDs.remove(id) }
-
-        let language = UserDefaults.standard.string(forKey: "transcriptionLanguage") ?? "auto"
+        let language = item.recordingLanguage
+            ?? UserDefaults.standard.string(forKey: "transcriptionLanguage") ?? "auto"
         do {
-            let outcome = try await TranscriptionCoordinator.transcribe(
-                audioFile: audioURL, language: language)
+            let outcome: TranscriptionOutcome
+            if automatically, let provider = TranscriptionModeUserDefaults.selectedRemoteProvider,
+               let model = TranscriptionModeUserDefaults.selectedRemoteModel {
+                outcome = try await RemoteTranscriptionClient(
+                    provider: provider, model: model, requiredRetryRoute: item.queuedRetry?.route)
+                    .transcribeDetailed(audioFile: audioURL, language: language)
+            } else {
+                outcome = try await TranscriptionCoordinator.transcribe(audioFile: audioURL, language: language)
+            }
+            try Task.checkCancellation()
             let raw = Self.cleanedTranscript(outcome.text)
             guard !raw.isEmpty else {
-                markFailed(id: id, reason: "No speech detected")
+                failDictation(id: id, reason: "No speech detected")
                 return
             }
+            _ = saveDictationText(id: id, transcript: raw, raw: raw, outcome: outcome)
+            // A delayed result can arrive after the user changed writing-polish preferences.
+            // Only a user-initiated retry runs the current polish configuration.
+            guard !automatically else { return }
             let finalText = Self.cleanedTranscript(
                 await TranscriptionFinalizer.finalizeTranscript(rawTranscript: raw))
-            completeFailedItem(
-                id: id,
-                transcript: finalText.isEmpty ? raw : finalText,
-                rawTranscript: raw,
-                outcome: outcome
-            )
+            if !Task.isCancelled, !finalText.isEmpty, finalText != raw {
+                saveDictationText(id: id, transcript: finalText, raw: raw, outcome: outcome)
+            }
         } catch is CancellationError {
             return
         } catch {
-            markFailed(id: id, reason: error.localizedDescription)
+            if automatically, var retry = item.queuedRetry,
+               (error as? RemoteTranscriptionClient.ClientError)?.allowsBackgroundRetry == true {
+                retry.backOff()
+                failDictation(id: id, reason: "Waiting to retry transcription", retry: retry)
+            } else {
+                failDictation(id: id, reason: error.localizedDescription)
+            }
         }
     }
 
-    private func completeFailedItem(id: UUID, transcript: String, rawTranscript: String, outcome: TranscriptionOutcome) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        items[index].transcript = transcript
-        items[index].rawTranscript = rawTranscript
-        items[index].polishedTranscript = transcript == rawTranscript ? nil : transcript
-        items[index].modelUsed = outcome.modelLabel
-        items[index].transcriptionTime = outcome.transcriptionTime
-        items[index].provider = outcome.provider.rawValue
-        items[index].estimatedCostUSD = outcome.estimatedCostUSD
-        items[index].failureReason = nil
-
-        let item = items[index]
-        statsEntries.removeAll { $0.id == id }
+    private func recordStats(for item: HistoryItem) {
+        statsEntries.removeAll { $0.id == item.id }
         statsEntries.append(
             HistoryStatsEntry(
-                id: id,
-                date: item.date,
-                wordCount: Self.wordCount(of: transcript),
-                duration: item.duration,
-                provider: item.provider,
-                estimatedCostUSD: item.estimatedCostUSD
-            )
+                id: item.id, date: item.date, wordCount: Self.wordCount(of: item.transcript),
+                duration: item.duration, provider: item.provider, estimatedCostUSD: item.estimatedCostUSD)
         )
         statsEntries.sort { $0.date > $1.date }
-        saveHistory()
         saveStats()
-    }
-
-    private func markFailed(id: UUID, reason: String) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        items[index].failureReason = reason
-        saveHistory()
     }
 
     /// Most recent successful transcript, for "Paste last transcript".
@@ -204,47 +322,51 @@ class HistoryService: ObservableObject {
 
     func setPolishedTranscript(_ text: String, for id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        items[index].polishedTranscript = text
-        items[index].transcript = text
-        saveHistory()
+        var item = items[index]
+        item.polishedTranscript = text
+        item.transcript = text
+        persist(item, at: index)
     }
 
     func setSummary(_ text: String, for id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        items[index].summary = text
-        saveHistory()
+        var item = items[index]
+        item.summary = text
+        persist(item, at: index)
     }
     
     func deleteItem(at offsets: IndexSet, deleteAudioFile: Bool = true) {
-        let itemsToDelete = offsets.compactMap { items.indices.contains($0) ? items[$0] : nil }
-        let deletedIds = Set(itemsToDelete.map(\.id))
-        items.remove(atOffsets: offsets)
-        // Statistics read from `statsEntries`, not `items`; without this mirror-delete a removed
-        // transcript keeps inflating word/duration totals forever (the orphaned entry is also
-        // re-persisted across launches). Keep the two stores in lockstep.
-        statsEntries.removeAll { deletedIds.contains($0.id) }
-        if deleteAudioFile {
-            itemsToDelete.forEach(removeAudioFileIfNeeded(for:))
-        }
-        saveHistory()
-        saveStats()
+        let ids = offsets.compactMap { items.indices.contains($0) ? items[$0].id : nil }
+        for id in ids { deleteItem(id: id, deleteAudioFile: deleteAudioFile) }
     }
 
     func deleteItem(id: UUID, deleteAudioFile: Bool = true) {
-        let itemToDelete = items.first { $0.id == id }
+        guard let item = items.first(where: { $0.id == id }), removeCheckpoint(for: id) else { return }
         items.removeAll { $0.id == id }
         statsEntries.removeAll { $0.id == id }
-        if deleteAudioFile, let itemToDelete {
-            removeAudioFileIfNeeded(for: itemToDelete)
-        }
+        if deleteAudioFile { removeAudioFileIfNeeded(for: item) }
         saveHistory()
         saveStats()
     }
 
     func clearAll() {
-        items.forEach(removeAudioFileIfNeeded(for:))
-        items.removeAll()
+        let removed = items.filter { removeCheckpoint(for: $0.id) }
+        let ids = Set(removed.map(\.id))
+        items.removeAll { ids.contains($0.id) }
+        removed.forEach(removeAudioFileIfNeeded(for:))
         saveHistory()
+    }
+
+    private func removeCheckpoint(for id: UUID) -> Bool {
+        guard durableIDs.contains(id) else { return true }
+        do {
+            try recoveryStore.remove(id: id)
+            durableIDs.remove(id)
+            return true
+        } catch {
+            AppLogger.warning("Could not remove saved dictation", category: AppLogger.transcription)
+            return false
+        }
     }
 
     func totalWordCount() -> Int {
@@ -271,7 +393,7 @@ class HistoryService: ObservableObject {
     }
     
     private func saveHistory() {
-        let snapshot = items
+        let snapshot = items.filter { !durableIDs.contains($0.id) }
         let key = saveKey
         Self.persistenceQueue.async {
             Self.encodeAndStore(snapshot, forKey: key)

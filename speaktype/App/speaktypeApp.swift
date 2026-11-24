@@ -27,26 +27,14 @@ struct speaktypeApp: App {
 
     var body: some Scene {
         // Main Dashboard Window (Hidden by default, opened via Menu Bar or Dock)
-        WindowGroup(id: "main-dashboard") {
-            ThemeProvider {
-                Group {
-                    if hasCompletedOnboarding {
-                        MainView()
-                    } else {
-                        OnboardingView()
-                    }
-                }
+        WindowGroup("SpeakType", id: "main-dashboard") {
+            if #available(macOS 15, *) {
+                dashboardContent.windowFullScreenBehavior(.enabled)
+            } else {
+                dashboardContent
             }
-            .environmentObject(licenseManager)
-            .environmentObject(trialManager)
-            .preferredColorScheme(appTheme.colorScheme)
-            // Tint native controls (menu arrows, toggles, sliders, checkmarks) with our one
-            // accent instead of the user's system accent — keeps the palette monochrome + blue.
-            .tint(Color.accentBlue)
-            .modifier(KeyboardFocusEffect(visibility: appDelegate.keyboardFocusVisibility))
         }
         .defaultSize(width: 1200, height: 800)
-        .windowStyle(.hiddenTitleBar)
         .handlesExternalEvents(matching: ["main-dashboard", "open"])
         .commands {
             SidebarCommands()
@@ -74,6 +62,25 @@ struct speaktypeApp: App {
             .labelStyle(.iconOnly)
         }
         .menuBarExtraStyle(.window)
+    }
+
+    private var dashboardContent: some View {
+        ThemeProvider {
+            Group {
+                if hasCompletedOnboarding {
+                    MainView()
+                } else {
+                    OnboardingView()
+                }
+            }
+        }
+        .environmentObject(licenseManager)
+        .environmentObject(trialManager)
+        .preferredColorScheme(appTheme.colorScheme)
+        // Tint native controls (menu arrows, toggles, sliders, checkmarks) with our one
+        // accent instead of the user's system accent — keeps the palette monochrome + blue.
+        .tint(Color.accentBlue)
+        .modifier(KeyboardFocusEffect(visibility: appDelegate.keyboardFocusVisibility))
     }
 
     // MARK: - Actions

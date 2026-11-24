@@ -7,6 +7,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 - **Web:** Free-only launch. Pricing shows one free plan with every feature and a note that Pro comes later; price rows and FAQ answers follow. Set `NEXT_PUBLIC_PAID_PLANS_OPEN=1` to show paid plans.
 
+## [1.0.37] - 2026-11-24
+- **macOS:** The standard title bar supports native window dragging, tiling, double-click actions, and full screen.
+- **Dictation:** Finished audio is saved locally before transcription. Escape stops insertion and keeps audio in History. If text is ready, the recorder offers Copy. Temporary cloud errors are retried when online and update the original History entry.
+- **Updates:** SpeakType checks when it starts and while it runs in the background. Installation starts when you approve it. A manual check reports when you are up to date or when the check fails.
+
 ## [1.0.36] - 2026-11-24
 - **macOS, recorder:** New small pill at the bottom center, like Wispr Flow: a live waveform while you speak, stop and language when you hover, soft dots while the text is written, and a checkmark once it is inserted. Errors are orange; notes stay neutral and wrap to two lines. Smooth fades and size changes; clicks around the pill pass through to the app below.
 - **macOS, memory:** The on-device Whisper model is never preloaded and never pinned. It loads when you start dictating (while you speak) and is released after 2 minutes idle, or 30 seconds when memory is tight. Opening the dashboard or file view no longer loads it. Cloud transcription never loads it. Old unused audio chunk files are deleted.
