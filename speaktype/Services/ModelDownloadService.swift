@@ -260,66 +260,30 @@ class ModelDownloadService: ObservableObject {
         // only code that ever touches the legacy Documents location, and only once.
         let searchDirs: [FileManager.SearchPathDirectory] = [.applicationSupportDirectory, .cachesDirectory]
 
-        // Parse variant: "openai/whisper-medium" or "openai_whisper-medium"
-        let variantParts = variant.split(separator: "/")
-        let modelName = variantParts.last ?? Substring(variant)
-
-        // Also search for underscore version: openai_whisper-medium
-        let underscoreVariant = variant.replacingOccurrences(of: "/", with: "_")
-
-        var deletedCount = 0
-        var checkedPaths: [String] = []
-
-        print("🗑️ Searching for model caches matching: '\(modelName)' or '\(underscoreVariant)'")
-
-        // 1. Check Standard macOS Paths
-        for searchDir in searchDirs {
-            guard let baseDir = fileManager.urls(for: searchDir, in: .userDomainMask).first else { continue }
-
-            // Check ./huggingface/models (HuggingFace cache)
-            let hfModelsDir = baseDir.appendingPathComponent("huggingface/models")
-            checkedPaths.append(hfModelsDir.path)
-            deletedCount += cleanupDirectory(hfModelsDir, matchAny: [String(modelName), underscoreVariant])
-
-            // Check ./huggingface/hub (Alternative HF structure)
-            let hfHubDir = baseDir.appendingPathComponent("huggingface/hub")
-            checkedPaths.append(hfHubDir.path)
-            deletedCount += cleanupDirectory(hfHubDir, matchAny: [String(modelName), underscoreVariant])
-
-            // Skip the old SpeakType-specific directory (no longer used)
-
-            // Check root directory (sometimes models are here)
-            deletedCount += cleanupDirectory(baseDir, matchAny: [String(modelName), underscoreVariant])
-        }
-
-        // 2. Check ~/.cache (Common for Python/Unix HF tools)
         let homeDir = fileManager.homeDirectoryForCurrentUser
-        let dotCacheModels = homeDir.appendingPathComponent(".cache/huggingface/models")
-        checkedPaths.append(dotCacheModels.path)
-        deletedCount += cleanupDirectory(dotCacheModels, matchAny: [String(modelName), underscoreVariant])
-
-        let dotCacheHub = homeDir.appendingPathComponent(".cache/huggingface/hub")
-        checkedPaths.append(dotCacheHub.path)
-        deletedCount += cleanupDirectory(dotCacheHub, matchAny: [String(modelName), underscoreVariant])
-
-        // 3. Check Temporary Directory
         let tempDir = fileManager.temporaryDirectory
-        let tempHf = tempDir.appendingPathComponent("huggingface")
-        checkedPaths.append(tempHf.path)
-        deletedCount += cleanupDirectory(tempHf, matchAny: [String(modelName), underscoreVariant])
-        deletedCount += cleanupDirectory(tempDir, matchAny: [String(modelName), underscoreVariant])
+        let standardDirectories = searchDirs.flatMap { directory -> [URL] in
+            guard let base = fileManager.urls(for: directory, in: .userDomainMask).first else { return [] }
+            return [base.appendingPathComponent("huggingface/models"),
+                    base.appendingPathComponent("huggingface/hub"), base]
+        }
+        let directories = standardDirectories + [
+            homeDir.appendingPathComponent(".cache/huggingface/models"),
+            homeDir.appendingPathComponent(".cache/huggingface/hub"),
+            tempDir.appendingPathComponent("huggingface"),
+            tempDir,
+            ModelStorage.whisperKitModelsDirectory,
+        ]
+        let deletedCount = purgeModelCaches(variant: variant, in: directories)
+        if deletedCount > 0 { return "Deleted \(deletedCount) items" }
+        return "No cached files found for '\(variant)'"
+    }
 
-        // 4. Check the canonical model directory in Application Support
-        let whisperKitModels = ModelStorage.whisperKitModelsDirectory
-        checkedPaths.append(whisperKitModels.path)
-        deletedCount += cleanupDirectory(whisperKitModels, matchAny: [String(modelName), underscoreVariant])
-
-        print("🗑️ Cleanup complete. Deleted \(deletedCount) items from \(checkedPaths.count) locations")
-
-        if deletedCount > 0 {
-            return "Deleted \(deletedCount) items"
-        } else {
-            return "No match for '\(modelName)' in \(checkedPaths.count) locations. checked: \(checkedPaths.map { $0.replacingOccurrences(of: homeDir.path, with: "~") }.joined(separator: ", "))"
+    nonisolated static func purgeModelCaches(variant: String, in directories: [URL]) -> Int {
+        let modelName = variant.split(separator: "/").last.map(String.init) ?? variant
+        let underscoreVariant = variant.replacingOccurrences(of: "/", with: "_")
+        return directories.reduce(0) {
+            $0 + cleanupDirectory($1, matchAny: [modelName, underscoreVariant])
         }
     }
 
@@ -344,8 +308,8 @@ class ModelDownloadService: ObservableObject {
         return count
     }
 
-    nonisolated static func matchesCacheName(_ fileName: String, patterns: [String]) -> Bool {
-        if patterns.contains("whisper-large-v3") {
+    nonisolated private static func matchesCacheName(_ fileName: String, patterns: [String]) -> Bool {
+        if patterns.contains("openai_whisper-large-v3") || patterns.contains("whisper-large-v3") {
             // The full model's short ID is a prefix of the Turbo and quantized variants.
             return ["whisper-large-v3", "openai_whisper-large-v3", "models--openai--whisper-large-v3"].contains(fileName)
         }

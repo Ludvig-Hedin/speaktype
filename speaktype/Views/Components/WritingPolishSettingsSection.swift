@@ -63,7 +63,7 @@ struct WritingPolishSettingsSection: View {
     }
 
     private var currentCleanupModelLabel: String {
-        CleanupModel.catalog.first(where: { $0.id == cleanupModelID }).map(cleanupModelLabel) ?? "Select…"
+        CleanupModel.model(id: cleanupModelID).map(cleanupModelLabel) ?? cleanupModelID
     }
 
     @ViewBuilder private var cleanupKeyField: some View {

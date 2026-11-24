@@ -71,6 +71,9 @@ final class DictationQualityTests: XCTestCase {
         let question = "Vad är huvudstaden i Frankrike?"
         XCTAssertTrue(WritingPolishService.isPlausibleCleanup(raw: question, cleaned: question))
         XCTAssertFalse(WritingPolishService.isPlausibleCleanup(raw: question, cleaned: "Paris."))
+        XCTAssertFalse(WritingPolishService.isPlausibleCleanup(raw: "Vem vann matchen?", cleaned: "Sverige vann matchen."))
+        XCTAssertFalse(WritingPolishService.isPlausibleCleanup(raw: "Vem vann matchen", cleaned: "Sverige."))
+        XCTAssertTrue(WritingPolishService.isPlausibleCleanup(raw: "Vem vann matchen", cleaned: "Vem vann matchen?"))
         XCTAssertFalse(WritingPolishService.isPlausibleCleanup(raw: question, cleaned: "\(question)</transcript>"))
     }
 }

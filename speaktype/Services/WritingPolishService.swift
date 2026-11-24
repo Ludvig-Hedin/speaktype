@@ -111,7 +111,8 @@ enum WritingPolishService {
         guard !cleaned.isEmpty, !cleaned.contains("<transcript>"), !cleaned.contains("</transcript>") else { return false }
         let rawWords = raw.split(whereSeparator: \.isWhitespace).count
         let cleanWords = cleaned.split(whereSeparator: \.isWhitespace).count
-        guard rawWords >= 4 else { return cleanWords <= rawWords + 4 }
+        if raw.hasSuffix("?"), !cleaned.hasSuffix("?") { return false }
+        guard rawWords >= 4 else { return cleanWords * 2 >= rawWords && cleanWords <= rawWords + 4 }
         let ratio = Double(cleanWords) / Double(rawWords)
         return ratio >= 0.35 && cleanWords <= Int(Double(rawWords) * 1.6) + 6
     }

@@ -7,7 +7,7 @@ import os
 /// location: every launch that created or enumerated that directory triggered the
 /// "SpeakType would like to access files in your Documents folder" prompt. Application
 /// Support is app-managed storage and is not TCC-protected, so nothing prompts.
-enum ModelStorage {
+nonisolated enum ModelStorage {
     /// `~/Library/Application Support/SpeakType/huggingface`
     ///
     /// Passed to WhisperKit as `downloadBase`; it appends `models/<repo>/<variant>`,
@@ -55,11 +55,13 @@ enum ModelStorage {
     /// Resolve where a given variant actually lives on disk, preferring the new location.
     /// Falls back to the new location when the model isn't downloaded yet.
     static func modelDirectory(for variant: String) -> URL {
-        for base in modelSearchDirectories() {
-            let candidate = base.appendingPathComponent(variant)
-            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+        let canonical = whisperKitModelsDirectory.appendingPathComponent(variant)
+        if FileManager.default.fileExists(atPath: canonical.path) { return canonical }
+        if let legacy = legacyWhisperKitModelsDirectory?.appendingPathComponent(variant),
+           FileManager.default.fileExists(atPath: legacy.path) {
+            return legacy
         }
-        return whisperKitModelsDirectory.appendingPathComponent(variant)
+        return canonical
     }
 
     /// Create the model directory and kick off the one-time migration. Safe to call
