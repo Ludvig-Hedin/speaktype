@@ -91,14 +91,9 @@ private struct ShortcutsSection: View {
                 if selectedHotkey == .custom {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(alignment: .center) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Custom shortcut")
-                                    .font(Typography.bodyMedium)
-                                    .foregroundStyle(Color.textPrimary)
-                                Text("Click the badge to record")
-                                    .font(Typography.caption)
-                                    .foregroundStyle(Color.textMuted)
-                            }
+                            Text("Custom shortcut")
+                                .font(Typography.bodyMedium)
+                                .foregroundStyle(Color.textPrimary)
                             Spacer()
                             ShortcutRecorderView(onChange: {
                                 customShortcutDisplay = CustomShortcutStorage.displayString
@@ -106,7 +101,7 @@ private struct ShortcutsSection: View {
                             .frame(width: 160, height: 32)
                         }
 
-                        Text("Needs at least one modifier (⌃ ⌥ ⇧ ⌘) unless using F13–F19.")
+                        Text("Include ⌃ ⌥ ⇧ or ⌘, or use F13–F19.")
                             .font(Typography.caption)
                             .foregroundStyle(Color.textMuted)
                     }
@@ -116,20 +111,16 @@ private struct ShortcutsSection: View {
 
                 RowDivider()
 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Recording mode")
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                        Spacer()
-                        RecordingModePicker(recordingMode: $recordingMode)
-                            .frame(width: 160)
-                    }
-                    Text(recordingMode == 0
-                        ? "Hold the hotkey to record; release when done."
-                        : "Press once to start, again to stop.")
-                        .font(Typography.caption)
-                        .foregroundStyle(Color.textMuted)
+                HStack {
+                    Text("Recording mode")
+                        .font(Typography.bodyMedium)
+                        .foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    RecordingModePicker(recordingMode: $recordingMode)
+                        .frame(width: 160)
+                        .help(recordingMode == 0
+                            ? "Hold the hotkey while you talk."
+                            : "Press once to start, again to stop.")
                 }
                 .settingsRowPadding()
             }
@@ -151,7 +142,7 @@ private struct GeneralBehaviorSection: View {
             VStack(spacing: 0) {
                 settingToggle(
                     "Launch at login",
-                    help: "Start in the background at login so the hotkey is always ready.",
+                    help: "Starts quietly so the hotkey always works.",
                     isOn: $launchAtLogin
                 )
                 .onChange(of: launchAtLogin) { _, newValue in
@@ -162,7 +153,7 @@ private struct GeneralBehaviorSection: View {
 
                 settingToggle(
                     "Run in background",
-                    help: "Hide the Dock icon and run menu-bar-only. Reopen from the menu bar icon.",
+                    help: "Hide the Dock icon. Open from the menu bar.",
                     isOn: Binding(get: { !showDockIcon }, set: { showDockIcon = !$0 })
                 )
                 .onChange(of: showDockIcon) { _, newValue in
@@ -175,7 +166,7 @@ private struct GeneralBehaviorSection: View {
                 settingToggle(
                     "Show menu bar icon",
                     help: showDockIcon
-                        ? nil : "Required while the Dock icon is hidden — the only way back in.",
+                        ? nil : "Stays on while the Dock icon is hidden.",
                     isOn: $showMenuBarIcon
                 )
                 .disabled(!showDockIcon)
@@ -185,21 +176,14 @@ private struct GeneralBehaviorSection: View {
 
     private func settingToggle(_ title: String, help: String?, isOn: Binding<Bool>) -> some View {
         HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(Typography.bodyMedium)
-                    .foregroundStyle(Color.textPrimary)
-                if let help {
-                    Text(help)
-                        .font(Typography.caption)
-                        .foregroundStyle(Color.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            Text(title)
+                .font(Typography.bodyMedium)
+                .foregroundStyle(Color.textPrimary)
             Spacer(minLength: 0)
             Toggle("", isOn: isOn).labelsHidden()
         }
         .settingsRowPadding()
+        .help(help ?? "")
         .clickActionPointerCursor()
     }
 }
@@ -267,10 +251,12 @@ struct SpokenLanguageSection: View {
                     .clickActionPointerCursor()
                 }
 
-                Text("Choose Swedish + English for mixed dictation with GPT Transcribe. Other models use Auto-detect for this option.")
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
+                if transcriptionLanguage == DictationHints.swedishEnglish {
+                    Text("Best with GPT Transcribe. Other engines auto-detect.")
+                        .font(Typography.caption)
+                        .foregroundStyle(Color.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .settingsRowPadding()
         }
