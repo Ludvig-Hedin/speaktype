@@ -7,6 +7,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 - **Web:** Free-only launch. Pricing shows one free plan with every feature and a note that Pro comes later; price rows and FAQ answers follow. Set `NEXT_PUBLIC_PAID_PLANS_OPEN=1` to show paid plans.
 
+## [1.0.36] - 2026-11-24
+- **macOS, recorder:** New small pill at the bottom center, like Wispr Flow: a live waveform while you speak, stop and language when you hover, soft dots while the text is written, and a checkmark once it is inserted. Errors are orange; notes stay neutral and wrap to two lines. Smooth fades and size changes; clicks around the pill pass through to the app below.
+- **macOS, memory:** The on-device Whisper model is never preloaded and never pinned. It loads when you start dictating (while you speak) and is released after 2 minutes idle, or 30 seconds when memory is tight. Opening the dashboard or file view no longer loads it. Cloud transcription never loads it. Old unused audio chunk files are deleted.
+- **macOS, local model:** New recommended model Whisper Large v3 Turbo Compact (632 MB): about a third of the memory of the full Turbo (~0.4 GB vs ~1.3 GB measured). Model compilation runs once, not on every load. Silent recordings are skipped as "No speech detected" (audio kept in History) instead of becoming "Thank you.", and local decoding skips silent stretches.
+- **macOS, speed:** Cloud uploads are compressed (~8× smaller); GPT Transcribe answered in about 0.9 s instead of 2.5 s on the same clips. A model that rejects the compressed file gets the WAV.
+- **macOS, cleanup:** Catalog refreshed: Claude Haiku 5.5 (default), DeepSeek V4.1 Flash, GPT-6 Luna, MiniMax M3.1 Flash, Gemini 3.5 Flash Lite. Retired models move to the default once. Reasoning is off for every cleanup model.
+- **macOS, cloud transcription:** Added AssemblyAI Universal-3.6 Pro, ElevenLabs Scribe v2 and Voxtral Mini Transcribe 3. GPT Transcribe stays recommended.
+
 ## [1.0.35] - 2026-11-24
 - **macOS:** GPT Transcribe can use a personal dictionary and a Swedish + English language hint. Claude Haiku 5.5 is the default for cloud text cleanup.
 - **macOS:** Full Whisper Large v3 is available to download for on-device dictation.
