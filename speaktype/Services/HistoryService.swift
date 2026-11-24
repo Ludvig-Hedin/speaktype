@@ -489,7 +489,7 @@ class HistoryService: ObservableObject {
 
     nonisolated private static func encodeAndStore<T: Encodable>(_ value: T, forKey key: String) {
         if let encoded = try? JSONEncoder().encode(value) {
-            UserDefaults.standard.set(encoded, forKey: key)
+            AppStorageIsolation.historyDefaults.set(encoded, forKey: key)
         }
     }
     
@@ -502,7 +502,7 @@ class HistoryService: ObservableObject {
     }
 
     nonisolated private static func loadSnapshot(from store: DictationRecoveryStore) -> Snapshot {
-        let defaults = UserDefaults.standard
+        let defaults = AppStorageIsolation.historyDefaults
         let decoder = JSONDecoder()
         let decoded = defaults.data(forKey: saveKey)
             .flatMap { try? decoder.decode([HistoryItem].self, from: $0) } ?? []
@@ -561,12 +561,14 @@ class HistoryService: ObservableObject {
     }
 
     func resetAllDataForTesting() {
+        // Never touch real history outside a test run.
+        guard AppStorageIsolation.isRunningTests else { return }
         Self.persistenceQueue.sync {}
         items = []
         retryingItemIDs = []
         statsEntries = []
-        UserDefaults.standard.removeObject(forKey: Self.saveKey)
-        UserDefaults.standard.removeObject(forKey: Self.statsSaveKey)
+        AppStorageIsolation.historyDefaults.removeObject(forKey: Self.saveKey)
+        AppStorageIsolation.historyDefaults.removeObject(forKey: Self.statsSaveKey)
     }
 #endif
 }

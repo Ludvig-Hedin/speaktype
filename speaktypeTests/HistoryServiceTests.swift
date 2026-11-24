@@ -102,7 +102,7 @@ final class HistoryServiceTests: XCTestCase {
         // Since 'init' loads from UserDefaults, creating a new instance isn't easy with singleton,
         // but we can check if UserDefaults has the data.
         
-        guard let data = UserDefaults.standard.data(forKey: "history_items"),
+        guard let data = AppStorageIsolation.historyDefaults.data(forKey: "history_items"),
               let decoded = try? JSONDecoder().decode([HistoryItem].self, from: data) else {
             XCTFail("Failed to load from UserDefaults")
             return
@@ -169,7 +169,7 @@ final class HistoryServiceTests: XCTestCase {
         service.addItem(transcript: "Persistent stats entry", duration: 5.0)
         service.flushPendingSavesForTesting()
 
-        guard let data = UserDefaults.standard.data(forKey: "history_stats_entries"),
+        guard let data = AppStorageIsolation.historyDefaults.data(forKey: "history_stats_entries"),
               let decoded = try? JSONDecoder().decode([HistoryStatsEntry].self, from: data) else {
             XCTFail("Failed to load stats from UserDefaults")
             return
