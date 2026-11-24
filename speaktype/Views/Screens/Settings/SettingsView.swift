@@ -257,11 +257,11 @@ struct SpokenLanguageSection: View {
     @AppStorage("recentTranscriptionLanguages") private var recentLanguagesString: String = ""
 
     private var recentLanguageCodes: [String] {
-        recentLanguagesString.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+        recentLanguagesString.split(separator: ",").map(String.init).filter { $0 != DictationHints.swedishEnglish }
     }
 
     private func updateRecentLanguages(code: String) {
-        guard code != "auto" else { return }
+        guard code != "auto", code != DictationHints.swedishEnglish else { return }
         var recents = recentLanguageCodes.filter { $0 != code }
         recents.insert(code, at: 0)
         recentLanguagesString = recents.prefix(5).joined(separator: ",")

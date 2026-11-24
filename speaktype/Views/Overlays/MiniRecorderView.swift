@@ -39,7 +39,7 @@ struct MiniRecorderView: View {
     private let quickLanguageDefaults = ["en", "es", "fr", "de", "hi", "pt", "ja", "zh"]
 
     private var recentLanguageCodes: [String] {
-        recentLanguagesString.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+        recentLanguagesString.split(separator: ",").map(String.init).filter { $0 != DictationHints.swedishEnglish }
     }
 
     private var quickLanguageCodes: [String] {
@@ -58,7 +58,7 @@ struct MiniRecorderView: View {
     }
 
     private func updateRecentLanguages(code: String) {
-        guard code != "auto" else { return }
+        guard code != "auto", code != DictationHints.swedishEnglish else { return }
         var recents = recentLanguageCodes.filter { $0 != code }
         recents.insert(code, at: 0)
         recentLanguagesString = recents.prefix(5).joined(separator: ",")
