@@ -162,10 +162,13 @@ struct MiniRecorderView: View {
 
     /// The panel is a fixed transparent canvas; the pill sits at its bottom center and
     /// animates its own size, so the window never jumps.
-    static let canvasSize = CGSize(width: 420, height: 64)
+    /// Tall enough for a tooltip above the pill; the empty area is transparent to clicks.
+    static let canvasSize = CGSize(width: 420, height: 124)
     private static let pillHeight: CGFloat = 34
 
     private var showsControls: Bool { pillState == .listening && isHovering }
+    /// Id of the pill element whose tooltip is showing, drawn above the pill.
+    @State private var tooltipID: String?
 
     private var capturesEscape: Bool {
         isListening || (isProcessing && (!isShowingMessage || (awaitingPasteResult && !showsPasted)))
@@ -175,9 +178,13 @@ struct MiniRecorderView: View {
         ZStack(alignment: .bottom) {
             Color.clear
             pill
+                .pillTooltipFrame()
                 .padding(.bottom, 6)
         }
         .frame(width: Self.canvasSize.width, height: Self.canvasSize.height, alignment: .bottom)
+        .overlayPreferenceValue(PillTooltipAnchors.self) { anchors in
+            tooltipLayer(anchors)
+        }
         .contextMenu {
             modelSelectionMenu
         }
@@ -291,18 +298,18 @@ struct MiniRecorderView: View {
             switch pillState {
             case .listening:
                 if showsControls {
-                    stopButton
+                    cancelButton
                         .transition(Self.contentTransition)
                 }
                 LiveWaveform(level: audioRecorder.audioLevel, isLive: isListening)
                     .transition(Self.contentTransition)
                 if showsControls {
-                    languageMenu
+                    finishButton
                         .transition(Self.contentTransition)
                 }
             case .working:
                 WorkingDots()
-                    .help(statusMessage)
+                    .pillTooltip(statusMessage, id: "status", shown: $tooltipID)
                     .transition(Self.contentTransition)
             case .done:
                 Image(systemName: "checkmark")
@@ -337,7 +344,7 @@ struct MiniRecorderView: View {
                 .frame(width: text.count > 44 ? 300 : nil)
                 .fixedSize(horizontal: text.count <= 44, vertical: true)
                 .padding(.vertical, 7)
-                .help(text)
+                .pillTooltip(text, id: "message", shown: $tooltipID)
                 .transition(Self.contentTransition)
             }
         }
@@ -369,72 +376,48 @@ struct MiniRecorderView: View {
             : "Press the hotkey again to insert text. Esc stops and saves."
     }
 
-    private var stopButton: some View {
+    /// Same as Esc: stops without inserting; the audio stays in History.
+    private var cancelButton: some View {
         Button {
-            handleRecordingControlTap()
+            handleEscape()
         } label: {
-            ZStack {
-                Circle()
-                    .fill(Color(red: 1.0, green: 0.27, blue: 0.27))
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(.white)
-                    .frame(width: 8, height: 8)
-            }
-            .frame(width: 22, height: 22)
+            PillCircleIcon(kind: .cancel)
         }
         .buttonStyle(.stPlain)
         .clickActionPointerCursor()
-        .help("Stop and insert text")
-        .accessibilityLabel("Stop and insert text")
+        .pillTooltip("Cancel", id: "cancel", shown: $tooltipID)
+        .accessibilityLabel("Cancel")
     }
 
-    private var languageMenu: some View {
-        Menu {
-            Button("Auto-detect") { setLanguage("auto") }
-
-            if !quickLanguageCodes.isEmpty {
-                Divider()
-                ForEach(quickLanguageCodes, id: \.self) { code in
-                    if let lang = SpokenLanguageSection.languageOptions.first(where: {
-                        $0.code == code
-                    }) {
-                        Button(lang.name) { setLanguage(code) }
-                    }
-                }
-            }
-
-            Divider()
-            Menu("More languages") {
-                ForEach(SpokenLanguageSection.languageOptions, id: \.code) { lang in
-                    Button(lang.name) { setLanguage(lang.code) }
-                }
-            }
-
-            if !recentLanguageCodes.isEmpty {
-                Divider()
-                Button("Clear recents") { recentLanguagesString = "" }
-            }
+    private var finishButton: some View {
+        Button {
+            handleRecordingControlTap()
         } label: {
-            HStack(spacing: 4) {
-                Text(currentLanguageLabel)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.92))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                DoubleChevronIcon(color: .white.opacity(0.7))
-            }
-            .frame(maxWidth: 80, alignment: .leading)
+            PillCircleIcon(kind: .finish)
         }
-        .menuIndicator(.hidden)
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .padding(.horizontal, 9)
-        .frame(height: 22)
-        .background(Capsule(style: .continuous).fill(Color.white.opacity(0.16)))
-        .contentShape(Capsule(style: .continuous))
+        .buttonStyle(.stPlain)
         .clickActionPointerCursor()
-        .help(spokenLanguageHelpText)
-        .accessibilityLabel("Language: \(currentLanguageLabel)")
+        .pillTooltip("Finish and paste", id: "finish", shown: $tooltipID)
+        .accessibilityLabel("Finish and paste")
+    }
+
+    /// The hovered element's tooltip, centered over it and floating just above the pill.
+    private func tooltipLayer(_ anchors: [String: PillTooltipEntry]) -> some View {
+        GeometryReader { proxy in
+            if let id = tooltipID, let target = anchors[id],
+               let pill = anchors[PillTooltipAnchors.pillKey] {
+                let targetRect = proxy[target.anchor]
+                let pillRect = proxy[pill.anchor]
+                PillTooltipBubble(text: target.text)
+                    .padding(.bottom, proxy.size.height - pillRect.minY + 6)
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
+                    .offset(x: targetRect.midX - proxy.size.width / 2)
+                    .transition(.opacity)
+                    .id(id)
+            }
+        }
+        .allowsHitTesting(false)
+        .animation(.easeOut(duration: 0.12), value: tooltipID)
     }
 
     private var isErrorState: Bool {
