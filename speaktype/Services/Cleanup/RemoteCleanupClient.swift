@@ -5,7 +5,7 @@ import Foundation
 ///
 /// Security: the key is read at call time (env var → Keychain) and used only for the
 /// `Authorization` header — never logged, stored, or returned.
-enum RemoteCleanupClient {
+nonisolated enum RemoteCleanupClient {
 
     /// Cleanup instruction. The transcript arrives wrapped in `<transcript>` tags so the model
     /// treats dictated questions and commands ("can you fix…", "what's the capital…") as text to
@@ -77,6 +77,7 @@ enum RemoteCleanupClient {
         instruction: String,
         wrapInTags: Bool
     ) async throws -> String {
+        try Task.checkCancellation()
         guard let url = provider.chatCompletionsURL else { throw CleanupError.badURL }
         guard let key = RemoteAPIKeyStore.read(account: provider.keychainAccount, envVar: provider.envVar) else {
             throw CleanupError.missingKey
@@ -103,8 +104,10 @@ enum RemoteCleanupClient {
         let data: Data
         let response: URLResponse
         do {
+            try Task.checkCancellation()
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
+            try Task.checkCancellation()
             throw CleanupError.network(error.localizedDescription)
         }
 

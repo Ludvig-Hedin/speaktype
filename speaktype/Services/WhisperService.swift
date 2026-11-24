@@ -1,17 +1,18 @@
 import Foundation
 import os
+import OSLog
 import WhisperKit
 
 @Observable
 class WhisperService {
     // Shared singleton instance - use this everywhere
     static let shared = WhisperService()
-    private static let placeholderPatterns = [
+    nonisolated private static let placeholderPatterns = [
         #"\[(?:BLANK_AUDIO|SILENCE)\]"#,
         #"<\|nospeech\|>"#,
         #"\[\s*S\s*\]"#,
     ]
-    private static let noiseLabelTerms = [
+    nonisolated private static let noiseLabelTerms = [
         "applause",
         "background noise",
         "blank audio",
@@ -40,7 +41,7 @@ class WhisperService {
         "wind blowing",
         "wind noise",
     ]
-    private static let bracketedNoisePattern: String = {
+    nonisolated private static let bracketedNoisePattern: String = {
         let escaped = noiseLabelTerms.map(NSRegularExpression.escapedPattern(for:)).joined(
             separator: "|")
         return #"[\[\(]\s*(?:"# + escaped + #")\s*[\]\)]"#
@@ -59,10 +60,8 @@ class WhisperService {
     /// Set automatically by `ModelMemoryPolicy` each time a model loads.
     var keepResident = false
 
-    /// Lock-protected coalescing/idle state. This class is a non-isolated `@Observable` whose async
-    /// methods run off the caller's actor (plus a `Task.detached` warm-load at record-start), so
-    /// these fields are read-modify-written from multiple threads. Guarding them prevents a double
-    /// model load (2× RAM spike on the low-RAM Macs this targets) and a missed idle-unload cancel.
+    /// Lock-protected coalescing/idle state. Guarding these updates prevents duplicate model
+    /// loads and makes a scheduled idle unload easy to invalidate when recording starts.
     private struct LoadState {
         /// The single in-flight load, so concurrent callers coalesce onto one `performLoad`.
         var loadingTask: Task<Void, Error>?
@@ -294,23 +293,30 @@ class WhisperService {
         // already started at record-time.
         // Also reload when the user picked another model since this one was loaded.
         let selected = UserDefaults.standard.string(forKey: SelectedModelPreference.storageKey) ?? ""
-        let selectedReady = !selected.isEmpty
-            && FileManager.default.fileExists(atPath: ModelStorage.modelDirectory(for: selected).path)
-            && !(ModelDownloadService.shared.isDownloading[selected] ?? false)
+        let (audioExists, selectedModelExists) = await Task.detached(priority: .userInitiated) {
+            let files = FileManager.default
+            let audioExists = files.fileExists(atPath: audioFile.path)
+            let selectedModelExists = !selected.isEmpty
+                && files.fileExists(atPath: ModelStorage.modelDirectory(for: selected).path)
+            return (audioExists, selectedModelExists)
+        }.value
+        try Task.checkCancellation()
+        let selectedReady = selectedModelExists && !(ModelDownloadService.shared.isDownloading[selected] ?? false)
         let switched = selectedReady && isInitialized && selected != currentModelVariant
         if pipe == nil || !isInitialized || switched {
             let variant = switched ? selected : resolvedVariant()
             guard !variant.isEmpty else { throw TranscriptionError.notInitialized }
+            let started = Date()
             try await loadModel(variant: variant)
+            let elapsed = Date().timeIntervalSince(started)
+            AppLogger.transcription.notice("stage=whisper_model_wait seconds=\(elapsed, format: .fixed(precision: 3))")
         }
 
         guard let pipe = pipe, isInitialized else {
             throw TranscriptionError.notInitialized
         }
 
-        guard FileManager.default.fileExists(atPath: audioFile.path) else {
-            throw TranscriptionError.fileNotFound
-        }
+        guard audioExists else { throw TranscriptionError.fileNotFound }
 
         isTranscribing = true
         defer {
@@ -371,7 +377,7 @@ class WhisperService {
         return options
     }
 
-    static func normalizedTranscription(from rawText: String) -> String {
+    nonisolated static func normalizedTranscription(from rawText: String) -> String {
         var normalized = rawText
 
         for pattern in placeholderPatterns {
@@ -399,7 +405,7 @@ class WhisperService {
 
     /// Same noise-tag cleanup as `normalizedTranscription`, but keeps line breaks so polished
     /// paragraphs and lists survive in history. Only runs of spaces/tabs are collapsed.
-    static func normalizedPreservingLineBreaks(from rawText: String) -> String {
+    nonisolated static func normalizedPreservingLineBreaks(from rawText: String) -> String {
         var normalized = rawText
 
         for pattern in placeholderPatterns {

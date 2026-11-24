@@ -1,6 +1,5 @@
 import Foundation
 import Combine
-import SwiftUI // For IndexSet operations if needed, though Foundation usually covers it, but error says missing import.
 
 nonisolated struct HistoryStatsEntry: Identifiable, Codable, Hashable {
     let id: UUID
@@ -15,7 +14,11 @@ nonisolated struct HistoryStatsEntry: Identifiable, Codable, Hashable {
 nonisolated struct HistoryItem: Identifiable, Codable, Hashable {
     let id: UUID
     let date: Date
-    var transcript: String
+    var transcript: String {
+        didSet {
+            if transcript != oldValue { wordCount = Self.countWords(in: transcript) }
+        }
+    }
     let duration: TimeInterval
     let audioFileURL: URL?
     var modelUsed: String?
@@ -33,6 +36,24 @@ nonisolated struct HistoryItem: Identifiable, Codable, Hashable {
     var recordingLanguage: String? = nil
     var queuedRetry: DictationRetry? = nil
 
+    private(set) var wordCount = 0
+    private(set) var hasAudio = false
+
+    private enum CodingKeys: String, CodingKey {
+        case id, date, transcript, duration, audioFileURL, modelUsed, transcriptionTime
+        case provider, estimatedCostUSD, rawTranscript, polishedTranscript, summary
+        case failureReason, recordingLanguage, queuedRetry
+    }
+
+    mutating func prepareForDisplay(audioExists: Bool? = nil) {
+        wordCount = Self.countWords(in: transcript)
+        hasAudio = audioExists ?? audioFileURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+    }
+
+    private static func countWords(in text: String) -> Int {
+        text.components(separatedBy: .whitespacesAndNewlines).count(where: { !$0.isEmpty })
+    }
+
     var isFailed: Bool { failureReason != nil }
 
     func hash(into hasher: inout Hasher) {
@@ -47,39 +68,59 @@ nonisolated struct HistoryItem: Identifiable, Codable, Hashable {
 class HistoryService: ObservableObject {
     static let shared = HistoryService()
     
-    @Published var items: [HistoryItem] = []
-    @Published private(set) var statsEntries: [HistoryStatsEntry] = []
+    @Published private(set) var items: [HistoryItem] = []
+    @Published private(set) var statsEntries: [HistoryStatsEntry] = [] {
+        didSet { statsRevision += 1 }
+    }
+    private(set) var statsRevision = 0
     /// Failed items currently being re-transcribed.
     @Published private(set) var retryingItemIDs: Set<UUID> = []
     
-    private let saveKey = "history_items"
-    private let statsSaveKey = "history_stats_entries"
-    
-    private let recoveryStore = DictationRecoveryStore.live
+    nonisolated private static let saveKey = "history_items"
+    nonisolated private static let statsSaveKey = "history_stats_entries"
+    private let recoveryStore: DictationRecoveryStore
     private var durableIDs: Set<UUID> = []
+    private var deletingIDs: Set<UUID> = []
     private var retryWorker: Task<Void, Never>?
+    private var startupTask: Task<Void, Never>?
 
     private init() {
-        loadStats()
-        loadHistory()
-        let restored = recoveryStore.load()
-        durableIDs = Set(restored.map(\.id))
-        items.removeAll { durableIDs.contains($0.id) }
-        items = (items + restored).sorted { $0.date > $1.date }
-        for item in restored where !item.isFailed && !statsEntries.contains(where: { $0.id == item.id }) {
-            recordStats(for: item)
+        let store = DictationRecoveryStore.live
+        recoveryStore = store
+        startupTask = Task { [weak self] in
+            let snapshot = await Task.detached(priority: .utility) {
+                Self.loadSnapshot(from: store)
+            }.value
+            guard let self else { return }
+            let addedItems = items
+            let addedStats = statsEntries
+            durableIDs = snapshot.durableIDs
+            items = addedItems.isEmpty ? snapshot.items : (addedItems + snapshot.items).sorted { $0.date > $1.date }
+            statsEntries = addedStats.isEmpty ? snapshot.stats : (addedStats + snapshot.stats).sorted { $0.date > $1.date }
+            startupTask = nil
+            if snapshot.historyChanged || !addedItems.isEmpty { saveHistory() }
+            if snapshot.statsChanged || !addedStats.isEmpty { saveStats() }
+            resumeQueuedDictations()
         }
+    }
+
+    func waitForStartup() async {
+        await startupTask?.value
     }
 
     /// Create a recoverable entry before transcription begins. While processing, the
     /// same entry is reserved so History cannot start a duplicate transcription.
-    func beginDictation(audioURL: URL, duration: TimeInterval, language: String, processing: Bool = true) throws -> UUID {
+    func beginDictation(audioURL: URL, duration: TimeInterval, language: String, processing: Bool = true) async throws -> UUID {
+        await waitForStartup()
         var item = HistoryItem(
             id: UUID(), date: .now, transcript: "", duration: duration, audioFileURL: audioURL,
             failureReason: processing ? "Recording saved — retry to transcribe" : "Dictation stopped",
             recordingLanguage: language)
+        item.prepareForDisplay(audioExists: true)
+        let checkpoint = item
+        let store = recoveryStore
         do {
-            try recoveryStore.write(item)
+            try await Self.performRecoveryIO { try store.write(checkpoint) }
             durableIDs.insert(item.id)
         } catch {
             item.failureReason = "Could not save recovery information"
@@ -97,13 +138,14 @@ class HistoryService: ObservableObject {
     }
 
     func containsDictation(id: UUID) -> Bool {
-        items.contains { $0.id == id }
+        !deletingIDs.contains(id) && items.contains { $0.id == id }
     }
 
     /// Checkpoint raw text before polish, then replace it in place if polish succeeds.
     @discardableResult
-    func saveDictationText(id: UUID, transcript: String, raw: String, outcome: TranscriptionOutcome) -> Bool {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return false }
+    func saveDictationText(id: UUID, transcript: String, raw: String, outcome: TranscriptionOutcome) async -> Bool {
+        guard !deletingIDs.contains(id),
+              let index = items.firstIndex(where: { $0.id == id }) else { return false }
         var item = items[index]
         item.transcript = transcript
         item.rawTranscript = raw
@@ -114,30 +156,30 @@ class HistoryService: ObservableObject {
         item.estimatedCostUSD = outcome.estimatedCostUSD
         item.failureReason = nil
         item.queuedRetry = nil
-        let saved = persist(item, at: index)
         recordStats(for: item)
-        return saved
+        return await persist(item, at: index)
     }
 
-    func failDictation(id: UUID, reason: String, retry: DictationRetry? = nil) {
-        guard let index = items.firstIndex(where: { $0.id == id }), items[index].isFailed else { return }
+    func failDictation(id: UUID, reason: String, retry: DictationRetry? = nil) async {
+        guard !deletingIDs.contains(id),
+              let index = items.firstIndex(where: { $0.id == id }), items[index].isFailed else { return }
         var item = items[index]
         item.failureReason = reason
         item.queuedRetry = retry
-        _ = persist(item, at: index)
+        _ = await persist(item, at: index)
         if retry != nil { resumeQueuedDictations() }
     }
 
-    func recordDictationError(_ error: Error, id: UUID, retryRoute: DictationRetryRoute?) -> String {
+    func recordDictationError(_ error: Error, id: UUID, retryRoute: DictationRetryRoute?) async -> String {
         let transient = (error as? RemoteTranscriptionClient.ClientError)?.allowsBackgroundRetry == true
         let offlineWithoutEngine = !NetworkReachability.shared.isOnline
             && error is TranscriptionCoordinator.CoordinatorError
         if let retryRoute, retryRoute == DictationRetryRoute.current, transient || offlineWithoutEngine {
             let retry = DictationRetry(route: retryRoute, nextAttempt: .now.addingTimeInterval(5))
-            failDictation(id: id, reason: "Waiting to retry transcription", retry: retry)
+            await failDictation(id: id, reason: "Waiting to retry transcription", retry: retry)
             return "Audio saved. SpeakType will retry."
         }
-        failDictation(id: id, reason: error.localizedDescription)
+        await failDictation(id: id, reason: error.localizedDescription)
         return "Audio saved. Retry in History."
     }
 
@@ -147,12 +189,14 @@ class HistoryService: ObservableObject {
             guard let self else { return }
             defer { self.retryWorker = nil }
             while !Task.isCancelled {
-                let queued = self.items.filter { $0.queuedRetry != nil }
-                guard !queued.isEmpty else { return }
+                guard self.items.contains(where: { $0.queuedRetry != nil }) else { return }
                 if NetworkReachability.shared.isOnline,
                    !AudioRecordingService.shared.isRecordingOrStarting,
                    self.retryingItemIDs.isEmpty,
-                   let item = queued.last(where: { ($0.queuedRetry?.nextAttempt ?? .distantFuture) <= .now }) {
+                   let item = self.items.last(where: {
+                       !self.deletingIDs.contains($0.id)
+                           && ($0.queuedRetry?.nextAttempt ?? .distantFuture) <= .now
+                   }) {
                     await self.retryTranscription(id: item.id, automatically: true)
                 }
                 try? await Task.sleep(for: .seconds(5))
@@ -161,33 +205,43 @@ class HistoryService: ObservableObject {
     }
 
     @discardableResult
-    private func persist(_ item: HistoryItem, at index: Int) -> Bool {
-        if durableIDs.contains(item.id) {
-            do {
-                try recoveryStore.write(item)
-            } catch {
-                AppLogger.warning("Could not update saved dictation", category: AppLogger.transcription)
-                items[index] = item
-                return false
-            }
-        }
+    private func persist(_ item: HistoryItem, at index: Int) async -> Bool {
         items[index] = item
-        if !durableIDs.contains(item.id) { saveHistory() }
-        return true
+        guard durableIDs.contains(item.id) else {
+            saveHistory()
+            return true
+        }
+        let store = recoveryStore
+        do {
+            try await Self.performRecoveryIO { try store.write(item) }
+            return containsDictation(id: item.id)
+        } catch {
+            AppLogger.warning("Could not update saved dictation", category: AppLogger.transcription)
+            return false
+        }
     }
-    
-    /// Serial background queue for JSON encoding + UserDefaults writes, so saving a long
-    /// history never blocks the main thread right after a dictation lands.
+
     private static let persistenceQueue = DispatchQueue(
         label: "com.speaktype.historyPersistence", qos: .utility)
 
-    /// Strips noise tags and trims, but keeps line breaks from polished output.
-    static func cleanedTranscript(_ text: String) -> String {
-        WhisperService.normalizedPreservingLineBreaks(from: text)
+    /// Submit writes and deletes in the order they were requested on the main actor.
+    /// A delete queued after a checkpoint always wins, even if a model is still running.
+    private static let recoveryQueue = DispatchQueue(
+        label: "com.speaktype.dictationRecovery", qos: .userInitiated)
+
+    private static func performRecoveryIO<Value: Sendable>(
+        _ operation: @escaping @Sendable () throws -> Value
+    ) async throws -> Value {
+        try await withCheckedThrowingContinuation { continuation in
+            recoveryQueue.async {
+                continuation.resume(with: Result { try operation() })
+            }
+        }
     }
 
-    private static func wordCount(of text: String) -> Int {
-        text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
+    /// Strips noise tags and trims, but keeps line breaks from polished output.
+    nonisolated static func cleanedTranscript(_ text: String) -> String {
+        WhisperService.normalizedPreservingLineBreaks(from: text)
     }
 
     func addItem(transcript: String, duration: TimeInterval, audioFileURL: URL? = nil, modelUsed: String? = nil, transcriptionTime: TimeInterval? = nil, provider: String? = nil, estimatedCostUSD: Double? = nil, rawTranscript: String? = nil, polishedTranscript: String? = nil) {
@@ -195,9 +249,7 @@ class HistoryService: ObservableObject {
         guard !normalizedTranscript.isEmpty else { return }
 
         let timestamp = Date()
-        let wordCount = Self.wordCount(of: normalizedTranscript)
-
-        let newItem = HistoryItem(
+        var newItem = HistoryItem(
             id: UUID(),
             date: timestamp,
             transcript: normalizedTranscript,
@@ -210,10 +262,11 @@ class HistoryService: ObservableObject {
             rawTranscript: rawTranscript,
             polishedTranscript: polishedTranscript
         )
+        newItem.prepareForDisplay(audioExists: audioFileURL != nil)
         let statsEntry = HistoryStatsEntry(
             id: newItem.id,
             date: timestamp,
-            wordCount: wordCount,
+            wordCount: newItem.wordCount,
             duration: duration,
             provider: provider,
             estimatedCostUSD: estimatedCostUSD
@@ -228,7 +281,7 @@ class HistoryService: ObservableObject {
     /// Failed items do not count toward statistics until a retry succeeds.
     @discardableResult
     func addFailedItem(audioFileURL: URL, duration: TimeInterval, errorMessage: String, modelUsed: String? = nil) -> UUID {
-        let newItem = HistoryItem(
+        var newItem = HistoryItem(
             id: UUID(),
             date: Date(),
             transcript: "",
@@ -238,6 +291,7 @@ class HistoryService: ObservableObject {
             transcriptionTime: nil,
             failureReason: errorMessage
         )
+        newItem.prepareForDisplay(audioExists: true)
         items.insert(newItem, at: 0)
         saveHistory()
         return newItem.id
@@ -246,24 +300,28 @@ class HistoryService: ObservableObject {
     /// Background retries only use the same cloud configuration. A manual retry is
     /// explicit and can use the current settings, e.g. after fixing a missing key.
     func retryTranscription(id: UUID, automatically: Bool = false) async {
-        guard !retryingItemIDs.contains(id),
+        guard !retryingItemIDs.contains(id), !deletingIDs.contains(id),
               let item = items.first(where: { $0.id == id }), item.isFailed,
               let audioURL = item.audioFileURL else { return }
 
-        guard FileManager.default.fileExists(atPath: audioURL.path) else {
-            failDictation(id: id, reason: "Audio file missing")
+        retryingItemIDs.insert(id)
+        defer { retryingItemIDs.remove(id) }
+        let exists = await Task.detached(priority: .utility) {
+            FileManager.default.fileExists(atPath: audioURL.path)
+        }.value
+        guard containsDictation(id: id), !Task.isCancelled else { return }
+        guard exists else {
+            await failDictation(id: id, reason: "Audio file missing")
             return
         }
 
         if automatically {
             guard let queued = item.queuedRetry, queued.route == DictationRetryRoute.current else {
-                failDictation(id: id, reason: "Transcription settings changed — retry from History")
+                await failDictation(id: id, reason: "Transcription settings changed — retry from History")
                 return
             }
         }
 
-        retryingItemIDs.insert(id)
-        defer { retryingItemIDs.remove(id) }
         let language = item.recordingLanguage
             ?? UserDefaults.standard.string(forKey: "transcriptionLanguage") ?? "auto"
         do {
@@ -279,17 +337,17 @@ class HistoryService: ObservableObject {
             try Task.checkCancellation()
             let raw = Self.cleanedTranscript(outcome.text)
             guard !raw.isEmpty else {
-                failDictation(id: id, reason: "No speech detected")
+                await failDictation(id: id, reason: "No speech detected")
                 return
             }
-            _ = saveDictationText(id: id, transcript: raw, raw: raw, outcome: outcome)
+            _ = await saveDictationText(id: id, transcript: raw, raw: raw, outcome: outcome)
             // A delayed result can arrive after the user changed writing-polish preferences.
             // Only a user-initiated retry runs the current polish configuration.
-            guard !automatically else { return }
+            guard !automatically, !Task.isCancelled, containsDictation(id: id) else { return }
             let finalText = Self.cleanedTranscript(
                 await TranscriptionFinalizer.finalizeTranscript(rawTranscript: raw))
             if !Task.isCancelled, !finalText.isEmpty, finalText != raw {
-                saveDictationText(id: id, transcript: finalText, raw: raw, outcome: outcome)
+                await saveDictationText(id: id, transcript: finalText, raw: raw, outcome: outcome)
             }
         } catch is CancellationError {
             return
@@ -297,9 +355,9 @@ class HistoryService: ObservableObject {
             if automatically, var retry = item.queuedRetry,
                (error as? RemoteTranscriptionClient.ClientError)?.allowsBackgroundRetry == true {
                 retry.backOff()
-                failDictation(id: id, reason: "Waiting to retry transcription", retry: retry)
+                await failDictation(id: id, reason: "Waiting to retry transcription", retry: retry)
             } else {
-                failDictation(id: id, reason: error.localizedDescription)
+                await failDictation(id: id, reason: error.localizedDescription)
             }
         }
     }
@@ -308,7 +366,7 @@ class HistoryService: ObservableObject {
         statsEntries.removeAll { $0.id == item.id }
         statsEntries.append(
             HistoryStatsEntry(
-                id: item.id, date: item.date, wordCount: Self.wordCount(of: item.transcript),
+                id: item.id, date: item.date, wordCount: item.wordCount,
                 duration: item.duration, provider: item.provider, estimatedCostUSD: item.estimatedCostUSD)
         )
         statsEntries.sort { $0.date > $1.date }
@@ -320,53 +378,72 @@ class HistoryService: ObservableObject {
         items.first(where: { !$0.isFailed && !$0.transcript.isEmpty })?.transcript
     }
 
-    func setPolishedTranscript(_ text: String, for id: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+    func setPolishedTranscript(_ text: String, for id: UUID) async {
+        guard !deletingIDs.contains(id),
+              let index = items.firstIndex(where: { $0.id == id }) else { return }
         var item = items[index]
         item.polishedTranscript = text
         item.transcript = text
-        persist(item, at: index)
+        await persist(item, at: index)
     }
 
-    func setSummary(_ text: String, for id: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+    func setSummary(_ text: String, for id: UUID) async {
+        guard !deletingIDs.contains(id),
+              let index = items.firstIndex(where: { $0.id == id }) else { return }
         var item = items[index]
         item.summary = text
-        persist(item, at: index)
+        await persist(item, at: index)
     }
     
-    func deleteItem(at offsets: IndexSet, deleteAudioFile: Bool = true) {
-        let ids = offsets.compactMap { items.indices.contains($0) ? items[$0].id : nil }
-        for id in ids { deleteItem(id: id, deleteAudioFile: deleteAudioFile) }
+    func deleteItem(id: UUID, deleteAudioFile: Bool = true) async {
+        await waitForStartup()
+        guard let item = items.first(where: { $0.id == id }) else { return }
+        await delete([item], deleteAudioFile: deleteAudioFile, preserveStats: false)
     }
 
-    func deleteItem(id: UUID, deleteAudioFile: Bool = true) {
-        guard let item = items.first(where: { $0.id == id }), removeCheckpoint(for: id) else { return }
-        items.removeAll { $0.id == id }
-        statsEntries.removeAll { $0.id == id }
-        if deleteAudioFile { removeAudioFileIfNeeded(for: item) }
-        saveHistory()
-        saveStats()
+    func clearAll() async {
+        await waitForStartup()
+        await delete(items, deleteAudioFile: true, preserveStats: true)
     }
 
-    func clearAll() {
-        let removed = items.filter { removeCheckpoint(for: $0.id) }
-        let ids = Set(removed.map(\.id))
-        items.removeAll { ids.contains($0.id) }
-        removed.forEach(removeAudioFileIfNeeded(for:))
-        saveHistory()
-    }
-
-    private func removeCheckpoint(for id: UUID) -> Bool {
-        guard durableIDs.contains(id) else { return true }
+    private func delete(_ candidates: [HistoryItem], deleteAudioFile: Bool, preserveStats: Bool) async {
+        let candidates = candidates.filter { deletingIDs.insert($0.id).inserted }
+        guard !candidates.isEmpty else { return }
+        let store = recoveryStore
+        let checkpoints = durableIDs
+        let removed: Set<UUID>
         do {
-            try recoveryStore.remove(id: id)
-            durableIDs.remove(id)
-            return true
+            removed = try await Self.performRecoveryIO {
+                Self.removeFiles(for: candidates, checkpoints: checkpoints,
+                                 store: store, deleteAudioFile: deleteAudioFile)
+            }
         } catch {
-            AppLogger.warning("Could not remove saved dictation", category: AppLogger.transcription)
-            return false
+            removed = []
         }
+        deletingIDs.subtract(candidates.map(\.id))
+        if removed.count != candidates.count {
+            AppLogger.warning("Could not remove saved dictation", category: AppLogger.transcription)
+        }
+        items.removeAll { removed.contains($0.id) }
+        durableIDs.subtract(removed)
+        if !preserveStats { statsEntries.removeAll { removed.contains($0.id) } }
+        saveHistory()
+        if !preserveStats { saveStats() }
+    }
+
+    nonisolated private static func removeFiles(
+        for candidates: [HistoryItem], checkpoints: Set<UUID>,
+        store: DictationRecoveryStore, deleteAudioFile: Bool
+    ) -> Set<UUID> {
+        Set(candidates.compactMap { item in
+            if checkpoints.contains(item.id) {
+                do { try store.remove(id: item.id) } catch { return nil }
+            }
+            if deleteAudioFile, let url = item.audioFileURL {
+                try? FileManager.default.removeItem(at: url)
+            }
+            return item.id
+        })
     }
 
     func totalWordCount() -> Int {
@@ -393,16 +470,18 @@ class HistoryService: ObservableObject {
     }
     
     private func saveHistory() {
+        guard startupTask == nil else { return }
         let snapshot = items.filter { !durableIDs.contains($0.id) }
-        let key = saveKey
+        let key = Self.saveKey
         Self.persistenceQueue.async {
             Self.encodeAndStore(snapshot, forKey: key)
         }
     }
 
     private func saveStats() {
+        guard startupTask == nil else { return }
         let snapshot = statsEntries
-        let key = statsSaveKey
+        let key = Self.statsSaveKey
         Self.persistenceQueue.async {
             Self.encodeAndStore(snapshot, forKey: key)
         }
@@ -414,73 +493,57 @@ class HistoryService: ObservableObject {
         }
     }
     
-    private func loadHistory() {
-        if let data = UserDefaults.standard.data(forKey: saveKey),
-           let decoded = try? JSONDecoder().decode([HistoryItem].self, from: data) {
-            let normalizedItems = decoded.compactMap { item -> HistoryItem? in
-                // Failed items have no transcript yet; keep them so they can be retried.
-                if item.isFailed { return item }
-                let normalizedTranscript = Self.cleanedTranscript(item.transcript)
-                guard !normalizedTranscript.isEmpty else { return nil }
+    private nonisolated struct Snapshot {
+        let items: [HistoryItem]
+        let stats: [HistoryStatsEntry]
+        let durableIDs: Set<UUID>
+        let historyChanged: Bool
+        let statsChanged: Bool
+    }
 
-                guard normalizedTranscript != item.transcript else { return item }
-
-                return HistoryItem(
-                    id: item.id,
-                    date: item.date,
-                    transcript: normalizedTranscript,
-                    duration: item.duration,
-                    audioFileURL: item.audioFileURL,
-                    modelUsed: item.modelUsed,
-                    transcriptionTime: item.transcriptionTime,
-                    provider: item.provider,
-                    estimatedCostUSD: item.estimatedCostUSD,
-                    rawTranscript: item.rawTranscript,
-                    polishedTranscript: item.polishedTranscript,
-                    summary: item.summary,
-                    failureReason: item.failureReason
-                )
+    nonisolated private static func loadSnapshot(from store: DictationRecoveryStore) -> Snapshot {
+        let defaults = UserDefaults.standard
+        let decoder = JSONDecoder()
+        let decoded = defaults.data(forKey: saveKey)
+            .flatMap { try? decoder.decode([HistoryItem].self, from: $0) } ?? []
+        var historyChanged = false
+        let legacy = decoded.compactMap { entry -> HistoryItem? in
+            var item = entry
+            if !item.isFailed {
+                let normalized = cleanedTranscript(item.transcript)
+                if normalized != item.transcript { historyChanged = true }
+                guard !normalized.isEmpty else {
+                    historyChanged = true
+                    return nil
+                }
+                if normalized != item.transcript { item.transcript = normalized }
             }
+            item.prepareForDisplay()
+            return item
+        }
 
-            items = normalizedItems
+        let restored = store.load().map { entry in
+            var item = entry
+            item.prepareForDisplay()
+            return item
+        }
+        let ids = Set(restored.map(\.id))
+        let items = (legacy.filter { !ids.contains($0.id) } + restored).sorted { $0.date > $1.date }
 
-            if normalizedItems.count != decoded.count
-                || zip(decoded, normalizedItems).contains(where: { $0.transcript != $1.transcript })
-            {
-                saveHistory()
+        let savedStats = defaults.data(forKey: statsSaveKey)
+            .flatMap { try? decoder.decode([HistoryStatsEntry].self, from: $0) } ?? []
+        let statsIDs = Set(savedStats.map(\.id))
+        let missingStats = (savedStats.isEmpty ? items : restored)
+            .filter { !$0.isFailed && !statsIDs.contains($0.id) }
+            .map {
+                HistoryStatsEntry(id: $0.id, date: $0.date, wordCount: $0.wordCount,
+                                  duration: $0.duration, provider: $0.provider,
+                                  estimatedCostUSD: $0.estimatedCostUSD)
             }
-
-            migrateStatsIfNeeded(from: normalizedItems)
-        }
+        return Snapshot(items: items, stats: (savedStats + missingStats).sorted { $0.date > $1.date },
+                        durableIDs: ids, historyChanged: historyChanged, statsChanged: !missingStats.isEmpty)
     }
 
-    private func loadStats() {
-        if let data = UserDefaults.standard.data(forKey: statsSaveKey),
-           let decoded = try? JSONDecoder().decode([HistoryStatsEntry].self, from: data) {
-            statsEntries = decoded.sorted { $0.date > $1.date }
-        }
-    }
-    
-    private func migrateStatsIfNeeded(from historyItems: [HistoryItem]) {
-        let historyItems = historyItems.filter { !$0.isFailed }
-        guard statsEntries.isEmpty, !historyItems.isEmpty else { return }
-
-        statsEntries = historyItems.map { item in
-            HistoryStatsEntry(
-                id: item.id,
-                date: item.date,
-                wordCount: item.transcript
-                    .components(separatedBy: .whitespacesAndNewlines)
-                    .filter { !$0.isEmpty }
-                    .count,
-                duration: item.duration,
-                provider: item.provider,
-                estimatedCostUSD: item.estimatedCostUSD
-            )
-        }
-        saveStats()
-    }
-    
     private func filteredStatsEntries(since startDate: Date?) -> [HistoryStatsEntry] {
         guard let startDate else { return statsEntries }
         return statsEntries.filter { $0.date >= startDate }
@@ -489,12 +552,6 @@ class HistoryService: ObservableObject {
     /// Total estimated USD spent on cloud transcription in the period (0 when all on-device).
     func totalEstimatedCostUSD(since startDate: Date?) -> Double {
         filteredStatsEntries(since: startDate).compactMap { $0.estimatedCostUSD }.reduce(0, +)
-    }
-
-    private func removeAudioFileIfNeeded(for item: HistoryItem) {
-        guard let audioFileURL = item.audioFileURL else { return }
-        guard FileManager.default.fileExists(atPath: audioFileURL.path) else { return }
-        try? FileManager.default.removeItem(at: audioFileURL)
     }
 
 #if DEBUG
@@ -508,8 +565,120 @@ class HistoryService: ObservableObject {
         items = []
         retryingItemIDs = []
         statsEntries = []
-        UserDefaults.standard.removeObject(forKey: saveKey)
-        UserDefaults.standard.removeObject(forKey: statsSaveKey)
+        UserDefaults.standard.removeObject(forKey: Self.saveKey)
+        UserDefaults.standard.removeObject(forKey: Self.statsSaveKey)
     }
 #endif
+}
+
+
+nonisolated struct DashboardHistoryMetrics {
+    let wordCount: Int
+    let todayCount: Int
+    let allTimeCount: Int
+    let weeklyData: [(day: String, count: Int)]
+
+    init(entries: [HistoryStatsEntry], now: Date, calendar: Calendar = .current) {
+        let today = calendar.startOfDay(for: now)
+        let weekStart = calendar.date(byAdding: .day, value: -6, to: today) ?? today
+        var words = 0
+        var todayCount = 0
+        var dayCounts: [Date: Int] = [:]
+        for entry in entries {
+            words += entry.wordCount
+            if entry.date >= today { todayCount += 1 }
+            if entry.date >= weekStart {
+                dayCounts[calendar.startOfDay(for: entry.date), default: 0] += 1
+            }
+        }
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "EEE"
+        self.wordCount = words
+        self.todayCount = todayCount
+        self.allTimeCount = entries.count
+        self.weeklyData = (-6...0).map { offset in
+            let date = calendar.date(byAdding: .day, value: offset, to: today) ?? today
+            return (String(formatter.string(from: date).prefix(3)), dayCounts[date, default: 0])
+        }
+    }
+}
+
+
+nonisolated enum StatisticsPeriod: String, CaseIterable, Identifiable {
+    case week = "Week"
+    case month = "Month"
+    case year = "Year"
+
+    var id: String { rawValue }
+
+    var days: Int {
+        switch self {
+        case .week: 7
+        case .month: 30
+        case .year: 365
+        }
+    }
+}
+
+nonisolated struct DailyWordCount: Identifiable {
+    var id: Date { date }
+    let date: Date
+    let wordCount: Int
+    let dateString: String
+}
+
+nonisolated struct HistoryPeriodMetrics {
+    let buckets: [DailyWordCount]
+    let transcriptionCount: Int
+    let totalDuration: TimeInterval
+    let totalCost: Double
+    let totalWords: Int
+    let bestDay: Int
+
+    static let empty = Self(entries: [], period: .week, now: .now)
+
+    var dailyAverage: Int { buckets.isEmpty ? 0 : totalWords / buckets.count }
+    var averageWordsPerTranscription: Int {
+        transcriptionCount == 0 ? 0 : totalWords / transcriptionCount
+    }
+
+    init(entries: [HistoryStatsEntry], period: StatisticsPeriod, now: Date, calendar: Calendar = .current) {
+        let start = calendar.date(byAdding: .day, value: 1 - period.days, to: now) ?? now
+        let unit: Calendar.Component = period == .year ? .month : .day
+        func bucket(for date: Date) -> Date {
+            calendar.dateInterval(of: unit, for: date)?.start ?? calendar.startOfDay(for: date)
+        }
+        let lastBucket = bucket(for: now)
+        var counts: [Date: Int] = [:]
+        var notes = 0
+        var duration: TimeInterval = 0
+        var cost = 0.0
+        for entry in entries where entry.date >= start {
+            notes += 1
+            duration += entry.duration
+            cost += entry.estimatedCostUSD ?? 0
+            counts[bucket(for: entry.date), default: 0] += entry.wordCount
+        }
+
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = unit == .month ? "MMM" : "MMM d"
+        var date = bucket(for: start)
+        var buckets: [DailyWordCount] = []
+        while date <= lastBucket {
+            buckets.append(DailyWordCount(date: date, wordCount: counts[date, default: 0],
+                                          dateString: formatter.string(from: date)))
+            guard let next = calendar.date(byAdding: unit, value: 1, to: date), next > date else { break }
+            date = bucket(for: next)
+        }
+        self.buckets = buckets
+        self.transcriptionCount = notes
+        self.totalDuration = duration
+        self.totalCost = cost
+        self.totalWords = buckets.reduce(0) { $0 + $1.wordCount }
+        self.bestDay = buckets.map(\.wordCount).max() ?? 0
+    }
 }

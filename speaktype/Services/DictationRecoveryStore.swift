@@ -2,7 +2,7 @@ import Foundation
 
 /// Each new dictation is checkpointed on disk before any model call. A small atomic write
 /// updates just that entry, so relaunch never depends on a background preferences write.
-struct DictationRecoveryStore {
+nonisolated struct DictationRecoveryStore {
     let directory: URL
 
     static var live: Self {

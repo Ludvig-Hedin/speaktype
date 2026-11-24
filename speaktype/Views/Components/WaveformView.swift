@@ -29,11 +29,19 @@ struct WaveformView: View {
             }
         }
         .frame(height: 60)
-        .onAppear {
-            generateSamples()
-        }
-        .onChange(of: audioURL) {
-            generateSamples()
+        .task(id: audioURL) {
+            samples = []
+            guard let audioURL else { return }
+            let worker = Task.detached(priority: .utility) {
+                Self.extractSamples(from: audioURL, bucketCount: 100)
+            }
+            let extracted = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard !Task.isCancelled else { return }
+            samples = extracted
         }
     }
 
@@ -56,22 +64,6 @@ struct WaveformView: View {
         return path
     }
 
-    private func generateSamples() {
-        guard let audioURL else {
-            samples = []
-            return
-        }
-        // Read + downsample the real recording off the main thread (a long dictation can be a few
-        // MB), then publish on the main actor. Previously this drew RANDOM samples, so the waveform
-        // had no relation to the audio and changed every time the same item was opened.
-        Task.detached(priority: .utility) {
-            let extracted = Self.extractSamples(from: audioURL, bucketCount: 100)
-            await MainActor.run {
-                self.samples = extracted
-            }
-        }
-    }
-
     /// Peak-amplitude downsample of the first audio channel into `bucketCount` normalized (0...1)
     /// bars. Returns `[]` on any failure (missing/unreadable file) so the view simply draws nothing.
     /// `nonisolated` so it genuinely runs off the main actor inside `Task.detached` — otherwise
@@ -80,40 +72,30 @@ struct WaveformView: View {
         guard bucketCount > 0,
               let file = try? AVAudioFile(forReading: url) else { return [] }
 
-        let format = file.processingFormat
-        let frameCount = AVAudioFrameCount(file.length)
-        guard frameCount > 0,
-              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount),
-              (try? file.read(into: buffer)) != nil,
-              let channelData = buffer.floatChannelData else { return [] }
+        let total = file.length
+        guard total > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 16_384)
+        else { return [] }
 
-        let channel = channelData[0]
-        let total = Int(buffer.frameLength)
-        guard total > 0 else { return [] }
-
-        let bucketSize = max(1, total / bucketCount)
-        var result: [Float] = []
-        result.reserveCapacity(bucketCount)
+        // Read in chunks so opening a long recording never allocates its entire decoded audio.
+        let bucketSize = max(1, total / Int64(bucketCount))
+        var result = [Float](repeating: 0, count: min(bucketCount, Int(total)))
+        var position: Int64 = 0
         var peak: Float = 0
-
-        var bucket = 0
-        while bucket < bucketCount {
-            let start = bucket * bucketSize
-            if start >= total { break }
-            let end = min(start + bucketSize, total)
-
-            var maxAmp: Float = 0
-            var i = start
-            while i < end {
-                maxAmp = max(maxAmp, abs(channel[i]))
-                i += 1
+        while position < total, !Task.isCancelled {
+            let count = AVAudioFrameCount(min(Int64(buffer.frameCapacity), total - position))
+            guard (try? file.read(into: buffer, frameCount: count)) != nil,
+                  buffer.frameLength > 0, let channel = buffer.floatChannelData?[0]
+            else { return [] }
+            for index in 0..<Int(buffer.frameLength) {
+                let bucket = min(Int((position + Int64(index)) / bucketSize), result.count - 1)
+                let amplitude = abs(channel[index])
+                result[bucket] = max(result[bucket], amplitude)
+                peak = max(peak, amplitude)
             }
-            result.append(maxAmp)
-            peak = max(peak, maxAmp)
-            bucket += 1
+            position += Int64(buffer.frameLength)
         }
-
-        // Normalize to 0...1 so quiet recordings still fill the view.
+        guard !Task.isCancelled else { return [] }
         if peak > 0 {
             result = result.map { $0 / peak }
         }

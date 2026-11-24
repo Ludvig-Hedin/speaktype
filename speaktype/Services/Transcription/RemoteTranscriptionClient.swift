@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OSLog
 
 /// Uploads audio to a cloud provider's OpenAI-compatible `/v1/audio/transcriptions` endpoint.
 /// Structure mirrors `OllamaPolishClient`: typed errors, bounded timeout, no state held between calls.
@@ -55,11 +56,21 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
     private static let retryDelays: [Duration] = [.milliseconds(500), .milliseconds(1500)]
 
     func transcribeDetailed(audioFile: URL, language: String) async throws -> TranscriptionOutcome {
-        guard let key = RemoteAPIKeyStore.read(for: provider) else { throw ClientError.missingAPIKey }
+        let account = provider.keychainAccount
+        let envVar = provider.envVar
+        let apiKey = await Task.detached(priority: .userInitiated) {
+            RemoteAPIKeyStore.read(account: account, envVar: envVar)
+        }.value
+        try Task.checkCancellation()
+        guard let key = apiKey else { throw ClientError.missingAPIKey }
 
         // Upload a compressed copy (~8× smaller, ~3× faster round trip). If the encoder fails,
         // or a model rejects the format with a 4xx, send the original WAV instead.
+        let encodingStarted = Date()
         let compressed = await AudioUploadEncoder.compressedCopy(of: audioFile)
+        let elapsedEncoding = Date().timeIntervalSince(encodingStarted)
+        AppLogger.transcription.notice(
+            "stage=upload_audio_encode seconds=\(elapsedEncoding, format: .fixed(precision: 3)) compressed=\(compressed != nil)")
         defer { if let compressed { try? FileManager.default.removeItem(at: compressed) } }
 
         let start = Date()

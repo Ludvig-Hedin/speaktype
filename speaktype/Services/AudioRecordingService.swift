@@ -311,8 +311,8 @@ class AudioRecordingService: NSObject, ObservableObject {
             return false
         }
 
-        isRecording = true
         recordingStartTime = Date()
+        isRecording = true
         audioLevel = 0.0
         audioFrequency = 0.0
         print("Recording started: \(url.lastPathComponent)")

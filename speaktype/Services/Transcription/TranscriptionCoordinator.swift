@@ -49,15 +49,16 @@ enum TranscriptionCoordinator {
     // MARK: - Internals
 
     private static func resolveChain() -> [TranscriptionProviderKind] {
+        let mode = TranscriptionModeUserDefaults.mode
         let localVariant = UserDefaults.standard.string(forKey: SelectedModelPreference.storageKey) ?? ""
         let localAvailable = !localVariant.isEmpty
             && (ModelDownloadService.shared.downloadProgress[localVariant] ?? 0) >= 1.0
 
         let inputs = TranscriptionRouter.Inputs(
-            mode: TranscriptionModeUserDefaults.mode,
+            mode: mode,
             localAvailable: localAvailable,
             remoteProvider: TranscriptionModeUserDefaults.selectedRemoteProvider?.providerKind,
-            remoteConfigured: TranscriptionModeUserDefaults.isRemoteConfigured
+            remoteConfigured: mode.canUseRemote && TranscriptionModeUserDefaults.isRemoteConfigured
                 && TranscriptionModeUserDefaults.selectedRemoteModel != nil,
             networkAvailable: NetworkReachability.shared.isOnline,
             availableRAMGB: SystemMemory.availableMemoryGB(),

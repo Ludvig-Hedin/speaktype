@@ -2,7 +2,6 @@ import SwiftUI
 
 struct HistoryView: View {
     @StateObject private var historyService = HistoryService.shared
-    @StateObject private var audioPlayer = AudioPlayerService.shared
     @State private var showDeleteAlert = false
     @State private var itemPendingDeletion: HistoryItem? = nil
     @State private var expandedItemId: UUID? = nil
@@ -48,27 +47,17 @@ struct HistoryView: View {
             } else {
                 // One list, hairline rows — not a stack of separate cards.
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(historyService.items.enumerated()), id: \.element.id) { index, item in
-                        if index > 0 {
+                    ForEach(historyService.items) { item in
+                        if item.id != historyService.items.first?.id {
                             RowDivider().padding(.horizontal, 16)
                         }
                         HistoryCard(
                             item: item,
                             isExpanded: expandedItemId == item.id,
                             onToggle: {
+                                AudioPlayerService.shared.reset()
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                    if expandedItemId == item.id {
-                                        expandedItemId = nil
-                                        audioPlayer.stop()
-                                    } else {
-                                        expandedItemId = item.id
-                                        if let audioURL = item.audioFileURL,
-                                           FileManager.default.fileExists(atPath: audioURL.path) {
-                                            audioPlayer.loadAudio(from: audioURL)
-                                        } else {
-                                            audioPlayer.reset()
-                                        }
-                                    }
+                                    expandedItemId = expandedItemId == item.id ? nil : item.id
                                 }
                             },
                             onCopy: { copyToClipboard(text: item.transcript) },
@@ -76,8 +65,7 @@ struct HistoryView: View {
                             onRetry: {
                                 Task { await historyService.retryTranscription(id: item.id) }
                             },
-                            isRetrying: historyService.retryingItemIDs.contains(item.id),
-                            audioPlayer: audioPlayer
+                            isRetrying: historyService.retryingItemIDs.contains(item.id)
                         )
                     }
                 }
@@ -106,7 +94,11 @@ struct HistoryView: View {
         .alert("Clear All History?", isPresented: $showDeleteAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Clear All", role: .destructive) {
-                historyService.clearAll()
+                if expandedItemId != nil {
+                    expandedItemId = nil
+                    AudioPlayerService.shared.reset()
+                }
+                Task { await historyService.clearAll() }
             }
         } message: {
             Text("This removes your saved transcripts, but keeps your statistics history.")
@@ -127,14 +119,13 @@ struct HistoryView: View {
             Button("Delete", role: .destructive) {
                 if expandedItemId == item.id {
                     expandedItemId = nil
-                    audioPlayer.reset()
+                    AudioPlayerService.shared.reset()
                 }
-                historyService.deleteItem(id: item.id)
+                Task { await historyService.deleteItem(id: item.id) }
                 itemPendingDeletion = nil
             }
         } message: { item in
-            if let audioURL = item.audioFileURL,
-               FileManager.default.fileExists(atPath: audioURL.path) {
+            if item.hasAudio {
                 Text("This will remove the transcript and its saved audio file.")
             } else {
                 Text("This will remove the transcript entry from your history.")
@@ -186,19 +177,9 @@ struct HistoryCard: View {
     let onDelete: () -> Void
     let onRetry: () -> Void
     let isRetrying: Bool
-    @ObservedObject var audioPlayer: AudioPlayerService
     @State private var isHovered = false
 
     private let dateColumnWidth: CGFloat = 40
-
-    private var audioFileExists: Bool {
-        guard let audioURL = item.audioFileURL else { return false }
-        return FileManager.default.fileExists(atPath: audioURL.path)
-    }
-
-    var wordCount: Int {
-        item.transcript.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -244,7 +225,7 @@ struct HistoryCard: View {
 
                         Text([
                             item.date.formatted(date: .omitted, time: .shortened),
-                            (wordCount == 1 ? "1 word" : "\(wordCount) words"),
+                            (item.wordCount == 1 ? "1 word" : "\(item.wordCount) words"),
                             formatDurationShort(item.duration),
                         ].joined(separator: "  ·  "))
                             .font(Typography.caption)
@@ -274,7 +255,8 @@ struct HistoryCard: View {
             .onHover { isHovered = $0 }
 
             if isExpanded {
-                expandedContent
+                ExpandedHistoryContent(item: item, onCopy: onCopy, onDelete: onDelete,
+                                       onRetry: onRetry, isRetrying: isRetrying)
                     .padding(.leading, 16 + dateColumnWidth + 16)
                     .padding(.trailing, 16)
                     .padding(.bottom, 16)
@@ -289,8 +271,29 @@ struct HistoryCard: View {
         return item.recordingLanguage == nil ? "Transcription failed" : "Audio saved"
     }
 
-    @ViewBuilder
-    private var expandedContent: some View {
+    private func formatDurationShort(_ duration: TimeInterval) -> String {
+        let seconds = Int(duration)
+        if seconds < 60 {
+            return "\(seconds)s"
+        } else {
+            let mins = seconds / 60
+            return "\(mins)m"
+        }
+    }
+}
+
+private struct ExpandedHistoryContent: View {
+    let item: HistoryItem
+    let onCopy: () -> Void
+    let onDelete: () -> Void
+    let onRetry: () -> Void
+    let isRetrying: Bool
+    @Bindable private var audioPlayer = AudioPlayerService.shared
+    @State private var checkedAudioExists: Bool?
+
+    private var hasAudio: Bool { checkedAudioExists ?? item.hasAudio }
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             if let failureReason = item.failureReason {
                 Text(failureReason)
@@ -299,7 +302,7 @@ struct HistoryCard: View {
                     .textSelection(.enabled)
             }
 
-            if let audioURL = item.audioFileURL, audioFileExists {
+            if let audioURL = item.audioFileURL, hasAudio {
                 WaveformView(
                     audioURL: audioURL,
                     currentTime: $audioPlayer.currentTime,
@@ -319,18 +322,23 @@ struct HistoryCard: View {
                         }
                     }
                     .buttonStyle(.stSecondary)
-                    .disabled(isRetrying || !audioFileExists)
+                    .disabled(isRetrying || !hasAudio)
                 } else {
                     Button("Copy", action: onCopy)
                         .buttonStyle(.stSecondary)
                 }
 
-                if let audioURL = item.audioFileURL, audioFileExists {
-                    Button(audioPlayer.isPlaying ? "Pause" : "Play Audio") {
-                        if audioPlayer.isPlaying {
+                if let audioURL = item.audioFileURL, hasAudio {
+                    Button(audioPlayer.isPlaying && audioPlayer.currentAudioURL == audioURL ? "Pause" : "Play Audio") {
+                        if audioPlayer.isPlaying && audioPlayer.currentAudioURL == audioURL {
                             audioPlayer.pause()
                         } else {
-                            audioPlayer.play()
+                            Task {
+                                if audioPlayer.currentAudioURL != audioURL {
+                                    guard await audioPlayer.loadAudio(from: audioURL) else { return }
+                                }
+                                audioPlayer.play()
+                            }
                         }
                     }
                     .buttonStyle(.stSecondary)
@@ -367,15 +375,16 @@ struct HistoryCard: View {
                 .accessibilityLabel("Delete")
             }
         }
-    }
-
-    private func formatDurationShort(_ duration: TimeInterval) -> String {
-        let seconds = Int(duration)
-        if seconds < 60 {
-            return "\(seconds)s"
-        } else {
-            let mins = seconds / 60
-            return "\(mins)m"
+        .task(id: item.audioFileURL) {
+            guard let url = item.audioFileURL else { return }
+            let exists = await Task.detached(priority: .utility) {
+                FileManager.default.fileExists(atPath: url.path)
+            }.value
+            guard !Task.isCancelled else { return }
+            checkedAudioExists = exists
+            if exists, audioPlayer.currentAudioURL != url {
+                await audioPlayer.loadAudio(from: url)
+            }
         }
     }
 }
