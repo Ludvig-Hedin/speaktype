@@ -117,6 +117,7 @@ struct MiniRecorderView: View {
     }
 
     private var pillState: PillState {
+        if let frozenState { return frozenState }
         if isShowingMessage {
             if showsPasted { return .done }
             if awaitingPasteResult { return .working }
@@ -144,6 +145,9 @@ struct MiniRecorderView: View {
     /// Bumped by anything that puts new content in the pill; a pending fade-out reset only
     /// applies if nothing newer was shown meanwhile.
     @State private var contentGeneration = 0
+    /// What the pill showed when a fade-out began. Held until the panel is gone (or newer
+    /// content arrives) so resetting the recorder's state never changes the fading pill.
+    @State private var frozenState: PillState?
 
     /// The panel is a fixed transparent canvas; the pill sits at its bottom center and
     /// animates its own size, so the window never jumps.
@@ -448,16 +452,17 @@ struct MiniRecorderView: View {
     /// the waveform while it is fading out.
     private func dismissAfterFade() {
         let generation = contentGeneration
+        if frozenState == nil { frozenState = pillState }
         onCancel?()
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(220))
             // Something new was shown during the fade (a recording, a message): leave it alone.
             guard generation == contentGeneration else { return }
-            guard !isListening, recordingStartTask == nil, !isStoppingRecording else { return }
             skipNextAnimation = true
-            clearMessage()
+            if !isListening && recordingStartTask == nil { clearMessage() }
             showsPasted = false
             isHovering = false
+            frozenState = nil
             try? await Task.sleep(for: .milliseconds(30))
             skipNextAnimation = false
         }
@@ -527,13 +532,15 @@ struct MiniRecorderView: View {
         pendingStopAfterStart = false
         transcriptionTask?.cancel()
         transcriptionTask = nil
+        // Freeze the current look and fade out before any state below changes it.
+        dismissTask?.cancel()
+        dismissAfterFade()
         clearMessage()
 
         let shouldStopRecording = isListening || audioRecorder.isRecording
         isListening = false
         isProcessing = false
         statusMessage = "Transcribing..."
-        onCancel?()
 
         guard shouldStopRecording else { return }
         guard !isStoppingRecording else { return }
@@ -599,6 +606,7 @@ struct MiniRecorderView: View {
 
         onStartAccepted?()
         contentGeneration += 1
+        frozenState = nil
         isHovering = false
         cancelCommit = false
         pendingStopAfterStart = false
@@ -655,6 +663,7 @@ struct MiniRecorderView: View {
         debugLog(message)
         dismissTask?.cancel()
         contentGeneration += 1
+        frozenState = nil
         // Coming from a hidden pill (e.g. a start error): appear already as the message.
         let fromHidden = !isListening && !isProcessing && !isShowingMessage
         if fromHidden { skipNextAnimation = true }
@@ -693,6 +702,7 @@ struct MiniRecorderView: View {
     private func awaitPasteResult() {
         dismissTask?.cancel()
         contentGeneration += 1
+        frozenState = nil
         isShowingMessage = true
         awaitingPasteResult = true
         showsPasted = false
@@ -795,6 +805,8 @@ struct MiniRecorderView: View {
         if isShowingMessage {
             dismissTask?.cancel()
             dismissAfterFade()
+            // A paste already in flight must not flash a checkmark inside the fade.
+            awaitingPasteResult = false
             return
         }
 
@@ -808,8 +820,8 @@ struct MiniRecorderView: View {
         } else {
             transcriptionTask?.cancel()
             transcriptionTask = nil
+            dismissAfterFade()
             isProcessing = false
-            onCancel?()
         }
     }
 
