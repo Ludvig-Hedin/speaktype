@@ -326,14 +326,22 @@ struct MiniRecorderView: View {
                         .transition(Self.contentTransition)
                 }
                 if meeting.active {
+                    // `meeting.level` is read on each tick (it isn't published), so the waveform
+                    // and the clock share one timeline.
                     TimelineView(.periodic(from: .now, by: 0.08)) { context in
                         HStack(spacing: 8) {
+                            // Red dot: tells a meeting apart from a dictation at a glance.
+                            Circle()
+                                .fill(Color(red: 1, green: 0.27, blue: 0.23))
+                                .frame(width: 6, height: 6)
+                                .accessibilityHidden(true)
                             LiveWaveform(level: meeting.level, isLive: meeting.started != nil)
-                            let seconds = max(0, Int(context.date.timeIntervalSince(meeting.started ?? context.date)))
-                            Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
-                                .font(.system(size: 12, weight: .medium).monospacedDigit()).foregroundStyle(.white)
+                            Text(Self.meetingClock(since: meeting.started, now: context.date))
+                                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                                .foregroundStyle(.white.opacity(0.85))
                         }
                     }
+                    .transition(Self.contentTransition)
                 } else {
                     LiveWaveform(level: audioRecorder.audioLevel, isLive: isListening)
                         .transition(Self.contentTransition)
@@ -403,6 +411,14 @@ struct MiniRecorderView: View {
         case .working, .done: return 12
         case .message: return 14
         }
+    }
+
+    /// "4:05" under an hour, "1:04:05" after.
+    nonisolated static func meetingClock(since start: Date?, now: Date) -> String {
+        let s = max(0, Int(now.timeIntervalSince(start ?? now)))
+        return s >= 3600
+            ? String(format: "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
+            : String(format: "%d:%02d", s / 60, s % 60)
     }
 
     private var listeningHelp: String {

@@ -251,4 +251,12 @@ final class MeetingRecordingTests: XCTestCase {
         XCTAssertEqual(text, "Accepted")
         XCTAssertEqual(extensions, ["m4a", "wav"])
     }
+
+    func testMeetingClockShowsHoursAfterAnHour() {
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        XCTAssertEqual(MiniRecorderView.meetingClock(since: start, now: start.addingTimeInterval(245)), "4:05")
+        XCTAssertEqual(MiniRecorderView.meetingClock(since: start, now: start.addingTimeInterval(3599)), "59:59")
+        XCTAssertEqual(MiniRecorderView.meetingClock(since: start, now: start.addingTimeInterval(3845)), "1:04:05")
+        XCTAssertEqual(MiniRecorderView.meetingClock(since: nil, now: start), "0:00")
+    }
 }
