@@ -26,3 +26,6 @@ MIT license requires keeping the original copyright notice; credit "based on Spe
 3. Weeks 3-5: new site with demo video, Homebrew cask, signed download + auto-update, launch on HN / r/macapps / Product Hunt, comparison pages.
 4. Months 2-3: dictionary, per-app styles, live text while speaking, voice-edit selection.
 5. Later, optional: free + open forever; one-time supporter licence or paid hosted cleanup for people without a key.
+
+## Decision (owner, 2026-11-25)
+Mark: "caret" concept (three rounded sound bars ending in a thin text cursor), monochrome. Name: owner only wants "short, simple, easy to spell and remember in Swedish". Caret (caret.so, Mac AI typing app) and Typist (erusev.com, Mac dictation) are taken, so the app is **Taly** (sounds like Swedish "tala", not a Swedish word). Free domains: gettaly.com / usetaly.com (~$12/yr on Vercel; Cloudflare price unknown, no token). Runner-up: Tono (trytono.app). Not bought yet.
