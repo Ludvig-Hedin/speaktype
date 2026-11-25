@@ -24,6 +24,7 @@ nonisolated enum MeetingFiles {
         let url: URL
         private var reader: AVAudioFile?
         private var readBuffer: AVAudioPCMBuffer?
+        private var unreadable = false
         let spans: [Span]
         var cursor = 0
 
@@ -64,11 +65,22 @@ nonisolated enum MeetingFiles {
                 let start = max(position, span.start)
                 let end = min(position + count, span.end)
                 if end > start {
-                    if reader == nil {
-                        reader = try AVAudioFile(forReading: url)
-                        readBuffer = AVAudioPCMBuffer(pcmFormat: reader!.processingFormat, frameCapacity: 8192)
+                    if reader == nil, !unreadable {
+                        // A damaged piece (e.g. a crash mid-restart) becomes silence, never a failed meeting.
+                        reader = try? AVAudioFile(forReading: url)
+                        if let reader {
+                            readBuffer = AVAudioPCMBuffer(pcmFormat: reader.processingFormat, frameCapacity: 8192)
+                        } else {
+                            unreadable = true
+                            AppLogger.warning("Meeting piece unreadable, using silence: \(url.lastPathComponent)",
+                                              category: AppLogger.transcription)
+                        }
                     }
-                    guard let file = reader, let buffer = readBuffer else { throw MeetingAudioError(message: "Cannot read meeting track.") }
+                    guard let file = reader, let buffer = readBuffer else {
+                        if span.end > position + count { break }
+                        cursor += 1
+                        continue
+                    }
                     let step = Double(span.count) / Double(span.end - span.start)
                     let first = Double(start - span.start) * step
                     let base = Int64(first)
@@ -76,15 +88,20 @@ nonisolated enum MeetingFiles {
                     let frames = min(span.count - base, last - base + 2)
                     guard frames > 0, frames <= buffer.frameCapacity else { throw MeetingAudioError(message: "Invalid track timing.") }
                     if file.framePosition != span.local + base { file.framePosition = span.local + base }
-                    try file.read(into: buffer, frameCount: UInt32(frames))
-                    guard buffer.frameLength == UInt32(frames) else { throw MeetingAudioError(message: "Incomplete meeting track.") }
+                    // A short read (truncated piece) leaves the missing tail silent instead of failing.
+                    if (try? file.read(into: buffer, frameCount: UInt32(frames))) == nil { buffer.frameLength = 0 }
+                    let available = Int(buffer.frameLength)
                     let input = buffer.floatChannelData![0]
                     let target = samples.advanced(by: Int(start - position))
-                    for i in 0..<Int(end - start) {
-                        if step == 1 { target[i] += input[i]; continue }
+                    for i in 0..<Int(end - start) where available > 0 {
+                        if step == 1 {
+                            if i < available { target[i] += input[i] }
+                            continue
+                        }
                         let index = first - Double(base) + Double(i) * step
-                        let j = min(Int(index), Int(frames) - 1)
-                        let next = min(j + 1, Int(frames) - 1)
+                        let j = min(Int(index), available - 1)
+                        let next = min(j + 1, available - 1)
+                        if Int(index) >= available { continue }
                         target[i] += input[j] + Float(index - Double(j)) * (input[next] - input[j])
                     }
                 }
@@ -104,7 +121,14 @@ nonisolated enum MeetingFiles {
         if files.isEmpty, fm.fileExists(atPath: url.path) {
             return Double(try AVAudioFile(forReading: url).length) / rate
         }
-        let sources = try files.map(Source.init)
+        // One damaged piece must not make the whole meeting unmixable: skip it and keep the rest.
+        let sources = files.compactMap { file -> Source? in
+            do { return try Source(url: file) } catch {
+                AppLogger.warning("Skipping unreadable meeting piece \(file.lastPathComponent)",
+                                  category: AppLogger.transcription)
+                return nil
+            }
+        }
         guard let length = sources.compactMap({ $0.spans.last?.end }).max(), length > 0 else {
             throw MeetingAudioError(message: "No meeting audio was captured.")
         }

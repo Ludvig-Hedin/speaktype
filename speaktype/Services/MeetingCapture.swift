@@ -31,7 +31,9 @@ nonisolated final class MeetingTrack: @unchecked Sendable {
     private let origin: Double
     private let anchorsURL: URL
     private let offsetQueue = DispatchQueue(label: "Taly.meetingTrackStart")
+    let url: URL
     init(url: URL, input: AudioStreamBasicDescription, origin: Double) throws {
+        self.url = url
         self.origin = origin
         inputRate = input.mSampleRate
         anchorsURL = url.deletingPathExtension().appendingPathExtension("anchors")
@@ -99,6 +101,21 @@ nonisolated final class MeetingTrack: @unchecked Sendable {
         let result = ExtAudioFileDispose(file)
         if result != noErr { status.withLock { $0 = result } }
         offsetQueue.sync {}
+    }
+    /// True once any audio frame was written.
+    var hasAudio: Bool {
+        ioLock.lock()
+        defer { ioLock.unlock() }
+        return inputFrames > 0
+    }
+
+    /// Removes this piece's files after `close()` when it never received audio (a restart
+    /// that failed before the device delivered anything). Pieces with audio are never deleted.
+    func discardIfEmpty() {
+        guard file == nil, !hasAudio else { return }
+        for ext in ["caf", "offset", "anchors"] {
+            try? FileManager.default.removeItem(at: url.deletingPathExtension().appendingPathExtension(ext))
+        }
     }
     deinit { close() }
 }
@@ -193,6 +210,11 @@ nonisolated final class MeetingCapture: @unchecked Sendable {
     private var folder: URL!
     private var deviceUID: String?
     private var micPiece = 0
+    // Bluetooth mics can take seconds to deliver their first buffer; don't call that a stall.
+    private var micStartedAt: UInt64 = 0
+    private var micRetryDelay: Double = 1
+    private var nextMicAttempt: UInt64 = 0
+    private static let micStartGrace: Double = 5
     private var systemPiece = 0
     private var restartSystem = false
     private var stopped = false
@@ -290,6 +312,7 @@ nonisolated final class MeetingCapture: @unchecked Sendable {
             defaultInputListener = listener
         }
         try engine.start()
+        micStartedAt = mach_absolute_time()
     }
 
     private func stopMic() {
@@ -303,7 +326,9 @@ nonisolated final class MeetingCapture: @unchecked Sendable {
         if installed { engine.inputNode.removeTap(onBus: 0); installed = false }
         mic?.close()
         if mic?.status.withLock({ $0 != noErr }) == true { closeFailed = true }
+        mic?.discardIfEmpty()
         mic = nil
+        micStartedAt = 0
     }
 
     private func stopSystem() {
@@ -329,9 +354,23 @@ nonisolated final class MeetingCapture: @unchecked Sendable {
             return pending
         }
         var result = Health()
-        if woke || micChanged.withLock({ $0 }) || !engine.isRunning || Self.stalled(mic?.lastAppend.withLock { $0 }, now: now) {
-            stopMic()
-            do { try startMic() } catch { stopMic() }
+        let graceOver = micStartedAt != 0 && now >= micStartedAt
+            && AVAudioTime.seconds(forHostTime: now - micStartedAt) >= Self.micStartGrace
+        let micStalled = graceOver && Self.stalled(mic?.lastAppend.withLock { $0 }, now: now)
+        if woke || micChanged.withLock({ $0 }) || !engine.isRunning || micStalled {
+            if now >= nextMicAttempt {
+                stopMic()
+                do {
+                    try startMic()
+                    micRetryDelay = 1
+                    nextMicAttempt = 0
+                } catch {
+                    stopMic()
+                    // Back off between failed restarts (1, 2, 4 … 30 s) instead of every poll.
+                    nextMicAttempt = now + AVAudioTime.hostTime(forSeconds: micRetryDelay)
+                    micRetryDelay = min(micRetryDelay * 2, 30)
+                }
+            }
             result.notice = "Microphone interrupted. Reconnecting…"
         }
         if #available(macOS 14.2, *), restartSystem {

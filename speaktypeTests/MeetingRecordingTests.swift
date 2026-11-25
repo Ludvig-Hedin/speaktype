@@ -252,6 +252,38 @@ final class MeetingRecordingTests: XCTestCase {
         XCTAssertEqual(extensions, ["m4a", "wav"])
     }
 
+    func testDamagedPieceIsSkippedAndEmptyPieceIsDiscarded() throws {
+        let url = MeetingFiles.mixURL(id: UUID())
+        let folder = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let format = AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1)!
+
+        // A good piece with one second of audio.
+        let good = try AVAudioFile(forWriting: folder.appendingPathComponent("mic.caf"), settings: format.settings)
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16000)!
+        buffer.frameLength = 16000
+        buffer.floatChannelData![0].update(repeating: 0.3, count: 16000)
+        try good.write(from: buffer)
+        try JSONEncoder().encode(0).write(to: folder.appendingPathComponent("mic.offset"))
+        // A damaged piece: garbage bytes, no offset file.
+        try Data("not audio".utf8).write(to: folder.appendingPathComponent("mic-2.caf"))
+        XCTAssertEqual(try MeetingFiles.mix(at: url), 1, accuracy: 0.001)
+
+        // A restart that never delivered audio leaves nothing behind; one with audio is kept.
+        let empty = try MeetingTrack(url: folder.appendingPathComponent("mic-3.caf"),
+                                     input: format.streamDescription.pointee, origin: 10)
+        empty.close()
+        empty.discardIfEmpty()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.appendingPathComponent("mic-3.caf").path))
+        let kept = try MeetingTrack(url: folder.appendingPathComponent("mic-4.caf"),
+                                    input: format.streamDescription.pointee, origin: 10)
+        kept.append(1024, buffer.audioBufferList, hostTime: AVAudioTime.hostTime(forSeconds: 10.5))
+        kept.close()
+        kept.discardIfEmpty()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("mic-4.caf").path))
+    }
+
     func testMeetingClockShowsHoursAfterAnHour() {
         let start = Date(timeIntervalSinceReferenceDate: 0)
         XCTAssertEqual(MiniRecorderView.meetingClock(since: start, now: start.addingTimeInterval(245)), "4:05")
