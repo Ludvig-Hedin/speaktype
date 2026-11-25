@@ -28,6 +28,7 @@ struct SettingsView: View {
 private struct ShortcutsSection: View {
     @AppStorage("selectedHotkey") private var selectedHotkey: HotkeyOption = .fn
     @AppStorage("recordingMode") private var recordingMode: Int = 0
+    @State private var previousMeetingShortcut = KeyboardShortcuts.getShortcut(for: .toggleMeeting)
     @State private var customShortcutDisplay = CustomShortcutStorage.displayString
 
     var body: some View {
@@ -59,16 +60,16 @@ private struct ShortcutsSection: View {
                         }
                         Divider()
                         Group {
-                            Button(HotkeyOption.f13.displayName) { selectedHotkey = .f13 }
-                            Button(HotkeyOption.f14.displayName) { selectedHotkey = .f14 }
-                            Button(HotkeyOption.f15.displayName) { selectedHotkey = .f15 }
-                            Button(HotkeyOption.f16.displayName) { selectedHotkey = .f16 }
-                            Button(HotkeyOption.f17.displayName) { selectedHotkey = .f17 }
-                            Button(HotkeyOption.f18.displayName) { selectedHotkey = .f18 }
-                            Button(HotkeyOption.f19.displayName) { selectedHotkey = .f19 }
+                            Button(HotkeyOption.f13.displayName) { selectedHotkey = .f13 }.disabled(HotkeyOption.f13.conflictsWithMeeting)
+                            Button(HotkeyOption.f14.displayName) { selectedHotkey = .f14 }.disabled(HotkeyOption.f14.conflictsWithMeeting)
+                            Button(HotkeyOption.f15.displayName) { selectedHotkey = .f15 }.disabled(HotkeyOption.f15.conflictsWithMeeting)
+                            Button(HotkeyOption.f16.displayName) { selectedHotkey = .f16 }.disabled(HotkeyOption.f16.conflictsWithMeeting)
+                            Button(HotkeyOption.f17.displayName) { selectedHotkey = .f17 }.disabled(HotkeyOption.f17.conflictsWithMeeting)
+                            Button(HotkeyOption.f18.displayName) { selectedHotkey = .f18 }.disabled(HotkeyOption.f18.conflictsWithMeeting)
+                            Button(HotkeyOption.f19.displayName) { selectedHotkey = .f19 }.disabled(HotkeyOption.f19.conflictsWithMeeting)
                         }
                         Divider()
-                        Button(HotkeyOption.custom.displayName) { selectedHotkey = .custom }
+                        Button(HotkeyOption.custom.displayName) { selectedHotkey = .custom }.disabled(HotkeyOption.custom.conflictsWithMeeting)
                     } label: {
                         HStack(spacing: 6) {
                             Text(selectedHotkey == .custom && !customShortcutDisplay.isEmpty
@@ -114,7 +115,14 @@ private struct ShortcutsSection: View {
                 HStack {
                     Text("Meeting").font(Typography.bodyMedium).foregroundStyle(Color.textPrimary)
                     Spacer()
-                    KeyboardShortcuts.Recorder(for: .toggleMeeting)
+                    KeyboardShortcuts.Recorder(for: .toggleMeeting) { shortcut in
+                        if selectedHotkey.conflicts(with: shortcut) {
+                            KeyboardShortcuts.setShortcut(previousMeetingShortcut, for: .toggleMeeting)
+                            NSSound.beep()
+                        } else {
+                            previousMeetingShortcut = shortcut
+                        }
+                    }
                 }
                 .settingsRowPadding()
 

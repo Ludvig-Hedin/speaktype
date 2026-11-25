@@ -83,7 +83,9 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
                 text = try await upload(audioFile, key: key, language: language)
             }
         } else {
-            text = try await upload(audioFile, key: key, language: language)
+            text = try await Self.uploadWithFormatFallback(audioFile) { file in
+                try await upload(file, key: key, language: language)
+            }
         }
         let elapsed = Date().timeIntervalSince(start)
 
@@ -96,6 +98,17 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
             estimatedCostUSD: duration.flatMap { model.costEstimate(durationSeconds: $0) },
             transcriptionTime: elapsed
         )
+    }
+
+    static func uploadWithFormatFallback(_ file: URL, upload: (URL) async throws -> String) async throws -> String {
+        do {
+            return try await upload(file)
+        } catch ClientError.httpStatus(let code) where file.pathExtension == "m4a" && [400, 415, 422].contains(code) {
+            let wav = FileManager.default.temporaryDirectory.appendingPathComponent("upload-\(UUID()).wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+            try await Task.detached { try AudioUploadEncoder.decodeWAV(file, to: wav) }.value
+            return try await upload(wav)
+        }
     }
 
     /// One upload with retries on transient failures (timeout, 429, 5xx).

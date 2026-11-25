@@ -207,6 +207,13 @@ struct MiniRecorderView: View {
         .onReceive(NotificationCenter.default.publisher(for: .recordingEscapeRequested)) { _ in
             handleEscape()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .meetingReplaceMessage)) { _ in
+            guard isShowingMessage, !awaitingPasteResult || showsPasted else { return }
+            contentGeneration += 1
+            frozenState = nil
+            clearMessage()
+            meeting.start()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .meetingFinished)) { event in
             if let message = event.object as? String { showStartError(message) } else { onCancel?() }
         }

@@ -1,4 +1,5 @@
 import AppKit
+import KeyboardShortcuts
 import SwiftUI
 
 // MARK: - UserDefaults keys for custom shortcut
@@ -282,6 +283,11 @@ final class ShortcutRecorderNSView: NSView {
         // key system-wide, so we swallow it and keep waiting for a valid combo.
         guard !maskedModifiers.isEmpty || isFKey else { return true }
 
+        if let meeting = KeyboardShortcuts.getShortcut(for: .toggleMeeting),
+           meeting.carbonKeyCode == Int(event.keyCode), meeting.modifiers == maskedModifiers {
+            NSSound.beep()
+            return true
+        }
         CustomShortcutStorage.keyCode = Int(event.keyCode)
         CustomShortcutStorage.modifiers = Int(maskedModifiers.rawValue)
         onChange?()

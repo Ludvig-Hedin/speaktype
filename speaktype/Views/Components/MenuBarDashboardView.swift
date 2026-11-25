@@ -129,6 +129,7 @@ struct MenuBarDashboardView: View {
                                 }
                             }
                         }
+                        .disabled(option.conflictsWithMeeting)
                     }
                 } label: {
                     HStack(spacing: 5) {

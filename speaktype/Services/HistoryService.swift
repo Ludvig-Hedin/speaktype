@@ -57,6 +57,7 @@ nonisolated struct HistoryItem: Identifiable, Codable, Hashable {
     }
 
     var isFailed: Bool { failureReason != nil }
+    var hasPartialMeetingTranscript: Bool { isMeeting == true && isFailed && !transcript.isEmpty }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
@@ -87,8 +88,12 @@ class HistoryService: ObservableObject {
     private var retryWorker: Task<Void, Never>?
     private var startupTask: Task<Void, Never>?
 
-    private init() {
-        let store = DictationRecoveryStore.live
+    private let mixMeeting: @Sendable (URL) async throws -> TimeInterval
+
+    init(store: DictationRecoveryStore = .live, mixMeeting: @escaping @Sendable (URL) async throws -> TimeInterval = { url in
+        try await Task.detached(priority: .utility) { try MeetingFiles.mix(at: url) }.value
+    }) {
+        self.mixMeeting = mixMeeting
         recoveryStore = store
         startupTask = Task { [weak self] in
             let snapshot = await Task.detached(priority: .utility) {
@@ -104,6 +109,15 @@ class HistoryService: ObservableObject {
             if snapshot.historyChanged || !addedItems.isEmpty { saveHistory() }
             if snapshot.statsChanged || !addedStats.isEmpty { saveStats() }
             resumeQueuedDictations()
+            let interrupted = snapshot.items.filter { $0.isMeeting == true && $0.duration == 0 }
+            Task(priority: .utility) {
+                for item in interrupted where self.containsDictation(id: item.id) {
+                    guard self.retryingItemIDs.insert(item.id).inserted else { continue }
+                    defer { self.finishDictation(id: item.id) }
+                    do { try await self.prepareMeeting(id: item.id) }
+                    catch { await self.failDictation(id: item.id, reason: error.localizedDescription) }
+                }
+            }
         }
     }
 
@@ -382,7 +396,7 @@ class HistoryService: ObservableObject {
     /// Also runs on manual retry after an interrupted capture or mix.
     func prepareMeeting(id: UUID) async throws {
         guard let item = items.first(where: { $0.id == id }), let url = item.audioFileURL else { throw CancellationError() }
-        let duration = try await Task.detached(priority: .utility) { try MeetingFiles.mix(at: url) }.value
+        let duration = try await mixMeeting(url)
         guard !deletingIDs.contains(id), let index = items.firstIndex(where: { $0.id == id }) else { throw CancellationError() }
         var saved = items[index]
         saved.duration = duration
@@ -628,12 +642,6 @@ class HistoryService: ObservableObject {
 
         let restored = store.load().map { entry in
             var item = entry
-            if item.isMeeting == true, item.duration == 0, let url = item.audioFileURL,
-               let duration = try? MeetingFiles.mix(at: url) {
-                item.duration = duration
-                item.failureReason = "Meeting recovered. Retry to transcribe."
-                try? store.write(item)
-            }
             item.prepareForDisplay()
             return item
         }

@@ -24,8 +24,13 @@ class MiniRecorderWindowController: NSObject {
     func toggleMeeting() {
         let meeting = MeetingRecorder.shared
         if meeting.active { meeting.stop(transcribe: true); return }
-        guard panel?.isVisible != true, !AudioRecordingService.shared.isRecordingOrStarting else { return }
-        meeting.start()
+        guard !AudioRecordingService.shared.isRecordingOrStarting else { return }
+        if panel?.isVisible == true {
+            NotificationCenter.default.post(name: .meetingReplaceMessage, object: nil)
+            guard meeting.active else { return }
+        } else {
+            meeting.start()
+        }
         showPanel()
     }
 

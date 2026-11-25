@@ -223,11 +223,7 @@ struct HistoryCard: View {
                                 .multilineTextAlignment(.leading)
                         }
 
-                        Text(((item.isMeeting == true ? ["Meeting"] : []) + [
-                            item.date.formatted(date: .omitted, time: .shortened),
-                            (item.wordCount == 1 ? "1 word" : "\(item.wordCount) words"),
-                            formatDurationShort(item.duration),
-                        ]).joined(separator: "  ·  "))
+                        Text(metadata)
                             .font(Typography.caption)
                             .monospacedDigit()
                             .foregroundStyle(Color.textMuted)
@@ -263,6 +259,16 @@ struct HistoryCard: View {
             }
         }
         .background(isHovered && !isExpanded ? Color.bgHover.opacity(0.4) : Color.clear)
+    }
+
+    private var metadata: String {
+        var parts = [String]()
+        if item.isMeeting == true { parts.append("Meeting") }
+        if item.hasPartialMeetingTranscript { parts.append("Partial transcript") }
+        parts.append(item.date.formatted(date: .omitted, time: .shortened))
+        parts.append(item.wordCount == 1 ? "1 word" : "\(item.wordCount) words")
+        parts.append(formatDurationShort(item.duration))
+        return parts.joined(separator: "  ·  ")
     }
 
     private var savedAudioTitle: String {
@@ -323,7 +329,8 @@ private struct ExpandedHistoryContent: View {
                     }
                     .buttonStyle(.stSecondary)
                     .disabled(isRetrying || (!hasAudio && item.isMeeting != true))
-                } else {
+                }
+                if !item.isFailed || item.hasPartialMeetingTranscript {
                     Button("Copy", action: onCopy)
                         .buttonStyle(.stSecondary)
                 }

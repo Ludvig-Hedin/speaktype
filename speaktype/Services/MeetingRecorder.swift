@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import Combine
 
 @MainActor
@@ -11,8 +12,10 @@ final class MeetingRecorder: ObservableObject {
     private var id: UUID?
     private var pendingStop: Bool?
     private var stopping = false
+    private var wakeObserver: NSObjectProtocol?
+    private var dictationNoticeUntil = Date.distantPast
     private var monitor: Task<Void, Never>?
-    var level: Float { capture?.level ?? 0 }
+    var level: Float { capture?.liveLevel ?? 0 }
 
     func start() {
         guard !active, !AudioRecordingService.shared.isRecordingOrStarting else { return }
@@ -43,24 +46,21 @@ final class MeetingRecorder: ObservableObject {
                     return capture
                 }.value
                 capture = session
+                wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification,
+                    object: nil, queue: nil) { [weak session] _ in session?.didWake() }
                 started = begin
-                notice = session.micOnly ? "Microphone only. System audio is unavailable." : nil
+                notice = session.health.notice
                 monitor = Task { [weak self] in
                     while !Task.isCancelled {
                         try? await Task.sleep(for: .seconds(1))
                         guard !Task.isCancelled, let self, let capture = self.capture else { return }
-                        if capture.writeFailed {
+                        let health = await Task.detached { capture.poll() }.value
+                        guard !Task.isCancelled, self.capture === capture else { return }
+                        if health.failed {
                             self.stop(transcribe: false)
                             return
                         }
-                        if !capture.micOnly, Date.now.timeIntervalSince(begin) > 6 {
-                            let silent = "Only microphone audio detected."
-                            if capture.systemHasSignal {
-                                if self.notice == silent { self.notice = nil }
-                            } else if self.notice == nil {
-                                self.notice = silent
-                            }
-                        }
+                        if Date.now >= self.dictationNoticeUntil { self.notice = health.notice }
                     }
                 }
                 if let pendingStop { stop(transcribe: pendingStop) }
@@ -76,7 +76,9 @@ final class MeetingRecorder: ObservableObject {
     }
 
     func dictationRequested() {
-        notice = capture?.micOnly == true ? "Meeting in progress. Recording microphone only." : "Stop the meeting to dictate."
+        guard !stopping else { return }
+        dictationNoticeUntil = Date.now.addingTimeInterval(2)
+        notice = "Stop the meeting to dictate."
     }
 
     func stop(transcribe: Bool) {
@@ -84,13 +86,13 @@ final class MeetingRecorder: ObservableObject {
         guard let session = capture, let id else { pendingStop = transcribe; return }
         HistoryService.shared.revealStoppedMeeting(id: id)
         stopping = true
-        let writeFailed = session.writeFailed
+        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver); self.wakeObserver = nil }
         monitor?.cancel()
         monitor = nil
         capture = nil
         notice = "Saving meeting…"
         Task {
-            await Task.detached { session.stop() }.value
+            let writeFailed = await Task.detached { session.stop() }.value
             let history = HistoryService.shared
             do {
                 try await history.prepareMeeting(id: id)
@@ -98,6 +100,11 @@ final class MeetingRecorder: ObservableObject {
                 finish(message: writeFailed ? "Recording interrupted. Available audio saved in History." : nil)
                 if transcribe { await history.retryTranscription(id: id) }
             } catch {
+                if error is CancellationError || !history.containsDictation(id: id) {
+                    history.finishDictation(id: id)
+                    finish(message: nil)
+                    return
+                }
                 await history.failDictation(id: id, reason: error.localizedDescription)
                 history.finishDictation(id: id)
                 finish(message: error.localizedDescription)
