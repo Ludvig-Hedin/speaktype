@@ -7,7 +7,7 @@ struct UpdateSheet: View {
     @AppStorage("autoUpdate") private var autoUpdate = true
 
     let update: AppVersion
-    let appName = "SpeakType"
+    let appName = "Hum"
 
     var body: some View {
         VStack(spacing: 0) {

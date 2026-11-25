@@ -22,6 +22,12 @@ enum ModelValidationService {
 
     /// Fetch OpenRouter's live model IDs (public endpoint; key adds rate headroom).
     static func fetchOpenRouterModelIDs() async -> Set<String>? {
+        await Task.detached(priority: .utility) {
+            await requestOpenRouterModelIDs()
+        }.value
+    }
+
+    nonisolated private static func requestOpenRouterModelIDs() async -> Set<String>? {
         guard let url = CleanupProvider.openRouter.modelsListURL else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 15

@@ -16,6 +16,7 @@ struct WritingPolishSettingsSection: View {
 
     @State private var ollamaPingResult: String?
     @State private var isPingingOllama = false
+    @State private var showOllamaAdvanced = false
 
     @AppStorage(WritingPolishUserDefaults.cleanupProviderKey) private var cleanupProviderRaw =
         WritingPolishUserDefaults.defaultCleanupProvider
@@ -27,6 +28,18 @@ struct WritingPolishSettingsSection: View {
 
     private var cleanupProvider: CleanupProvider {
         CleanupProvider(rawValue: cleanupProviderRaw) ?? .openRouter
+    }
+
+    @AppStorage(TranscriptionModeUserDefaults.modeKey) private var transcriptionModeRaw =
+        TranscriptionMode.localOnly.rawValue
+    @AppStorage(TranscriptionModeUserDefaults.remoteProviderKey) private var remoteProviderRaw = ""
+
+    /// The cloud transcription section already shows this exact key (same Keychain entry),
+    /// so asking for it a second time here would only confuse.
+    private var keyShownInCloudSection: Bool {
+        guard (TranscriptionMode(rawValue: transcriptionModeRaw) ?? .localOnly).canUseRemote,
+              let remote = RemoteProvider(rawValue: remoteProviderRaw) else { return false }
+        return remote.keychainAccount == cleanupProvider.keychainAccount
     }
 
     private var selectedPreset: WritingPolishPreset {
@@ -98,7 +111,7 @@ struct WritingPolishSettingsSection: View {
                 }
             } else {
                 HStack(spacing: 8) {
-                    SecureField("sk-…" + (cleanupProvider.envVar.map { "  (or $\($0))" } ?? ""), text: $cleanupKeyInput)
+                    SecureField("sk-…", text: $cleanupKeyInput)
                         .textFieldStyle(.app)
                     Button("Save") { saveCleanupKey() }
                         .buttonStyle(.stAction)
@@ -130,25 +143,14 @@ struct WritingPolishSettingsSection: View {
 
     var body: some View {
         SettingsSection {
-            SettingsSectionHeader(
-                icon: "text.quote",
-                title: "Writing polish",
-                subtitle: compact
-                    ? "Optional cleanup after transcription"
-                    : "Turn speech into clearer writing with your selected cleanup engine"
-            )
+            SettingsSectionHeader(icon: "text.quote", title: "Writing polish")
 
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Polish speech into clear writing")
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                        Text(configSummary)
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.textMuted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    Text("Polish speech into clear writing")
+                        .font(Typography.bodyMedium)
+                        .foregroundStyle(Color.textPrimary)
+                        .help(configSummary)
                     Spacer(minLength: 0)
                     Toggle("", isOn: $writingPolishEnabled)
                         .labelsHidden()
@@ -161,6 +163,7 @@ struct WritingPolishSettingsSection: View {
                     Text("Cleanup engine")
                         .font(Typography.labelMedium)
                         .foregroundStyle(Color.textSecondary)
+                        .help("If cleanup fails or times out, you still get the raw transcript.")
                     HStack(spacing: 8) {
                         ForEach(CleanupProvider.allCases.filter { $0 != .openAI }) { p in
                             RadioButton(
@@ -199,63 +202,15 @@ struct WritingPolishSettingsSection: View {
                             .clickActionPointerCursor()
                         }
 
-                        cleanupKeyField
-
-                        Text("Keeps the language of your dictation. OpenRouter requests use a no-training data policy.")
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.textMuted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        Text("Local cleanup uses your Ollama settings below. It also serves as the offline fallback when a cloud engine is unreachable.")
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.textMuted)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if !keyShownInCloudSection {
+                            cleanupKeyField
+                        }
                     }
                 }
                 .disabled(!writingPolishEnabled)
                 .onAppear(perform: refreshCleanupKey)
 
                 if !cleanupProvider.isRemote {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Ollama base URL")
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                        TextField("http://127.0.0.1:11434", text: $ollamaBaseURL)
-                            .textFieldStyle(.app)
-                            .disabled(!writingPolishEnabled)
-                    }
-
-                    HStack(spacing: 12) {
-                        Button {
-                            Task { await runOllamaPing() }
-                        } label: {
-                            HStack(spacing: 6) {
-                                if isPingingOllama {
-                                    ProgressView()
-                                        .scaleEffect(0.65)
-                                        .frame(width: 14, height: 14)
-                                } else {
-                                    Image(systemName: "antenna.radiowaves.left.and.right")
-                                        .font(.system(size: 12))
-                                }
-                                Text(isPingingOllama ? "Checking…" : "Check Ollama")
-                            }
-                        }
-                        .buttonStyle(.stSecondary)
-                        .disabled(isPingingOllama || !writingPolishEnabled)
-
-                        Spacer()
-                    }
-
-                    if let ping = ollamaPingResult {
-                        Text(ping)
-                            .font(Typography.caption)
-                            .foregroundStyle(
-                                ping.hasPrefix("OK") ? Color.accentSuccess : Color.textSecondary
-                            )
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
                     OllamaRecommendedModelsView(
                         ollamaBaseURL: $ollamaBaseURL,
                         selectedModelTag: $ollamaModel,
@@ -263,35 +218,79 @@ struct WritingPolishSettingsSection: View {
                     )
                     .disabled(!writingPolishEnabled)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Custom model (optional)")
-                            .font(Typography.bodyMedium)
-                            .foregroundStyle(Color.textPrimary)
-                        TextField(WritingPolishUserDefaults.defaultOllamaModel, text: $ollamaModel)
-                            .textFieldStyle(.app)
-                            .disabled(!writingPolishEnabled)
-                        Text("Override the catalog with any tag Ollama knows, e.g. llama3.2:3b.")
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.textMuted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    DisclosureGroup(isExpanded: $showOllamaAdvanced) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Ollama base URL")
+                                    .font(Typography.bodyMedium)
+                                    .foregroundStyle(Color.textPrimary)
+                                TextField("http://127.0.0.1:11434", text: $ollamaBaseURL)
+                                    .textFieldStyle(.app)
+                                    .disabled(!writingPolishEnabled)
+                            }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Temperature")
-                                .font(Typography.bodyMedium)
-                                .foregroundStyle(Color.textPrimary)
-                            Spacer()
-                            Text(String(format: "%.2f", ollamaTemperature))
-                                .font(Typography.caption)
-                                .foregroundStyle(Color.textMuted)
+                            HStack(spacing: 12) {
+                                Button {
+                                    Task { await runOllamaPing() }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        if isPingingOllama {
+                                            ProgressView()
+                                                .scaleEffect(0.65)
+                                                .frame(width: 14, height: 14)
+                                        } else {
+                                            Image(systemName: "antenna.radiowaves.left.and.right")
+                                                .font(.system(size: 12))
+                                        }
+                                        Text(isPingingOllama ? "Checking…" : "Check Ollama")
+                                    }
+                                }
+                                .buttonStyle(.stSecondary)
+                                .disabled(isPingingOllama || !writingPolishEnabled)
+
+                                Spacer()
+                            }
+
+                            if let ping = ollamaPingResult {
+                                Text(ping)
+                                    .font(Typography.caption)
+                                    .foregroundStyle(
+                                        ping.hasPrefix("OK") ? Color.accentSuccess : Color.textSecondary
+                                    )
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Custom model (optional)")
+                                    .font(Typography.bodyMedium)
+                                    .foregroundStyle(Color.textPrimary)
+                                TextField(WritingPolishUserDefaults.defaultOllamaModel, text: $ollamaModel)
+                                    .textFieldStyle(.app)
+                                    .disabled(!writingPolishEnabled)
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("Temperature")
+                                        .font(Typography.bodyMedium)
+                                        .foregroundStyle(Color.textPrimary)
+                                    Spacer()
+                                    Text(String(format: "%.2f", ollamaTemperature))
+                                        .font(Typography.caption)
+                                        .foregroundStyle(Color.textMuted)
+                                }
+                                Slider(value: $ollamaTemperature, in: 0 ... 1, step: 0.05)
+                                    .disabled(!writingPolishEnabled)
+                                    .help("Lower stays closer to your words.")
+                            }
                         }
-                        Slider(value: $ollamaTemperature, in: 0 ... 1, step: 0.05)
-                            .disabled(!writingPolishEnabled)
-                        Text("Lower = stick closer to your words; slightly higher can read smoother.")
-                            .font(Typography.caption)
-                            .foregroundStyle(Color.textMuted)
+                        .padding(.top, 12)
+                    } label: {
+                        Text("Advanced")
+                            .font(Typography.labelMedium)
+                            .foregroundStyle(Color.textSecondary)
                     }
+                    .tint(Color.textSecondary)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -336,7 +335,7 @@ struct WritingPolishSettingsSection: View {
                 }
 
                 HStack {
-                    Text("Remove filler words (um, uh, …)")
+                    Text("Remove filler words")
                         .font(Typography.bodyMedium)
                         .foregroundStyle(Color.textPrimary)
                     Spacer()
@@ -345,17 +344,6 @@ struct WritingPolishSettingsSection: View {
                         .disabled(!writingPolishEnabled)
                 }
                 .clickActionPointerCursor()
-
-                RowDivider()
-
-                Text(cleanupProvider.isRemote
-                    ? "Writing polish uses your selected cloud provider. If cleanup fails, you still get the raw transcript."
-                    : "Writing polish calls your Ollama server on this Mac. If Ollama is down or the model is missing, you still get the raw transcript."
-                )
-                .font(Typography.caption)
-                .foregroundStyle(Color.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-                .stCompactUI()
             }
             .padding(.top, 4)
             .padding(.bottom, 11)

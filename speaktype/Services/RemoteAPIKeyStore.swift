@@ -10,7 +10,7 @@ import Security
 /// - `read` returns `nil` rather than throwing, so callers never accidentally log an error that
 ///   might echo request context.
 enum RemoteAPIKeyStore {
-    private static let service = "sh.polar.speaktype.apikeys"
+    nonisolated private static let service = "sh.polar.speaktype.apikeys" + AppStorageIsolation.keychainSuffix
     static let didChangeNotification = Notification.Name("RemoteAPIKeyStore.didChange")
 
     // MARK: - Account-string core (works for any provider: STT or cleanup)
@@ -35,7 +35,7 @@ enum RemoteAPIKeyStore {
     /// Resolve a key. Precedence: process **env var** (dev convenience when launched from a
     /// shell) → **Keychain** (how UI-entered keys are stored). Env-only can't work for a
     /// Finder-launched `.app`, so the Keychain is the real path for end users.
-    static func read(account: String, envVar: String? = nil) -> String? {
+    nonisolated static func read(account: String, envVar: String? = nil) -> String? {
         if let envVar,
            let v = ProcessInfo.processInfo.environment[envVar]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !v.isEmpty {
@@ -69,7 +69,7 @@ enum RemoteAPIKeyStore {
         return status == errSecSuccess || status == errSecItemNotFound
     }
 
-    static func hasKey(account: String, envVar: String? = nil) -> Bool {
+    nonisolated static func hasKey(account: String, envVar: String? = nil) -> Bool {
         read(account: account, envVar: envVar) != nil
     }
 

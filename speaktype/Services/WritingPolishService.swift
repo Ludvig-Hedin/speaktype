@@ -1,7 +1,7 @@
 import Foundation
 
 /// Post-processes Whisper output using a **local Ollama** small LLM (`/api/chat`). Falls back to the raw transcript on any error.
-enum WritingPolishService {
+nonisolated enum WritingPolishService {
 
     static func buildSystemPrompt(configuration: WritingPolishConfiguration) -> String {
         let guardrails = """
@@ -64,10 +64,11 @@ enum WritingPolishService {
         guard !trimmed.isEmpty else { return rawTranscript }
         guard configuration.isEnabled else { return rawTranscript }
 
+        guard !Task.isCancelled else { return rawTranscript }
         let provider = effectiveProvider(configuration)
 
         // Remote cleanup (OpenRouter / OpenAI) uses the shared transcription cleanup prompt.
-        if provider.isRemote, provider.hasKey() {
+        if provider.isRemote, !Task.isCancelled {
             do {
                 let out = try await RemoteCleanupClient.cleanup(
                     provider: provider,
@@ -85,6 +86,9 @@ enum WritingPolishService {
                 // fall through to local / raw
             }
         }
+
+        // Cancellation of cloud cleanup must not start a second request via Ollama.
+        guard !Task.isCancelled else { return rawTranscript }
 
         // Local Ollama path (existing behavior + presets).
         let model = configuration.ollamaModel.trimmingCharacters(in: .whitespacesAndNewlines)

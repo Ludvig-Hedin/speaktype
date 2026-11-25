@@ -18,7 +18,7 @@ nonisolated enum ModelStorage {
         )[0]
         return
             appSupport
-            .appendingPathComponent("SpeakType")
+            .appendingPathComponent(AppStorageIsolation.supportFolderName)
             .appendingPathComponent("huggingface")
     }
 
@@ -53,7 +53,7 @@ nonisolated enum ModelStorage {
     }
 
     static func startMigrationIfNeeded(for mode: TranscriptionMode) {
-        guard mode != .remoteOnly else { return }
+        guard AppStorageIsolation.supportFolderName == "SpeakType", mode != .remoteOnly else { return }
         let shouldStart = migrationState.withLock { state in
             guard state == .idle else { return false }
             state = .running

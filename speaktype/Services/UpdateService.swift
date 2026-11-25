@@ -84,7 +84,7 @@ class UpdateService: ObservableObject {
                     }
                 } else {
                     self.availableUpdate = nil
-                    if manual { self.manualCheckMessage = "SpeakType is up to date." }
+                    if manual { self.manualCheckMessage = "Hum is up to date." }
                 }
                 self.lastCheckDate = Date()
                 self.saveLastCheckDate()
@@ -162,9 +162,12 @@ class UpdateService: ObservableObject {
             return
         }
 
+        // Claim the install synchronously so a fast double click can't start two.
+        guard !isInstalling else { return }
+        isInstalling = true
+
         Task {
             await MainActor.run {
-                self.isInstalling = true
                 self.installProgress = 0
                 self.installPhase = "Downloading"
                 self.installStatus = "Preparing download…"
@@ -204,10 +207,11 @@ class UpdateService: ObservableObject {
 
                 // 5. Find + replace the running app, then detach — all blocking work off the
                 // main actor (this type is implicitly @MainActor) so the UI stays responsive.
-                try await Task.detached(priority: .userInitiated) {
+                let installedApp = try await Task.detached(priority: .userInitiated) {
                     let appInDMG = try Self.findApp(in: mountPoint)
-                    try Self.replaceCurrentApp(with: appInDMG)
+                    let installed = try Self.replaceCurrentApp(with: appInDMG)
                     Self.detachDMG(mountPoint: mountPoint)
+                    return installed
                 }.value
 
                 // 7. Relaunch
@@ -216,7 +220,7 @@ class UpdateService: ObservableObject {
                     self.installStatus = "Finishing update…"
                     self.setInstallProgress(1)
                 }
-                relaunch()
+                relaunch(at: installedApp.path)
 
             } catch {
                 await MainActor.run {
@@ -365,25 +369,91 @@ class UpdateService: ObservableObject {
         return appURL
     }
 
-    nonisolated private static func replaceCurrentApp(with sourceApp: URL) throws {
-        // Determine destination: where the current bundle lives
-        let runningPath = Bundle.main.bundlePath
-        let destURL = URL(fileURLWithPath: runningPath)
-        let fm = FileManager.default
+    /// File name the app should have in Applications. Older installs are called SpeakType.app.
+    nonisolated static let appFileName = "Hum.app"
 
-        let stagingURL = destURL.deletingLastPathComponent()
-            .appendingPathComponent(".SpeakType-update-\(UUID().uuidString).app")
-        try fm.copyItem(at: sourceApp, to: stagingURL)
-        do {
-            _ = try fm.replaceItemAt(
-                destURL,
-                withItemAt: stagingURL,
-                backupItemName: ".SpeakType-update-backup.app"
-            )
-        } catch {
-            try? fm.removeItem(at: stagingURL)
-            throw error
+    /// Hidden staging folders an install leaves next to the app if it is interrupted.
+    nonisolated static let stagingPrefixes = [".Hum-update-", ".SpeakType-update-"]
+
+    /// Installs `sourceApp` over the app at `destURL` and returns where the app ends up.
+    /// The new Contents folder is swapped in with one atomic rename, so the bundle folder stays
+    /// the same item on disk and Dock or Finder links to it keep working, even after the rename
+    /// to Hum.app. If that swap is not possible (e.g. another user owns the app folder), it
+    /// falls back to replacing the whole bundle, as older versions did.
+    nonisolated static func installUpdate(
+        from sourceApp: URL,
+        over destURL: URL,
+        fileManager fm: FileManager = .default
+    ) throws -> URL {
+        let folder = destURL.deletingLastPathComponent()
+        removeStagingLeftovers(in: folder, fileManager: fm)
+        let staging = folder.appendingPathComponent(".Hum-update-\(UUID().uuidString).app")
+        defer { try? fm.removeItem(at: staging) }
+        try fm.copyItem(at: sourceApp, to: staging)
+
+        let contents = destURL.appendingPathComponent("Contents")
+        let newContents = staging.appendingPathComponent("Contents")
+        // After the swap the old contents sit in the staging folder, which `defer` removes.
+        if renamex_np(newContents.path, contents.path, UInt32(RENAME_SWAP)) == 0 {
+            // The bundle folder keeps its old flags; drop quarantine like a fresh copy would.
+            removexattr(destURL.path, "com.apple.quarantine", 0)
+        } else {
+            let newVersion = bundleVersion(at: staging)
+            do {
+                _ = try fm.replaceItemAt(
+                    destURL,
+                    withItemAt: staging,
+                    backupItemName: ".Hum-update-backup.app"
+                )
+            } catch {
+                // The new app may be in place even if removing the old copy failed.
+                guard newVersion != nil, bundleVersion(at: destURL) == newVersion else { throw error }
+            }
         }
+        return renamedToCurrentName(destURL, fileManager: fm)
+    }
+
+    nonisolated private static func bundleVersion(at app: URL) -> String? {
+        let info = app.appendingPathComponent("Contents/Info.plist")
+        guard let dict = NSDictionary(contentsOf: info) else { return nil }
+        let short = dict["CFBundleShortVersionString"] as? String ?? ""
+        let build = dict["CFBundleVersion"] as? String ?? ""
+        return short.isEmpty && build.isEmpty ? nil : "\(short) (\(build))"
+    }
+
+    /// Removes staging folders left by an install that was interrupted (crash, power loss).
+    nonisolated static func removeStagingLeftovers(
+        in folder: URL,
+        fileManager fm: FileManager = .default
+    ) {
+        guard let names = try? fm.contentsOfDirectory(atPath: folder.path) else { return }
+        for name in names where stagingPrefixes.contains(where: name.hasPrefix) {
+            try? fm.removeItem(at: folder.appendingPathComponent(name))
+        }
+    }
+
+    /// Gives an app in an Applications folder the current file name, so Finder and the Dock
+    /// show "Hum". Leaves it as is anywhere else, or if that name is already taken.
+    nonisolated static func renamedToCurrentName(
+        _ appURL: URL,
+        fileManager fm: FileManager = .default
+    ) -> URL {
+        let folder = appURL.deletingLastPathComponent()
+        let target = folder.appendingPathComponent(appFileName)
+        guard folder.lastPathComponent == "Applications",
+              appURL.lastPathComponent.caseInsensitiveCompare(appFileName) != .orderedSame,
+              !fm.fileExists(atPath: target.path)
+        else { return appURL }
+        do {
+            try fm.moveItem(at: appURL, to: target)
+            return target
+        } catch {
+            return appURL
+        }
+    }
+
+    nonisolated private static func replaceCurrentApp(with sourceApp: URL) throws -> URL {
+        try installUpdate(from: sourceApp, over: URL(fileURLWithPath: Bundle.main.bundlePath))
     }
 
     nonisolated private static func detachDMG(mountPoint: URL) {
@@ -395,24 +465,45 @@ class UpdateService: ObservableObject {
         try? proc.run()
     }
 
-    private func relaunch() {
-        // Use a shell to wait for the current process to exit, then reopen the app
-        let bundlePath = Bundle.main.bundlePath
-        let pid = ProcessInfo.processInfo.processIdentifier
-
-        let script = """
-            while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done
-            open "\(bundlePath)"
-            """
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/sh")
-        proc.arguments = ["-c", script]
-        try? proc.run()
-
+    private func relaunch(at bundlePath: String) {
+        Self.relaunchAfterExit(at: bundlePath)
         DispatchQueue.main.async {
             NSApplication.shared.terminate(nil)
         }
+    }
+
+    /// Starts a small shell that waits for this process to exit, then opens `bundlePath`.
+    @discardableResult
+    nonisolated static func relaunchAfterExit(at bundlePath: String) -> Bool {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        // The path is passed as an argument ($1), never pasted into the script text.
+        let script = """
+            while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done
+            open "$1"
+            """
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/sh")
+        proc.arguments = ["-c", script, "sh", bundlePath]
+        do {
+            try proc.run()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Installs updated by older versions are still called SpeakType.app. On the first launch
+    /// of this version, rename the app to Hum.app and reopen it from there. A move keeps the
+    /// same item on disk, so the Dock pin follows. Returns true if the app is about to quit.
+    nonisolated static func moveToCurrentNameIfNeeded() -> Bool {
+        guard !AppStorageIsolation.isRunningTests else { return false }
+        let current = Bundle.main.bundleURL
+        let renamed = renamedToCurrentName(current)
+        guard renamed != current else { return false }
+        if relaunchAfterExit(at: renamed.path) { return true }
+        // Nothing would reopen the app: undo the rename and keep running from the old path.
+        try? FileManager.default.moveItem(at: renamed, to: current)
+        return false
     }
 
     private func setError(_ message: String) {
@@ -453,7 +544,7 @@ enum UpdateError: LocalizedError {
         case .appNotFoundInDMG: return "Could not find the app inside the downloaded update."
         case .copyFailed(let msg): return "Failed to install: \(msg)"
         case .verificationFailed: return "The downloaded update failed verification."
-        case .invalidAppSignature: return "The update is not a valid SpeakType app."
+        case .invalidAppSignature: return "The update is not a valid Hum app."
         }
     }
 }

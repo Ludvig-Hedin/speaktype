@@ -88,7 +88,7 @@ struct WelcomePage: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Color.textSecondary)
 
-                Text("SpeakType")
+                Text("Hum")
                     .font(.system(size: 48, weight: .semibold))
                     .foregroundStyle(Color.textPrimary)
                     .tracking(-0.5)
@@ -463,7 +463,7 @@ struct GlobeKeyOptimizationPage: View {
                     .foregroundStyle(Color.textPrimary)
 
                 Text(
-                    "By default, macOS uses the \u{1F310} key to show the Emoji Picker, which interrupts SpeakType.\n\nPlease open Keyboard Settings and change **\"Press \u{1F310} key to\"** to **\"Do Nothing\"**."
+                    "By default, macOS uses the \u{1F310} key to show the Emoji Picker, which interrupts Hum.\n\nPlease open Keyboard Settings and change **\"Press \u{1F310} key to\"** to **\"Do Nothing\"**."
                 )
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(Color.textSecondary)
@@ -536,7 +536,7 @@ struct OnboardingPolishModelPage: View {
                     .multilineTextAlignment(.center)
 
                 Text(
-                    "SpeakType can tighten dictation with a local model through Ollama. Choose a size that fits your Mac — download is one tap. Skip anytime; you can change this in Settings."
+                    "Hum can tighten dictation with a local model through Ollama. Choose a size that fits your Mac — download is one tap. Skip anytime; you can change this in Settings."
                 )
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(Color.textSecondary)
@@ -707,7 +707,7 @@ struct OnboardingModelDownloadPage: View {
                     .multilineTextAlignment(.center)
 
                 Text(
-                    "SpeakType runs entirely on your Mac. Grab the recommended model for \(WhisperService.deviceRAMGB) GB RAM — you can start dictating as soon as the download finishes."
+                    "Hum runs entirely on your Mac. Grab the recommended model for \(WhisperService.deviceRAMGB) GB RAM — you can start dictating as soon as the download finishes."
                 )
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(Color.textSecondary)

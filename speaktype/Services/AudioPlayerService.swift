@@ -1,55 +1,58 @@
 import Foundation
 import AVFoundation
-import Combine
+import Observation
 
 /// Service for playing back audio recordings
-class AudioPlayerService: NSObject, ObservableObject, AVAudioPlayerDelegate {
+@Observable
+class AudioPlayerService: NSObject, AVAudioPlayerDelegate {
     static let shared = AudioPlayerService()
     
-    @Published var isPlaying = false
-    @Published var currentTime: TimeInterval = 0
-    @Published var duration: TimeInterval = 0
-    @Published var currentAudioURL: URL?
+    var isPlaying = false
+    var currentTime: TimeInterval = 0
+    var duration: TimeInterval = 0
+    var currentAudioURL: URL?
     
-    private var audioPlayer: AVAudioPlayer?
-    private var timer: Timer?
+    @ObservationIgnored private var audioPlayer: AVAudioPlayer?
+    @ObservationIgnored private var timer: Timer?
     
+    @ObservationIgnored private var loadGeneration = 0
+
     private override init() {
         super.init()
     }
     
-    /// Load audio file and prepare for playback
-    func loadAudio(from url: URL) {
-        // Bail cleanly if the recording file was deleted/moved — otherwise a stale player from a
-        // previous item lingers (duration/currentAudioURL out of sync) and the Play button no-ops
-        // silently. Resetting keeps observed state consistent with "nothing loaded".
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            print("Audio file not found, resetting player: \(url.path)")
-            reset()
-            return
-        }
-        do {
-            // Reset previous state
-            stop()
-
-            audioPlayer = try AVAudioPlayer(contentsOf: url)
-            audioPlayer?.delegate = self
-            audioPlayer?.prepareToPlay()
-
-            currentAudioURL = url
-            duration = audioPlayer?.duration ?? 0
-            currentTime = 0
-
-        } catch {
-            print("Error loading audio: \(error)")
-            reset()
-        }
+    /// A newly created player is handed to the main actor once, before playback or
+    /// delegate registration. The background task never touches it after the handoff.
+    private nonisolated struct PreparedPlayer: @unchecked Sendable {
+        let player: AVAudioPlayer
     }
-    
+
+    @discardableResult
+    func loadAudio(from url: URL) async -> Bool {
+        reset()
+        let generation = loadGeneration
+        let prepared = await Task.detached(priority: .userInitiated) {
+            Self.prepareAudio(from: url)
+        }.value
+        guard !Task.isCancelled, generation == loadGeneration, let prepared else { return false }
+        let player = prepared.player
+        player.delegate = self
+        audioPlayer = player
+        currentAudioURL = url
+        duration = player.duration
+        return true
+    }
+
+    nonisolated private static func prepareAudio(from url: URL) -> PreparedPlayer? {
+        guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        player.prepareToPlay()
+        return PreparedPlayer(player: player)
+    }
+
     /// Start or resume playback
     func play() {
         guard let player = audioPlayer else { return }
-        player.play()
+        guard player.play() else { return }
         isPlaying = true
         startTimer()
     }
@@ -63,6 +66,7 @@ class AudioPlayerService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     
     /// Stop playback and reset to beginning
     func stop() {
+        loadGeneration += 1
         audioPlayer?.stop()
         audioPlayer?.currentTime = 0
         isPlaying = false
@@ -103,10 +107,14 @@ class AudioPlayerService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     
     // MARK: - AVAudioPlayerDelegate
     
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        isPlaying = false
-        stopTimer()
-        currentTime = 0
-        player.currentTime = 0
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        let finishedPlayer = ObjectIdentifier(player)
+        Task { @MainActor [weak self] in
+            guard let self, let audioPlayer, ObjectIdentifier(audioPlayer) == finishedPlayer else { return }
+            isPlaying = false
+            stopTimer()
+            currentTime = 0
+            audioPlayer.currentTime = 0
+        }
     }
 }

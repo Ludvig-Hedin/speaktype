@@ -143,7 +143,7 @@ struct OllamaRecommendedModelsView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Color.textMuted)
                     if ramTight {
-                        Text("Your Mac has \(deviceRAMGB) GB RAM — this model may run tight; lighter options above are safer.")
+                        Text("May be slow with \(deviceRAMGB) GB RAM.")
                             .font(.system(size: 11))
                             .foregroundStyle(Color.textMuted)
                             .fixedSize(horizontal: false, vertical: true)

@@ -20,10 +20,7 @@ struct RemoteTranscriptionSettingsSection: View {
 
     var body: some View {
         SettingsSection {
-            SettingsSectionHeader(
-                icon: "cloud",
-                title: "Transcription engine",
-                subtitle: "Choose on-device, cloud, or automatic")
+            SettingsSectionHeader(icon: "cloud", title: "Transcription engine")
 
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -182,12 +179,6 @@ struct RemoteTranscriptionSettingsSection: View {
                 }
             }
 
-            if provider == .openRouter {
-                Text("This is the same OpenRouter key used for writing polish.")
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.textMuted)
-            }
-
             if !statusMessage.isEmpty {
                 Text(statusMessage)
                     .font(Typography.caption)
@@ -199,7 +190,7 @@ struct RemoteTranscriptionSettingsSection: View {
     private var consentToggle: some View {
         HStack(alignment: .top, spacing: 10) {
             Toggle("", isOn: $consent).labelsHidden().toggleStyle(.checkbox)
-            Text("I understand my audio is uploaded to \(provider?.displayName ?? "the provider") for transcription.")
+            Text("Send my audio to \(provider?.displayName ?? "the provider") to transcribe it")
                 .font(Typography.caption)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -207,7 +198,7 @@ struct RemoteTranscriptionSettingsSection: View {
     }
 
     private var privacyNote: some View {
-        Text("Cloud transcription sends your recorded audio off your Mac. Keys are stored in the macOS Keychain and never leave your device except as the Authorization header for the request. Cloud is only used after you add a key and give consent above.")
+        Text("Audio leaves your Mac only with a key and your OK above. Keys stay in Keychain.")
             .font(Typography.caption)
             .foregroundStyle(Color.textMuted)
             .fixedSize(horizontal: false, vertical: true)
@@ -219,6 +210,7 @@ struct RemoteTranscriptionSettingsSection: View {
                 .font(Typography.labelMedium)
                 .foregroundStyle(Color.textSecondary)
             TextEditor(text: $dictionary)
+                .help("Names and terms, one per line. Up to \(DictationHints.maximumTerms).")
                 .font(Typography.bodySmall)
                 .foregroundStyle(Color.textPrimary)
                 .scrollContentBackground(.hidden)
@@ -231,10 +223,16 @@ struct RemoteTranscriptionSettingsSection: View {
                 }
                 .accessibilityLabel("Personal dictionary")
                 .accessibilityIdentifier("dictationDictionary")
-            Text("Add names and terms, one per line. Up to \(DictationHints.maximumTerms) entries are shared with GPT Transcribe only when you use it for cloud transcription.")
-                .font(Typography.caption)
-                .foregroundStyle(Color.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
+                .overlay(alignment: .topLeading) {
+                    if dictionary.isEmpty {
+                        Text("One name or term per line")
+                            .font(Typography.bodySmall)
+                            .foregroundStyle(Color.textMuted)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .allowsHitTesting(false)
+                    }
+                }
         }
     }
 

@@ -10,7 +10,7 @@ struct DashboardView: View {
     // Reuse the shared instance instead of spinning up a second recorder (and a second
     // synchronous device enumeration) on the main thread while the window is appearing —
     // that duplicate init was a source of the spinning-cursor stall on launch.
-    @StateObject private var audioRecorder = AudioRecordingService.shared
+    private var audioRecorder: AudioRecordingService { .shared }
     private var whisperService: WhisperService { WhisperService.shared }
     @State private var leftColumnHeight: CGFloat = 0
 
@@ -25,27 +25,7 @@ struct DashboardView: View {
     @State private var isTranscribing = false
     @State private var transcriptionStatus = ""
 
-    // Computed Metrics
-    var transcriptionCountToday: Int {
-        historyService.transcriptionCount(
-            since: Calendar.current.startOfDay(for: Date())
-        )
-    }
-
-    var totalWordsTranscribed: Int {
-        historyService.totalWordCount()
-    }
-
-    var timeSavedMinutes: Int {
-        // Average typing speed: 40 WPM.
-        // Time saved = (Words / 40) - (Duration / 60)
-        // Simplified: Just typing time for positive reinforcement.
-        return totalWordsTranscribed / 40
-    }
-
-    var totalDurationSeconds: TimeInterval {
-        historyService.totalDuration()
-    }
+    @State private var metrics = DashboardHistoryMetrics(entries: [], now: .now)
 
     var timeBasedGreeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -57,22 +37,6 @@ struct DashboardView: View {
         }
     }
 
-    var weeklyData: [(day: String, count: Int)] {
-        let calendar = Calendar.current
-        let today = Date()
-        // Last 7 days including today
-        return (0..<7).reversed().map { i in
-            let date = calendar.date(byAdding: .day, value: -i, to: today) ?? today
-            let count = historyService.statsEntries(since: calendar.startOfDay(for: date))
-                .filter { calendar.isDate($0.date, inSameDayAs: date) }
-                .count
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEE"  // Mon, Tue, Wed
-            let dayStr = String(formatter.string(from: date).prefix(3))
-            return (dayStr, count)
-        }
-    }
-
     var body: some View {
         PageScaffold(title: timeBasedGreeting) {
             // Trial Banner - Hidden (logic kept for future use)
@@ -81,11 +45,11 @@ struct DashboardView: View {
             // }
 
             StatsCard(
-                wordCount: totalWordsTranscribed,
-                timeSaved: timeSavedMinutes,
-                todayCount: transcriptionCountToday,
-                allTimeCount: historyService.transcriptionCount(),
-                weeklyData: weeklyData
+                wordCount: metrics.wordCount,
+                timeSaved: metrics.wordCount / 40,
+                todayCount: metrics.todayCount,
+                allTimeCount: metrics.allTimeCount,
+                weeklyData: metrics.weeklyData
             )
 
             VStack(alignment: .leading, spacing: 12) {
@@ -146,6 +110,14 @@ struct DashboardView: View {
         }
         // No model load on appear: opening the window must not pull ~1 GB into memory. The
         // model loads on demand when a transcription actually runs locally.
+        .task(id: historyService.statsRevision) {
+            let entries = historyService.statsEntries
+            let snapshot = await Task.detached(priority: .userInitiated) {
+                DashboardHistoryMetrics(entries: entries, now: .now)
+            }.value
+            guard !Task.isCancelled else { return }
+            metrics = snapshot
+        }
     }
 
     // MARK: - Helpers
@@ -208,7 +180,7 @@ struct DashboardView: View {
                 // Coordinator picks on-device vs cloud per the user's mode + machine resources,
                 // self-heals a local model load, and falls back automatically.
                 let outcome = try await TranscriptionCoordinator.transcribe(audioFile: url, language: transcriptionLanguage)
-                if TranscriptionFinalizer.willPolishNextTranscript() {
+                if await TranscriptionFinalizer.willPolishNextTranscript() {
                     await MainActor.run { transcriptionStatus = "Polishing..." }
                 }
                 let finalText = await TranscriptionFinalizer.finalizeTranscript(rawTranscript: outcome.text)
@@ -272,11 +244,11 @@ struct StatsCard: View {
             HStack(alignment: .top, spacing: 0) {
                 StatBlock(value: wordCount.formatted(), label: "Words transcribed")
                 statDivider
-                StatBlock(value: "\(timeSaved)m", label: "Time saved typing")
+                StatBlock(value: Self.hoursAndMinutes(timeSaved), label: "Time saved typing")
                 statDivider
-                StatBlock(value: "\(allTimeCount)", label: "Total transcriptions")
+                StatBlock(value: allTimeCount.formatted(), label: "Total transcriptions")
                 statDivider
-                StatBlock(value: "\(todayCount)", label: "Transcriptions today")
+                StatBlock(value: todayCount.formatted(), label: "Transcriptions today")
             }
             .padding(.vertical, 18)
 
@@ -305,6 +277,11 @@ struct StatsCard: View {
             .fill(Color.border.opacity(0.6))
             .frame(width: 0.5)
             .padding(.vertical, 2)
+    }
+
+    /// "45m" under an hour, "3h 28m" above, like Statistics' total duration.
+    static func hoursAndMinutes(_ minutes: Int) -> String {
+        minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h \(minutes % 60)m"
     }
 
     private func formatMinutes(_ minutes: Int) -> String {
@@ -367,19 +344,9 @@ struct StatBlock: View {
 
 struct RecentTranscriptionRow: View {
     let item: HistoryItem
-    @ObservedObject private var audioPlayer = AudioPlayerService.shared
+    private var audioPlayer: AudioPlayerService { .shared }
     @State private var isHovered = false
     @State private var showCopySuccess = false
-
-    var wordCount: Int {
-        item.transcript.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-            .count
-    }
-
-    private var hasAudio: Bool {
-        guard let url = item.audioFileURL else { return false }
-        return FileManager.default.fileExists(atPath: url.path)
-    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
@@ -391,7 +358,7 @@ struct RecentTranscriptionRow: View {
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text([timeAgo(item.date), (wordCount == 1 ? "1 word" : "\(wordCount) words"), formatDuration(item.duration)]
+                Text([timeAgo(item.date), (item.wordCount == 1 ? "1 word" : "\(item.wordCount) words"), formatDuration(item.duration)]
                     .joined(separator: "  ·  "))
                     .font(Typography.caption)
                     .monospacedDigit()
@@ -409,7 +376,7 @@ struct RecentTranscriptionRow: View {
                         action: copyToClipboard
                     )
                 }
-                if hasAudio, let audioURL = item.audioFileURL {
+                if item.hasAudio, let audioURL = item.audioFileURL {
                     rowAction(
                         icon: isPlayingThisItem ? "pause.fill" : "play.fill",
                         help: isPlayingThisItem ? "Pause" : "Play",
@@ -450,13 +417,15 @@ struct RecentTranscriptionRow: View {
 
     /// Same shared player the History screen uses: load this row's audio, then play/pause.
     private func togglePlayback(_ url: URL) {
-        if audioPlayer.currentAudioURL != url {
-            audioPlayer.loadAudio(from: url)
-        }
-        if audioPlayer.isPlaying {
+        if isPlayingThisItem {
             audioPlayer.pause()
         } else {
-            audioPlayer.play()
+            Task {
+                if audioPlayer.currentAudioURL != url {
+                    guard await audioPlayer.loadAudio(from: url) else { return }
+                }
+                audioPlayer.play()
+            }
         }
     }
 

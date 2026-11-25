@@ -6,7 +6,7 @@ import Foundation
 /// **Why:** On low-RAM Macs we want to decide *at runtime* whether to keep the Whisper
 /// model resident in memory or load it lazily. That requires knowing how much physical
 /// memory is actually free right now, not just the total installed RAM.
-enum SystemMemory {
+nonisolated enum SystemMemory {
     /// Total installed physical memory, in gigabytes (cached — it never changes).
     static let totalMemoryGB: Double = {
         Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824.0

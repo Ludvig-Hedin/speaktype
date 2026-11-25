@@ -74,7 +74,7 @@ private struct SidebarHeader: View {
                 .frame(width: 22, height: 22)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
-            Text("SpeakType")
+            Text("Hum")
                 .font(Typography.sidebarLogo)
                 .foregroundStyle(Color.textPrimary)
 
@@ -147,7 +147,7 @@ private struct SidebarPromoCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text("Try SpeakType Pro")
+                Text("Try Hum Pro")
                     .font(Typography.sidebarPromoTitle)
                     .foregroundStyle(Color.textPrimary)
                 Text("✨")

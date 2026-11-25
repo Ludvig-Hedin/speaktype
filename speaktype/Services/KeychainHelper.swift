@@ -22,7 +22,7 @@ class KeychainHelper {
     static let shared = KeychainHelper()
     private init() {}
     
-    private let service = "sh.polar.speaktype.license"
+    private let service = "sh.polar.speaktype.license" + AppStorageIsolation.keychainSuffix
     private let account = "license_key"
     
     // MARK: - Save License Key

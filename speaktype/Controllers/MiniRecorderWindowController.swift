@@ -21,8 +21,22 @@ class MiniRecorderWindowController: NSObject {
         self.keyboardFocusVisibility = keyboardFocusVisibility
     }
 
+    func toggleMeeting() {
+        let meeting = MeetingRecorder.shared
+        if meeting.active { meeting.stop(transcribe: true); return }
+        guard !AudioRecordingService.shared.isRecordingOrStarting else { return }
+        if panel?.isVisible == true {
+            NotificationCenter.default.post(name: .meetingReplaceMessage, object: nil)
+            guard meeting.active else { return }
+        } else {
+            meeting.start()
+        }
+        showPanel()
+    }
+
     // Start recording - show panel and begin recording
     func startRecording() {
+        if MeetingRecorder.shared.active { MeetingRecorder.shared.dictationRequested(); return }
         // Remember the app the user was in; it becomes the paste target if the start is accepted.
         startCandidateApp = NSWorkspace.shared.frontmostApplication
 
@@ -33,6 +47,12 @@ class MiniRecorderWindowController: NSObject {
     }
 
     #if DEBUG
+    /// Debug builds launched with `--meeting-demo` show the meeting pill (no capture, no files).
+    func runMeetingDemo() {
+        showPanel()
+        MeetingRecorder.shared.runDemo()
+    }
+
     /// Debug builds launched with `--recorder-demo` play every pill state (no mic, no paste).
     func runVisualDemo() {
         showPanel()
@@ -109,8 +129,8 @@ class MiniRecorderWindowController: NSObject {
     private func setupPanel() {
         // Initialize View with callbacks
         let recorderView = MiniRecorderView(
-            onCommit: { [weak self] text in
-                self?.handleCommit(text: text)
+            onCommit: { [weak self] text, id, releasedAt in
+                self?.handleCommit(text: text, id: id, releasedAt: releasedAt)
             },
             onCancel: { [weak self] in
                 self?.hidePanel()
@@ -191,7 +211,8 @@ class MiniRecorderWindowController: NSObject {
         })
     }
 
-    private func handleCommit(text: String) {
+    private func handleCommit(text: String, id: UUID, releasedAt: ContinuousClock.Instant) {
+        let pasteStarted = ContinuousClock.now
         let pasteTarget = pendingPasteTarget ?? lastActiveApp
         pendingPasteTarget = nil
         pasteTask?.cancel()
@@ -203,11 +224,15 @@ class MiniRecorderWindowController: NSObject {
                 // make sure it can't hold key focus while ⌘V is sent to the target app.
                 beforePaste: { [weak self] in self?.panel?.resignKey() },
                 afterPaste: {
+                    MiniRecorderView.logStage("paste", id: id, startedAt: pasteStarted)
+                    MiniRecorderView.logStage("release_to_paste", id: id, startedAt: releasedAt)
                     NotificationCenter.default.post(name: .recordingPasteSucceeded, object: nil)
                 }
             )
 
             if result == .copiedOnly && !Task.isCancelled {
+                MiniRecorderView.logStage("clipboard_only", id: id, startedAt: pasteStarted)
+                MiniRecorderView.logStage("release_to_clipboard", id: id, startedAt: releasedAt)
                 // No Accessibility: say so in the panel instead of failing silently. The text
                 // stays on the clipboard for a manual ⌘V.
                 NotificationCenter.default.post(
@@ -232,7 +257,7 @@ class MiniRecorderWindowController: NSObject {
         let alert = NSAlert()
         alert.messageText = "Accessibility Permission Required"
         alert.informativeText =
-            "SpeakType needs Accessibility permission to automatically paste transcriptions into the active app.\n\nYour transcription has been copied to the clipboard.\n\nTo enable auto-paste, grant permission in:\nSystem Settings → Privacy & Security → Accessibility"
+            "Hum needs Accessibility permission to automatically paste transcriptions into the active app.\n\nYour transcription has been copied to the clipboard.\n\nTo enable auto-paste, grant permission in:\nSystem Settings → Privacy & Security → Accessibility"
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open System Settings")
         alert.addButton(withTitle: "OK")

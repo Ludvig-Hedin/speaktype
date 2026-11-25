@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OSLog
 
 /// Uploads audio to a cloud provider's OpenAI-compatible `/v1/audio/transcriptions` endpoint.
 /// Structure mirrors `OllamaPolishClient`: typed errors, bounded timeout, no state held between calls.
@@ -55,11 +56,21 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
     private static let retryDelays: [Duration] = [.milliseconds(500), .milliseconds(1500)]
 
     func transcribeDetailed(audioFile: URL, language: String) async throws -> TranscriptionOutcome {
-        guard let key = RemoteAPIKeyStore.read(for: provider) else { throw ClientError.missingAPIKey }
+        let account = provider.keychainAccount
+        let envVar = provider.envVar
+        let apiKey = await Task.detached(priority: .userInitiated) {
+            RemoteAPIKeyStore.read(account: account, envVar: envVar)
+        }.value
+        try Task.checkCancellation()
+        guard let key = apiKey else { throw ClientError.missingAPIKey }
 
         // Upload a compressed copy (~8× smaller, ~3× faster round trip). If the encoder fails,
         // or a model rejects the format with a 4xx, send the original WAV instead.
-        let compressed = await AudioUploadEncoder.compressedCopy(of: audioFile)
+        let encodingStarted = Date()
+        let compressed = audioFile.pathExtension == "m4a" ? nil : await AudioUploadEncoder.compressedCopy(of: audioFile)
+        let elapsedEncoding = Date().timeIntervalSince(encodingStarted)
+        AppLogger.transcription.notice(
+            "stage=upload_audio_encode seconds=\(elapsedEncoding, format: .fixed(precision: 3)) compressed=\(compressed != nil)")
         defer { if let compressed { try? FileManager.default.removeItem(at: compressed) } }
 
         let start = Date()
@@ -72,7 +83,9 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
                 text = try await upload(audioFile, key: key, language: language)
             }
         } else {
-            text = try await upload(audioFile, key: key, language: language)
+            text = try await Self.uploadWithFormatFallback(audioFile) { file in
+                try await upload(file, key: key, language: language)
+            }
         }
         let elapsed = Date().timeIntervalSince(start)
 
@@ -85,6 +98,17 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
             estimatedCostUSD: duration.flatMap { model.costEstimate(durationSeconds: $0) },
             transcriptionTime: elapsed
         )
+    }
+
+    static func uploadWithFormatFallback(_ file: URL, upload: (URL) async throws -> String) async throws -> String {
+        do {
+            return try await upload(file)
+        } catch ClientError.httpStatus(let code) where file.pathExtension == "m4a" && [400, 415, 422].contains(code) {
+            let wav = FileManager.default.temporaryDirectory.appendingPathComponent("upload-\(UUID()).wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+            try await Task.detached { try AudioUploadEncoder.decodeWAV(file, to: wav) }.value
+            return try await upload(wav)
+        }
     }
 
     /// One upload with retries on transient failures (timeout, 429, 5xx).

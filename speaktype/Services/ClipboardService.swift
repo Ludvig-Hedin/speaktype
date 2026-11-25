@@ -9,7 +9,9 @@ class ClipboardService {
         return LicenseManager.shared
     }
 
-    private init() {}
+    private let pasteboard: NSPasteboard
+
+    init(pasteboard: NSPasteboard = .general) { self.pasteboard = pasteboard }
 
     /// Pasteboard types other apps and clipboard managers use to skip temporary writes.
     /// See nspasteboard.org.
@@ -52,7 +54,6 @@ class ClipboardService {
     func copy(text: String, transient: Bool = false) -> Int {
         let finalText = wrapTextIfNeeded(text)
 
-        let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
 
         let item = NSPasteboardItem()
@@ -68,7 +69,7 @@ class ClipboardService {
     }
 
     func snapshot() -> PasteboardSnapshot {
-        let items = (NSPasteboard.general.pasteboardItems ?? []).map { item in
+        let items = (pasteboard.pasteboardItems ?? []).map { item in
             item.types.compactMap { type in
                 item.data(forType: type).map { (type: type, data: $0) }
             }
@@ -77,7 +78,6 @@ class ClipboardService {
     }
 
     func restore(_ snapshot: PasteboardSnapshot) {
-        let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         let items = snapshot.items.compactMap { entries -> NSPasteboardItem? in
             guard !entries.isEmpty else { return nil }
@@ -124,7 +124,7 @@ class ClipboardService {
 
         try? await Task.sleep(for: Self.restoreDelay)
         // Only restore if nothing else has written since our paste, and never restore secrets.
-        if NSPasteboard.general.changeCount == ourChangeCount, !previous.isSensitive {
+        if pasteboard.changeCount == ourChangeCount, !previous.isSensitive {
             restore(previous)
         }
         return .pasted
@@ -153,36 +153,32 @@ class ClipboardService {
         return text
     }
 
-    // Paste content (Simulate Cmd+V)
-    func paste() {
-        // Create a concurrent task to avoid blocking main thread if needed,
-        // though CGEvent is fast.
-        DispatchQueue.main.async {
-            let source = CGEventSource(stateID: .hidSystemState)
+    /// Post the keystroke before reporting paste success.
+    private func paste() {
+        let source = CGEventSource(stateID: .hidSystemState)
 
-            // Command key down
-            let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: true)
-            cmdDown?.flags = .maskCommand
+        // Command key down
+        let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: true)
+        cmdDown?.flags = .maskCommand
 
-            // 'V' key down
-            let vDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
-            vDown?.flags = .maskCommand
+        // 'V' key down
+        let vDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
+        vDown?.flags = .maskCommand
 
-            // 'V' key up
-            let vUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
-            vUp?.flags = .maskCommand
+        // 'V' key up
+        let vUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
+        vUp?.flags = .maskCommand
 
-            // Command key up
-            let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: false)
+        // Command key up
+        let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: false)
 
-            // Post events
-            cmdDown?.post(tap: .cghidEventTap)
-            vDown?.post(tap: .cghidEventTap)
-            vUp?.post(tap: .cghidEventTap)
-            cmdUp?.post(tap: .cghidEventTap)
+        // Post events
+        cmdDown?.post(tap: .cghidEventTap)
+        vDown?.post(tap: .cghidEventTap)
+        vUp?.post(tap: .cghidEventTap)
+        cmdUp?.post(tap: .cghidEventTap)
 
-            print("Simulated Cmd+V")
-        }
+        print("Simulated Cmd+V")
     }
 
     // Fallback using AppleScript (more robust for some apps)

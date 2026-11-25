@@ -15,6 +15,20 @@ nonisolated enum AudioUploadEncoder {
         await Task.detached(priority: .userInitiated) { encode(wav) }.value
     }
 
+    static func decodeWAV(_ url: URL, to destination: URL) throws {
+        let input = try AVAudioFile(forReading: url)
+        let source = input.processingFormat
+        let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: source.sampleRate,
+                                   channels: source.channelCount, interleaved: true)!
+        let output = try AVAudioFile(forWriting: destination, settings: format.settings)
+        let buffer = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: 8192)!
+        while input.framePosition < input.length {
+            try input.read(into: buffer)
+            guard buffer.frameLength > 0 else { break }
+            try output.write(from: buffer)
+        }
+    }
+
     private static func encode(_ wav: URL) -> URL? {
         let out = FileManager.default.temporaryDirectory
             .appendingPathComponent("speaktype-upload-\(UUID().uuidString).m4a")

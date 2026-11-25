@@ -4,7 +4,7 @@ import Foundation
 /// Prefer tags from `OllamaRecommendedModels.polishCatalog` (e.g. `qwen3.5:2b`); any Ollama tag works for custom installs.
 enum OllamaPolishClient {
 
-    enum ClientError: Error, LocalizedError {
+    nonisolated enum ClientError: Error, LocalizedError {
         case invalidBaseURL
         case invalidChatURL
         case invalidPullURL
@@ -36,7 +36,7 @@ enum OllamaPolishClient {
         return URLSession(configuration: config)
     }()
 
-    private struct ChatRequest: Encodable {
+    nonisolated private struct ChatRequest: Encodable {
         var model: String
         var messages: [Message]
         var stream: Bool
@@ -52,7 +52,7 @@ enum OllamaPolishClient {
         }
     }
 
-    private struct ChatResponse: Decodable {
+    nonisolated private struct ChatResponse: Decodable {
         var message: Message
 
         struct Message: Decodable {
@@ -70,7 +70,7 @@ enum OllamaPolishClient {
     }
 
     /// Normalizes user input: default host, optional `http://`, trim slashes.
-    static func normalizeBaseURL(_ raw: String) -> String {
+    nonisolated static func normalizeBaseURL(_ raw: String) -> String {
         var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.isEmpty {
             t = WritingPolishUserDefaults.defaultOllamaBaseURL
@@ -84,7 +84,7 @@ enum OllamaPolishClient {
         return t
     }
 
-    static func chatURL(baseURLString: String) -> URL? {
+    nonisolated static func chatURL(baseURLString: String) -> URL? {
         let base = normalizeBaseURL(baseURLString)
         return URL(string: base + "/api/chat")
     }
@@ -184,7 +184,7 @@ enum OllamaPolishClient {
         }
     }
 
-    static func polish(
+    nonisolated static func polish(
         baseURLString: String,
         model: String,
         temperature: Double,
@@ -209,13 +209,7 @@ enum OllamaPolishClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
-        // Polish runs inline in the dictation → insert flow: a slow/wedged Ollama server (up,
-        // but model cold-loading or the box thrashing) blocks insertion this whole time while
-        // the recorder shows "Polishing…", and the call is not cancellable. A healthy local
-        // polish on a small model responds in well under 10s even cold, so cap the worst-case
-        // freeze at 45s — past that we fall back to the raw transcript (WritingPolishService
-        // catches the timeout) rather than holding the user's text hostage. (Connection-refused
-        // when the server is down fails instantly and is unaffected by this value.)
+        // Automatic dictation has a separate, shorter deadline across all cleanup attempts.
         request.timeoutInterval = 45
 
         let (data, response) = try await URLSession.shared.data(for: request)
