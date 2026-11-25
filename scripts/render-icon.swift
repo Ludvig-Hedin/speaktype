@@ -80,4 +80,57 @@ write(png(size: 512) { ctx, s in
     drawMark(ctx, in: markRect(in: CGRect(x: 0, y: 0, width: s, height: s), heightFraction: 0.9),
              color: CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
 }, "\(assets)/MenuBarWave.imageset/wave-sound.png")
+
+// macOS 26 icon (Icon Composer format). Older-format icons get a grey frame on macOS 26.
+// This is the app's real icon: with the same name "AppIcon" it wins over AppIcon.appiconset,
+// and Xcode also builds the icon for older macOS from it (the PNG set above is unused).
+// A solid ink fill with the white mark as one vector layer; the system draws shape, edge
+// and shadow. Note: this script rewrites icon.json, so edits made in Icon Composer are lost.
+let iconDir = "\(root)/speaktype/AppIcon.icon"
+try! FileManager.default.createDirectory(atPath: "\(iconDir)/Assets", withIntermediateDirectories: true)
+let canvas: CGFloat = 1024
+let mark = markRect(in: CGRect(x: 0, y: 0, width: canvas, height: canvas), heightFraction: 0.52)
+let unit = mark.height / 6.4
+var svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1024\" height=\"1024\" viewBox=\"0 0 1024 1024\">\n"
+for (i, bar) in markBars.enumerated() {
+    let x = mark.minX + CGFloat(i) * unit * (1 + markGap)
+    let y = mark.minY + bar.top * unit  // SVG y grows downward, like the design
+    svg += String(format: "  <rect x=\"%.2f\" y=\"%.2f\" width=\"%.2f\" height=\"%.2f\" rx=\"%.2f\" fill=\"#FFFFFF\"/>\n",
+                  x, y, unit, (bar.bottom - bar.top) * unit, unit / 2)
+}
+svg += "</svg>\n"
+write(svg.data(using: .utf8)!, "\(iconDir)/Assets/mark.svg")
+let iconJSON = """
+{
+  "fill" : {
+    "solid" : "srgb:0.06700,0.06700,0.06700,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name" : "mark.svg",
+          "name" : "mark"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.3
+      },
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}
+
+"""
+write(iconJSON.data(using: .utf8)!, "\(iconDir)/icon.json")
 print("icons written")
