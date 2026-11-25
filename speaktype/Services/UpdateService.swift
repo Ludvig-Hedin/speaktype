@@ -466,23 +466,36 @@ class UpdateService: ObservableObject {
     }
 
     private func relaunch(at bundlePath: String) {
-        // Use a shell to wait for the current process to exit, then reopen the app
-        let pid = ProcessInfo.processInfo.processIdentifier
+        Self.relaunchAfterExit(at: bundlePath)
+        DispatchQueue.main.async {
+            NSApplication.shared.terminate(nil)
+        }
+    }
 
+    /// Starts a small shell that waits for this process to exit, then opens `bundlePath`.
+    nonisolated static func relaunchAfterExit(at bundlePath: String) {
+        let pid = ProcessInfo.processInfo.processIdentifier
         // The path is passed as an argument ($1), never pasted into the script text.
         let script = """
             while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done
             open "$1"
             """
-
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/sh")
         proc.arguments = ["-c", script, "sh", bundlePath]
         try? proc.run()
+    }
 
-        DispatchQueue.main.async {
-            NSApplication.shared.terminate(nil)
-        }
+    /// Installs updated by older versions are still called SpeakType.app. On the first launch
+    /// of this version, rename the app to Taly.app and reopen it from there. A move keeps the
+    /// same item on disk, so the Dock pin follows. Returns true if the app is about to quit.
+    nonisolated static func moveToCurrentNameIfNeeded() -> Bool {
+        guard !AppStorageIsolation.isRunningTests else { return false }
+        let current = Bundle.main.bundleURL
+        let renamed = renamedToCurrentName(current)
+        guard renamed != current else { return false }
+        relaunchAfterExit(at: renamed.path)
+        return true
     }
 
     private func setError(_ message: String) {
