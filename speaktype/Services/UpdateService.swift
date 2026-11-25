@@ -204,10 +204,11 @@ class UpdateService: ObservableObject {
 
                 // 5. Find + replace the running app, then detach — all blocking work off the
                 // main actor (this type is implicitly @MainActor) so the UI stays responsive.
-                try await Task.detached(priority: .userInitiated) {
+                let installedApp = try await Task.detached(priority: .userInitiated) {
                     let appInDMG = try Self.findApp(in: mountPoint)
-                    try Self.replaceCurrentApp(with: appInDMG)
+                    let installed = try Self.replaceCurrentApp(with: appInDMG)
                     Self.detachDMG(mountPoint: mountPoint)
+                    return installed
                 }.value
 
                 // 7. Relaunch
@@ -216,7 +217,7 @@ class UpdateService: ObservableObject {
                     self.installStatus = "Finishing update…"
                     self.setInstallProgress(1)
                 }
-                relaunch()
+                relaunch(at: installedApp.path)
 
             } catch {
                 await MainActor.run {
@@ -365,25 +366,58 @@ class UpdateService: ObservableObject {
         return appURL
     }
 
-    nonisolated private static func replaceCurrentApp(with sourceApp: URL) throws {
-        // Determine destination: where the current bundle lives
-        let runningPath = Bundle.main.bundlePath
-        let destURL = URL(fileURLWithPath: runningPath)
-        let fm = FileManager.default
+    /// File name the app should have in Applications. Older installs are called SpeakType.app.
+    nonisolated static let appFileName = "Taly.app"
 
-        let stagingURL = destURL.deletingLastPathComponent()
-            .appendingPathComponent(".SpeakType-update-\(UUID().uuidString).app")
-        try fm.copyItem(at: sourceApp, to: stagingURL)
+    /// Installs `sourceApp` over the app at `destURL` and returns where the app ends up.
+    /// Only the bundle's Contents folder is swapped, so the bundle folder stays the same item
+    /// on disk and Dock or Finder links to it keep working, even after the rename below.
+    nonisolated static func installUpdate(
+        from sourceApp: URL,
+        over destURL: URL,
+        fileManager fm: FileManager = .default
+    ) throws -> URL {
+        let folder = destURL.deletingLastPathComponent()
+        let token = UUID().uuidString
+        let staging = folder.appendingPathComponent(".Taly-update-\(token).app")
+        let oldContents = folder.appendingPathComponent(".Taly-old-contents-\(token)")
+        try fm.copyItem(at: sourceApp, to: staging)
+        defer { try? fm.removeItem(at: staging) }
+
+        let contents = destURL.appendingPathComponent("Contents")
+        try fm.moveItem(at: contents, to: oldContents)
         do {
-            _ = try fm.replaceItemAt(
-                destURL,
-                withItemAt: stagingURL,
-                backupItemName: ".SpeakType-update-backup.app"
-            )
+            try fm.moveItem(at: staging.appendingPathComponent("Contents"), to: contents)
         } catch {
-            try? fm.removeItem(at: stagingURL)
+            try? fm.moveItem(at: oldContents, to: contents)
             throw error
         }
+        try? fm.removeItem(at: oldContents)
+        return renamedToCurrentName(destURL, fileManager: fm)
+    }
+
+    /// Gives an app in an Applications folder the current file name, so Finder and the Dock
+    /// show "Taly". Leaves it as is anywhere else, or if that name is already taken.
+    nonisolated static func renamedToCurrentName(
+        _ appURL: URL,
+        fileManager fm: FileManager = .default
+    ) -> URL {
+        let folder = appURL.deletingLastPathComponent()
+        let target = folder.appendingPathComponent(appFileName)
+        guard folder.lastPathComponent == "Applications",
+              appURL.lastPathComponent.caseInsensitiveCompare(appFileName) != .orderedSame,
+              !fm.fileExists(atPath: target.path)
+        else { return appURL }
+        do {
+            try fm.moveItem(at: appURL, to: target)
+            return target
+        } catch {
+            return appURL
+        }
+    }
+
+    nonisolated private static func replaceCurrentApp(with sourceApp: URL) throws -> URL {
+        try installUpdate(from: sourceApp, over: URL(fileURLWithPath: Bundle.main.bundlePath))
     }
 
     nonisolated private static func detachDMG(mountPoint: URL) {
@@ -395,9 +429,8 @@ class UpdateService: ObservableObject {
         try? proc.run()
     }
 
-    private func relaunch() {
+    private func relaunch(at bundlePath: String) {
         // Use a shell to wait for the current process to exit, then reopen the app
-        let bundlePath = Bundle.main.bundlePath
         let pid = ProcessInfo.processInfo.processIdentifier
 
         let script = """
