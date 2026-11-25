@@ -369,31 +369,50 @@ class UpdateService: ObservableObject {
     /// File name the app should have in Applications. Older installs are called SpeakType.app.
     nonisolated static let appFileName = "Taly.app"
 
+    /// Hidden staging folders an install leaves next to the app if it is interrupted.
+    nonisolated static let stagingPrefixes = [".Taly-update-", ".SpeakType-update-"]
+
     /// Installs `sourceApp` over the app at `destURL` and returns where the app ends up.
-    /// Only the bundle's Contents folder is swapped, so the bundle folder stays the same item
-    /// on disk and Dock or Finder links to it keep working, even after the rename below.
+    /// The new Contents folder is swapped in with one atomic rename, so the bundle folder stays
+    /// the same item on disk and Dock or Finder links to it keep working, even after the rename
+    /// to Taly.app. If that swap is not possible (e.g. another user owns the app folder), it
+    /// falls back to replacing the whole bundle, as older versions did.
     nonisolated static func installUpdate(
         from sourceApp: URL,
         over destURL: URL,
         fileManager fm: FileManager = .default
     ) throws -> URL {
         let folder = destURL.deletingLastPathComponent()
-        let token = UUID().uuidString
-        let staging = folder.appendingPathComponent(".Taly-update-\(token).app")
-        let oldContents = folder.appendingPathComponent(".Taly-old-contents-\(token)")
-        try fm.copyItem(at: sourceApp, to: staging)
+        removeStagingLeftovers(in: folder, fileManager: fm)
+        let staging = folder.appendingPathComponent(".Taly-update-\(UUID().uuidString).app")
         defer { try? fm.removeItem(at: staging) }
+        try fm.copyItem(at: sourceApp, to: staging)
 
         let contents = destURL.appendingPathComponent("Contents")
-        try fm.moveItem(at: contents, to: oldContents)
-        do {
-            try fm.moveItem(at: staging.appendingPathComponent("Contents"), to: contents)
-        } catch {
-            try? fm.moveItem(at: oldContents, to: contents)
-            throw error
+        let newContents = staging.appendingPathComponent("Contents")
+        // After the swap the old contents sit in the staging folder, which `defer` removes.
+        if renamex_np(newContents.path, contents.path, UInt32(RENAME_SWAP)) == 0 {
+            // The bundle folder keeps its old flags; drop quarantine like a fresh copy would.
+            removexattr(destURL.path, "com.apple.quarantine", 0)
+        } else {
+            _ = try fm.replaceItemAt(
+                destURL,
+                withItemAt: staging,
+                backupItemName: ".Taly-update-backup.app"
+            )
         }
-        try? fm.removeItem(at: oldContents)
         return renamedToCurrentName(destURL, fileManager: fm)
+    }
+
+    /// Removes staging folders left by an install that was interrupted (crash, power loss).
+    nonisolated static func removeStagingLeftovers(
+        in folder: URL,
+        fileManager fm: FileManager = .default
+    ) {
+        guard let names = try? fm.contentsOfDirectory(atPath: folder.path) else { return }
+        for name in names where stagingPrefixes.contains(where: name.hasPrefix) {
+            try? fm.removeItem(at: folder.appendingPathComponent(name))
+        }
     }
 
     /// Gives an app in an Applications folder the current file name, so Finder and the Dock
@@ -433,14 +452,15 @@ class UpdateService: ObservableObject {
         // Use a shell to wait for the current process to exit, then reopen the app
         let pid = ProcessInfo.processInfo.processIdentifier
 
+        // The path is passed as an argument ($1), never pasted into the script text.
         let script = """
             while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done
-            open "\(bundlePath)"
+            open "$1"
             """
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/sh")
-        proc.arguments = ["-c", script]
+        proc.arguments = ["-c", script, "sh", bundlePath]
         try? proc.run()
 
         DispatchQueue.main.async {

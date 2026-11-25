@@ -13,6 +13,12 @@ final class AppUpdateInstallTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        // Unlock anything a test made read-only so the temp folder can be removed.
+        if let items = fm.enumerator(atPath: root.path) {
+            for case let item as String in items {
+                try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.appendingPathComponent(item).path)
+            }
+        }
         try? fm.removeItem(at: root)
     }
 
@@ -59,6 +65,53 @@ final class AppUpdateInstallTests: XCTestCase {
 
         XCTAssertEqual(installed, app)
         XCTAssertEqual(version(at: installed), "new")
+    }
+
+    func testLowercaseOldNameIsRenamedToo() throws {
+        let applications = root.appendingPathComponent("Applications")
+        let oldApp = applications.appendingPathComponent("speaktype.app")
+        try makeApp(oldApp, version: "old")
+        let download = root.appendingPathComponent("dmg/Taly.app")
+        try makeApp(download, version: "new")
+
+        let installed = try UpdateService.installUpdate(from: download, over: oldApp)
+
+        XCTAssertEqual(installed.lastPathComponent, "Taly.app")
+        XCTAssertEqual(version(at: installed), "new")
+    }
+
+    /// Another user owns the app folder, so nothing in it can be changed. The update must
+    /// fail with an error and leave the old app exactly as it was.
+    func testLockedAppFolderFailsCleanlyAndKeepsOldApp() throws {
+        let applications = root.appendingPathComponent("Applications")
+        let oldApp = applications.appendingPathComponent("SpeakType.app")
+        try makeApp(oldApp, version: "old")
+        try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: oldApp.path)
+        let download = root.appendingPathComponent("dmg/Taly.app")
+        try makeApp(download, version: "new")
+
+        XCTAssertThrowsError(try UpdateService.installUpdate(from: download, over: oldApp))
+
+        XCTAssertEqual(version(at: oldApp), "old")
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: applications.path), ["SpeakType.app"])
+    }
+
+    func testInterruptedInstallLeftoversAreRemovedNextTime() throws {
+        let applications = root.appendingPathComponent("Applications")
+        let oldApp = applications.appendingPathComponent("Taly.app")
+        try makeApp(oldApp, version: "old")
+        try makeApp(applications.appendingPathComponent(".Taly-update-123.app"), version: "x")
+        try makeApp(applications.appendingPathComponent(".SpeakType-update-456.app"), version: "x")
+        try makeApp(applications.appendingPathComponent("Other.app"), version: "keep")
+        let download = root.appendingPathComponent("dmg/Taly.app")
+        try makeApp(download, version: "new")
+
+        _ = try UpdateService.installUpdate(from: download, over: oldApp)
+
+        XCTAssertEqual(
+            try fm.contentsOfDirectory(atPath: applications.path).sorted(),
+            ["Other.app", "Taly.app"]
+        )
     }
 
     func testRenameSkipsWhenTalyAlreadyExists() throws {
