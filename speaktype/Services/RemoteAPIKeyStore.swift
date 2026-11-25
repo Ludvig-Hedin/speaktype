@@ -10,7 +10,7 @@ import Security
 /// - `read` returns `nil` rather than throwing, so callers never accidentally log an error that
 ///   might echo request context.
 enum RemoteAPIKeyStore {
-    nonisolated private static let service = "sh.polar.speaktype.apikeys"
+    nonisolated private static let service = "sh.polar.speaktype.apikeys" + AppStorageIsolation.keychainSuffix
     static let didChangeNotification = Notification.Name("RemoteAPIKeyStore.didChange")
 
     // MARK: - Account-string core (works for any provider: STT or cleanup)

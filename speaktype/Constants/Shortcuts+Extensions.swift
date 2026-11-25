@@ -3,10 +3,13 @@ import KeyboardShortcuts
 import AppKit
 
 extension KeyboardShortcuts.Name {
+    static let toggleMeeting = Self("toggleMeeting", default: .init(.m, modifiers: [.control, .option]))
     static let toggleRecord = Self("toggleRecord", default: .init(.space, modifiers: [.control, .option]))
 }
 
 extension Notification.Name {
+    static let meetingToggleRequested = Self("meetingToggleRequested")
+    static let meetingFinished = Self("meetingFinished")
     static let hotkeyTriggered = Notification.Name("hotkeyTriggered") // Legacy, can be removed
     static let recordingStartRequested = Notification.Name("recordingStartRequested")
     static let recordingStopRequested = Notification.Name("recordingStopRequested")

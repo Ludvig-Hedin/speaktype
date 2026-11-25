@@ -21,8 +21,17 @@ class MiniRecorderWindowController: NSObject {
         self.keyboardFocusVisibility = keyboardFocusVisibility
     }
 
+    func toggleMeeting() {
+        let meeting = MeetingRecorder.shared
+        if meeting.active { meeting.stop(transcribe: true); return }
+        guard panel?.isVisible != true, !AudioRecordingService.shared.isRecordingOrStarting else { return }
+        meeting.start()
+        showPanel()
+    }
+
     // Start recording - show panel and begin recording
     func startRecording() {
+        if MeetingRecorder.shared.active { MeetingRecorder.shared.dictationRequested(); return }
         // Remember the app the user was in; it becomes the paste target if the start is accepted.
         startCandidateApp = NSWorkspace.shared.frontmostApplication
 

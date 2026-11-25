@@ -25,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastExternalApp: NSRunningApplication?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        if AppStorageIsolation.isUnitTestHost { return }
         // Register background-mode defaults before any UI is built so the activation policy
         // (Dock icon vs. background agent) is correct on the very first frame — no Dock flash.
         UserDefaults.standard.register(defaults: [
@@ -54,10 +55,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if AppStorageIsolation.isUnitTestHost { return }
         keyboardFocusVisibility.startMonitoring()
         miniRecorderController = MiniRecorderWindowController(
             keyboardFocusVisibility: keyboardFocusVisibility
         )
+        KeyboardShortcuts.onKeyUp(for: .toggleMeeting) { [weak self] in self?.miniRecorderController?.toggleMeeting() }
+        NotificationCenter.default.publisher(for: .meetingToggleRequested)
+            .sink { [weak self] _ in self?.miniRecorderController?.toggleMeeting() }
+            .store(in: &cancellables)
+        _ = HistoryService.shared
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--recorder-demo") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
@@ -143,6 +150,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidResignActive(_ notification: Notification) {
         keyboardFocusVisibility.hide()
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard MeetingRecorder.shared.active else { return .terminateNow }
+        NotificationCenter.default.publisher(for: .meetingFinished).first()
+            .sink { _ in sender.reply(toApplicationShouldTerminate: true) }
+            .store(in: &cancellables)
+        MeetingRecorder.shared.stop(transcribe: false)
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {

@@ -5,6 +5,7 @@ import OSLog
 import SwiftUI
 
 struct MiniRecorderView: View {
+    @ObservedObject private var meeting = MeetingRecorder.shared
     @ObservedObject private var audioRecorder = AudioRecordingService.shared
     private var whisperService: WhisperService { WhisperService.shared }
     @State private var isListening = false
@@ -128,6 +129,7 @@ struct MiniRecorderView: View {
     }
 
     private var pillState: PillState {
+        if meeting.active { return .listening }
         if let frozenState { return frozenState }
         if isShowingMessage {
             if showsPasted { return .done }
@@ -174,9 +176,13 @@ struct MiniRecorderView: View {
         isListening || (isProcessing && (!isShowingMessage || (awaitingPasteResult && !showsPasted)))
     }
 
-    var body: some View {
+    private var recorderCanvas: some View {
         ZStack(alignment: .bottom) {
             Color.clear
+            if meeting.active, let notice = meeting.notice {
+                Text(notice).font(.caption).foregroundStyle(.white)
+                    .padding(6).background(.black.opacity(0.82), in: Capsule()).padding(.bottom, 47)
+            }
             pill
                 .pillTooltipFrame()
                 .padding(.bottom, 6)
@@ -188,6 +194,10 @@ struct MiniRecorderView: View {
         .contextMenu {
             modelSelectionMenu
         }
+    }
+
+    var body: some View {
+        recorderCanvas
         .onReceive(NotificationCenter.default.publisher(for: .recordingStartRequested)) { _ in
             startRecording()
         }
@@ -196,6 +206,9 @@ struct MiniRecorderView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .recordingEscapeRequested)) { _ in
             handleEscape()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .meetingFinished)) { event in
+            if let message = event.object as? String { showStartError(message) } else { onCancel?() }
         }
         .onChange(of: capturesEscape) { _, capture in
             onEscapeCaptureChanged?(capture)
@@ -218,25 +231,7 @@ struct MiniRecorderView: View {
         }
         #endif
         .onAppear {
-            initializedService()
-
-            // Set up Escape key monitors
-            globalEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
-                if event.keyCode == 53, !event.isARepeat {
-                    Task { @MainActor in self.handleEscape() }
-                }
-            }
-            localEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                guard event.keyCode == 53, !event.isARepeat else { return event }
-                // Local monitors run on the main thread. Only take Escape while the recorder is
-                // actually recording or transcribing, so other Taly windows (sheets,
-                // menus, fields) keep their normal Escape behavior.
-                let shouldSwallow = MainActor.assumeIsolated {
-                    self.capturesEscape
-                }
-                Task { @MainActor in self.handleEscape() }
-                return shouldSwallow ? nil : event
-            }
+            installEscapeMonitors()
         }
         .onDisappear {
             if let globalEscapeMonitor = globalEscapeMonitor {
@@ -251,6 +246,28 @@ struct MiniRecorderView: View {
                 handleEscape()
             })
         )
+    }
+
+    private func installEscapeMonitors() {
+        initializedService()
+
+        // Set up Escape key monitors
+        globalEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53, !event.isARepeat {
+                Task { @MainActor in self.handleEscape() }
+            }
+        }
+        localEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53, !event.isARepeat else { return event }
+            // Local monitors run on the main thread. Only take Escape while the recorder is
+            // actually recording or transcribing, so other Taly windows (sheets,
+            // menus, fields) keep their normal Escape behavior.
+            let shouldSwallow = MainActor.assumeIsolated {
+                self.capturesEscape
+            }
+            Task { @MainActor in self.handleEscape() }
+            return shouldSwallow ? nil : event
+        }
     }
 
     #if DEBUG
@@ -301,8 +318,19 @@ struct MiniRecorderView: View {
                     cancelButton
                         .transition(Self.contentTransition)
                 }
-                LiveWaveform(level: audioRecorder.audioLevel, isLive: isListening)
-                    .transition(Self.contentTransition)
+                if meeting.active {
+                    TimelineView(.periodic(from: .now, by: 0.08)) { context in
+                        HStack(spacing: 8) {
+                            LiveWaveform(level: meeting.level, isLive: meeting.started != nil)
+                            let seconds = max(0, Int(context.date.timeIntervalSince(meeting.started ?? context.date)))
+                            Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
+                                .font(.system(size: 12, weight: .medium).monospacedDigit()).foregroundStyle(.white)
+                        }
+                    }
+                } else {
+                    LiveWaveform(level: audioRecorder.audioLevel, isLive: isListening)
+                        .transition(Self.contentTransition)
+                }
                 if showsControls {
                     finishButton
                         .transition(Self.contentTransition)
@@ -371,7 +399,8 @@ struct MiniRecorderView: View {
     }
 
     private var listeningHelp: String {
-        recordingMode == 0
+        if meeting.active { return "Recording meeting" }
+        return recordingMode == 0
             ? "Release the hotkey to insert text. Esc stops and saves."
             : "Press the hotkey again to insert text. Esc stops and saves."
     }
@@ -379,26 +408,28 @@ struct MiniRecorderView: View {
     /// Same as Esc: stops without inserting; the audio stays in History.
     private var cancelButton: some View {
         Button {
+            if meeting.active { meeting.stop(transcribe: false); return }
             handleEscape()
         } label: {
             PillCircleIcon(kind: .cancel)
         }
         .buttonStyle(.stPlain)
         .clickActionPointerCursor()
-        .pillTooltip("Cancel", id: "cancel", shown: $tooltipID)
-        .accessibilityLabel("Cancel")
+        .pillTooltip(meeting.active ? "Stop and keep audio" : "Cancel", id: "cancel", shown: $tooltipID)
+        .accessibilityLabel(meeting.active ? "Stop and keep audio" : "Cancel")
     }
 
     private var finishButton: some View {
         Button {
+            if meeting.active { meeting.stop(transcribe: true); return }
             handleRecordingControlTap()
         } label: {
             PillCircleIcon(kind: .finish)
         }
         .buttonStyle(.stPlain)
         .clickActionPointerCursor()
-        .pillTooltip("Finish and paste", id: "finish", shown: $tooltipID)
-        .accessibilityLabel("Finish and paste")
+        .pillTooltip(meeting.active ? "Save and transcribe" : "Finish and paste", id: "finish", shown: $tooltipID)
+        .accessibilityLabel(meeting.active ? "Save and transcribe" : "Finish and paste")
     }
 
     /// The hovered element's tooltip, centered over it and floating just above the pill.
@@ -569,6 +600,7 @@ struct MiniRecorderView: View {
     }
 
     private func startRecording() {
+        guard !meeting.active else { meeting.dictationRequested(); return }
         guard !isStoppingRecording else {
             debugLog("Audio recorder is still stopping, ignoring start request")
             return

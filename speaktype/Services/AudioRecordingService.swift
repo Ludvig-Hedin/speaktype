@@ -26,6 +26,10 @@ class AudioRecordingService: NSObject, ObservableObject {
         }
     }
 
+    var preferredDeviceID: String? {
+        selectedDeviceId ?? UserDefaults.standard.string(forKey: Self.selectedDeviceKey)
+    }
+
     private static let selectedDeviceKey = "selectedAudioDeviceId"
 
     private var captureSession: AVCaptureSession?
@@ -162,7 +166,7 @@ class AudioRecordingService: NSObject, ObservableObject {
         DispatchQueue.global(qos: .background).async {
             guard let support = FileManager.default.urls(
                 for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
-            let chunks = support.appendingPathComponent("SpeakType/Chunks")
+            let chunks = support.appendingPathComponent(AppStorageIsolation.supportFolderName).appendingPathComponent("Chunks")
             try? FileManager.default.removeItem(at: chunks)
         }
 
@@ -277,6 +281,7 @@ class AudioRecordingService: NSObject, ObservableObject {
 
     @discardableResult
     func startRecording() async -> Bool {
+        guard !MeetingRecorder.shared.active else { MeetingRecorder.shared.dictationRequested(); return false }
         guard !isStarting, !isRecording, !isStopping else { return false }
         isStarting = true
         defer { isStarting = false }
@@ -552,7 +557,7 @@ class AudioRecordingService: NSObject, ObservableObject {
 
         let recordingsDir =
             appSupport
-            .appendingPathComponent("SpeakType")
+            .appendingPathComponent(AppStorageIsolation.supportFolderName)
             .appendingPathComponent("Recordings")
 
         // Create directory if it doesn't exist
@@ -572,7 +577,7 @@ class AudioRecordingService: NSObject, ObservableObject {
 
         let chunksDir =
             appSupport
-            .appendingPathComponent("SpeakType")
+            .appendingPathComponent(AppStorageIsolation.supportFolderName)
             .appendingPathComponent("Chunks")
 
         try? FileManager.default.createDirectory(

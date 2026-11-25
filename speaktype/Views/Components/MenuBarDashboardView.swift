@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct MenuBarDashboardView: View {
+    @ObservedObject private var meeting = MeetingRecorder.shared
     @StateObject private var historyService = HistoryService.shared
 
     let openDashboard: () -> Void
@@ -287,6 +288,17 @@ struct MenuBarDashboardView: View {
                 .padding(.vertical, 10)
                 .background(Color.accentBlue)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.stPlain)
+
+            Button {
+                dismiss()
+                NotificationCenter.default.post(name: .meetingToggleRequested, object: nil)
+            } label: {
+                Label(meeting.active ? "Stop meeting" : "Start meeting", systemImage: "person.2")
+                    .font(Typography.labelMedium).foregroundStyle(Color.textPrimary)
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .background(Color.bgHover, in: RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(.stPlain)
 

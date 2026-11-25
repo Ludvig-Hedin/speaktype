@@ -19,7 +19,7 @@ nonisolated struct HistoryItem: Identifiable, Codable, Hashable {
             if transcript != oldValue { wordCount = Self.countWords(in: transcript) }
         }
     }
-    let duration: TimeInterval
+    var duration: TimeInterval
     let audioFileURL: URL?
     var modelUsed: String?
     var transcriptionTime: TimeInterval?
@@ -34,6 +34,8 @@ nonisolated struct HistoryItem: Identifiable, Codable, Hashable {
     var failureReason: String? = nil
 
     var recordingLanguage: String? = nil
+    var isMeeting: Bool? = nil
+    var meetingFrame: Int64? = nil
     var queuedRetry: DictationRetry? = nil
 
     private(set) var wordCount = 0
@@ -42,7 +44,7 @@ nonisolated struct HistoryItem: Identifiable, Codable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id, date, transcript, duration, audioFileURL, modelUsed, transcriptionTime
         case provider, estimatedCostUSD, rawTranscript, polishedTranscript, summary
-        case failureReason, recordingLanguage, queuedRetry
+        case failureReason, recordingLanguage, queuedRetry, isMeeting, meetingFrame
     }
 
     mutating func prepareForDisplay(audioExists: Bool? = nil) {
@@ -80,6 +82,7 @@ class HistoryService: ObservableObject {
     nonisolated private static let statsSaveKey = "history_stats_entries"
     private let recoveryStore: DictationRecoveryStore
     private var durableIDs: Set<UUID> = []
+    private var capturingMeeting: HistoryItem?
     private var deletingIDs: Set<UUID> = []
     private var retryWorker: Task<Void, Never>?
     private var startupTask: Task<Void, Never>?
@@ -110,13 +113,13 @@ class HistoryService: ObservableObject {
 
     /// Create a recoverable entry before transcription begins. While processing, the
     /// same entry is reserved so History cannot start a duplicate transcription.
-    func beginDictation(audioURL: URL, duration: TimeInterval, language: String, processing: Bool = true) async throws -> UUID {
+    func beginDictation(audioURL: URL, duration: TimeInterval, language: String, processing: Bool = true, meetingID: UUID? = nil) async throws -> UUID {
         await waitForStartup()
         var item = HistoryItem(
-            id: UUID(), date: .now, transcript: "", duration: duration, audioFileURL: audioURL,
+            id: meetingID ?? UUID(), date: .now, transcript: "", duration: duration, audioFileURL: audioURL,
             failureReason: processing ? "Recording saved — retry to transcribe" : "Dictation stopped",
-            recordingLanguage: language)
-        item.prepareForDisplay(audioExists: true)
+            recordingLanguage: language, isMeeting: meetingID == nil ? nil : true)
+        item.prepareForDisplay(audioExists: meetingID == nil)
         let checkpoint = item
         let store = recoveryStore
         do {
@@ -129,8 +132,18 @@ class HistoryService: ObservableObject {
             throw error
         }
         if processing { retryingItemIDs.insert(item.id) }
-        items.insert(item, at: 0)
+        if meetingID != nil {
+            capturingMeeting = item
+        } else {
+            items.insert(item, at: 0)
+        }
         return item.id
+    }
+
+    func revealStoppedMeeting(id: UUID) {
+        guard let item = capturingMeeting, item.id == id else { return }
+        capturingMeeting = nil
+        items.insert(item, at: 0)
     }
 
     func finishDictation(id: UUID) {
@@ -306,6 +319,10 @@ class HistoryService: ObservableObject {
 
         retryingItemIDs.insert(id)
         defer { retryingItemIDs.remove(id) }
+        if item.isMeeting == true {
+            await transcribeMeeting(item, automatically: automatically, recognize: recognizeMeetingSegment)
+            return
+        }
         let exists = await Task.detached(priority: .utility) {
             FileManager.default.fileExists(atPath: audioURL.path)
         }.value
@@ -358,6 +375,89 @@ class HistoryService: ObservableObject {
                 await failDictation(id: id, reason: "Waiting to retry transcription", retry: retry)
             } else {
                 await failDictation(id: id, reason: error.localizedDescription)
+            }
+        }
+    }
+
+    /// Also runs on manual retry after an interrupted capture or mix.
+    func prepareMeeting(id: UUID) async throws {
+        guard let item = items.first(where: { $0.id == id }), let url = item.audioFileURL else { throw CancellationError() }
+        let duration = try await Task.detached(priority: .utility) { try MeetingFiles.mix(at: url) }.value
+        guard !deletingIDs.contains(id), let index = items.firstIndex(where: { $0.id == id }) else { throw CancellationError() }
+        var saved = items[index]
+        saved.duration = duration
+        saved.prepareForDisplay(audioExists: true)
+        saved.failureReason = "Meeting audio saved. Retry to transcribe."
+        guard await persist(saved, at: index) else { throw MeetingAudioError(message: "Could not checkpoint meeting.") }
+    }
+
+    private func recognizeMeetingSegment(_ segment: URL, language: String, automaticRoute: DictationRetryRoute?) async throws -> TranscriptionOutcome {
+        if let route = automaticRoute {
+            guard route == DictationRetryRoute.current,
+                  let provider = TranscriptionModeUserDefaults.selectedRemoteProvider,
+                  let model = TranscriptionModeUserDefaults.selectedRemoteModel else {
+                throw RemoteTranscriptionClient.ClientError.settingsChanged
+            }
+            return try await RemoteTranscriptionClient(provider: provider, model: model, requiredRetryRoute: route)
+                .transcribeDetailed(audioFile: segment, language: language)
+        }
+        return try await TranscriptionCoordinator.transcribe(audioFile: segment, language: language)
+    }
+
+    func transcribeMeeting(_ item: HistoryItem, automatically: Bool,
+                           recognize: (URL, String, DictationRetryRoute?) async throws -> TranscriptionOutcome) async {
+        guard let url = item.audioFileURL else { return }
+        let route = automatically ? item.queuedRetry?.route : DictationRetryRoute.current
+        var frame = item.meetingFrame ?? 0
+        var text = item.transcript
+        do {
+            if !item.hasAudio || item.duration == 0 { try await prepareMeeting(id: item.id) }
+            while containsDictation(id: item.id) {
+                try Task.checkCancellation()
+                let start = frame
+                let segment = FileManager.default.temporaryDirectory.appendingPathComponent("meeting-\(UUID()).m4a")
+                defer { try? FileManager.default.removeItem(at: segment) }
+                let range = try await Task.detached(priority: .utility) {
+                    try MeetingFiles.segment(from: url, startingAt: start, to: segment)
+                }.value
+                guard containsDictation(id: item.id), !Task.isCancelled else { return }
+                let language = item.recordingLanguage ?? "auto"
+                let outcome = try await recognize(segment, language, automatically ? route : nil)
+                guard containsDictation(id: item.id), let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+                let previous = items[index]
+                let part = Self.cleanedTranscript(outcome.text)
+                if !part.isEmpty { text = text.isEmpty ? part : text + "\n" + part }
+                var saved = previous
+                saved.transcript = text
+                saved.rawTranscript = text
+                saved.modelUsed = outcome.modelLabel
+                saved.provider = outcome.provider.rawValue
+                saved.transcriptionTime = (saved.transcriptionTime ?? 0) + outcome.transcriptionTime
+                if let cost = outcome.estimatedCostUSD { saved.estimatedCostUSD = (saved.estimatedCostUSD ?? 0) + cost }
+                saved.meetingFrame = range.last && text.isEmpty ? 0 : range.end
+                saved.failureReason = range.last ? (text.isEmpty ? "No speech detected" : nil) : "Meeting partially transcribed"
+                saved.queuedRetry = range.last ? nil : saved.queuedRetry
+                guard await persist(saved, at: index) else {
+                    if let current = items.firstIndex(where: { $0.id == item.id }) {
+                        items[current] = previous
+                        items[current].failureReason = "Could not checkpoint transcript. Retry in History."
+                    }
+                    return
+                }
+                if range.last {
+                    if !text.isEmpty { recordStats(for: saved) }
+                    return
+                }
+                frame = range.end
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            if automatically, var retry = item.queuedRetry, (error as? RemoteTranscriptionClient.ClientError)?.allowsBackgroundRetry == true {
+                retry.backOff()
+                await failDictation(id: item.id, reason: "Waiting to retry transcription", retry: retry)
+            } else {
+                _ = await recordDictationError(error, id: item.id, retryRoute: route)
             }
         }
     }
@@ -440,7 +540,11 @@ class HistoryService: ObservableObject {
                 do { try store.remove(id: item.id) } catch { return nil }
             }
             if deleteAudioFile, let url = item.audioFileURL {
-                try? FileManager.default.removeItem(at: url)
+                if item.isMeeting == true, url.standardizedFileURL == MeetingFiles.mixURL(id: item.id).standardizedFileURL {
+                    try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+                } else {
+                    try? FileManager.default.removeItem(at: url)
+                }
             }
             return item.id
         })
@@ -524,6 +628,12 @@ class HistoryService: ObservableObject {
 
         let restored = store.load().map { entry in
             var item = entry
+            if item.isMeeting == true, item.duration == 0, let url = item.audioFileURL,
+               let duration = try? MeetingFiles.mix(at: url) {
+                item.duration = duration
+                item.failureReason = "Meeting recovered. Retry to transcribe."
+                try? store.write(item)
+            }
             item.prepareForDisplay()
             return item
         }

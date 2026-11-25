@@ -1,0 +1,117 @@
+import AVFoundation
+import Combine
+
+@MainActor
+final class MeetingRecorder: ObservableObject {
+    static let shared = MeetingRecorder()
+    @Published private(set) var active = false
+    @Published private(set) var started: Date?
+    @Published private(set) var notice: String?
+    private var capture: MeetingCapture?
+    private var id: UUID?
+    private var pendingStop: Bool?
+    private var stopping = false
+    private var monitor: Task<Void, Never>?
+    var level: Float { capture?.level ?? 0 }
+
+    func start() {
+        guard !active, !AudioRecordingService.shared.isRecordingOrStarting else { return }
+        active = true
+        notice = "Starting meeting…"
+        let device = AudioRecordingService.shared.preferredDeviceID
+        let language = UserDefaults.standard.string(forKey: "transcriptionLanguage") ?? "auto"
+        Task {
+            do {
+                guard await AVCaptureDevice.requestAccess(for: .audio) else {
+                    throw MeetingAudioError(message: "Allow microphone access in Settings to record a meeting.")
+                }
+                let meetingID = UUID()
+                let url = MeetingFiles.mixURL(id: meetingID)
+                let folder = url.deletingLastPathComponent()
+                try await Task.detached {
+                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
+                                                            attributes: [.posixPermissions: 0o700])
+                }.value
+                _ = try await HistoryService.shared.beginDictation(audioURL: url, duration: 0, language: language,
+                                                                  meetingID: meetingID)
+                id = meetingID
+                let begin = Date.now
+                let session = try await Task.detached {
+                    let capture = MeetingCapture()
+                    do { try capture.start(folder: folder, deviceUID: device) }
+                    catch { capture.stop(); throw error }
+                    return capture
+                }.value
+                capture = session
+                started = begin
+                notice = session.micOnly ? "Microphone only. System audio is unavailable." : nil
+                monitor = Task { [weak self] in
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(1))
+                        guard !Task.isCancelled, let self, let capture = self.capture else { return }
+                        if capture.writeFailed {
+                            self.stop(transcribe: false)
+                            return
+                        }
+                        if !capture.micOnly, Date.now.timeIntervalSince(begin) > 6 {
+                            let silent = "Only microphone audio detected."
+                            if capture.systemHasSignal {
+                                if self.notice == silent { self.notice = nil }
+                            } else if self.notice == nil {
+                                self.notice = silent
+                            }
+                        }
+                    }
+                }
+                if let pendingStop { stop(transcribe: pendingStop) }
+            } catch {
+                if let id {
+                    HistoryService.shared.revealStoppedMeeting(id: id)
+                    await HistoryService.shared.failDictation(id: id, reason: error.localizedDescription)
+                    HistoryService.shared.finishDictation(id: id)
+                }
+                finish(message: error.localizedDescription)
+            }
+        }
+    }
+
+    func dictationRequested() {
+        notice = capture?.micOnly == true ? "Meeting in progress. Recording microphone only." : "Stop the meeting to dictate."
+    }
+
+    func stop(transcribe: Bool) {
+        guard active, !stopping else { return }
+        guard let session = capture, let id else { pendingStop = transcribe; return }
+        HistoryService.shared.revealStoppedMeeting(id: id)
+        stopping = true
+        let writeFailed = session.writeFailed
+        monitor?.cancel()
+        monitor = nil
+        capture = nil
+        notice = "Saving meeting…"
+        Task {
+            await Task.detached { session.stop() }.value
+            let history = HistoryService.shared
+            do {
+                try await history.prepareMeeting(id: id)
+                history.finishDictation(id: id)
+                finish(message: writeFailed ? "Recording interrupted. Available audio saved in History." : nil)
+                if transcribe { await history.retryTranscription(id: id) }
+            } catch {
+                await history.failDictation(id: id, reason: error.localizedDescription)
+                history.finishDictation(id: id)
+                finish(message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func finish(message: String?) {
+        started = nil
+        notice = nil
+        id = nil
+        pendingStop = nil
+        stopping = false
+        active = false
+        NotificationCenter.default.post(name: .meetingFinished, object: message)
+    }
+}

@@ -112,6 +112,15 @@ private struct ShortcutsSection: View {
                 RowDivider()
 
                 HStack {
+                    Text("Meeting").font(Typography.bodyMedium).foregroundStyle(Color.textPrimary)
+                    Spacer()
+                    KeyboardShortcuts.Recorder(for: .toggleMeeting)
+                }
+                .settingsRowPadding()
+
+                RowDivider()
+
+                HStack {
                     Text("Recording mode")
                         .font(Typography.bodyMedium)
                         .foregroundStyle(Color.textPrimary)

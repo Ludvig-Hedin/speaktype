@@ -67,7 +67,7 @@ struct RemoteTranscriptionClient: TranscriptionProvider {
         // Upload a compressed copy (~8× smaller, ~3× faster round trip). If the encoder fails,
         // or a model rejects the format with a 4xx, send the original WAV instead.
         let encodingStarted = Date()
-        let compressed = await AudioUploadEncoder.compressedCopy(of: audioFile)
+        let compressed = audioFile.pathExtension == "m4a" ? nil : await AudioUploadEncoder.compressedCopy(of: audioFile)
         let elapsedEncoding = Date().timeIntervalSince(encodingStarted)
         AppLogger.transcription.notice(
             "stage=upload_audio_encode seconds=\(elapsedEncoding, format: .fixed(precision: 3)) compressed=\(compressed != nil)")

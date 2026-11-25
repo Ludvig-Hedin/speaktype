@@ -197,7 +197,7 @@ struct HistoryCard: View {
                     .frame(width: dateColumnWidth)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        if item.isFailed {
+                        if item.isFailed && item.transcript.isEmpty {
                             HStack(spacing: 6) {
                                 Image(systemName: "exclamationmark.triangle")
                                     .font(.system(size: 11))
@@ -223,11 +223,11 @@ struct HistoryCard: View {
                                 .multilineTextAlignment(.leading)
                         }
 
-                        Text([
+                        Text(((item.isMeeting == true ? ["Meeting"] : []) + [
                             item.date.formatted(date: .omitted, time: .shortened),
                             (item.wordCount == 1 ? "1 word" : "\(item.wordCount) words"),
                             formatDurationShort(item.duration),
-                        ].joined(separator: "  ·  "))
+                        ]).joined(separator: "  ·  "))
                             .font(Typography.caption)
                             .monospacedDigit()
                             .foregroundStyle(Color.textMuted)
@@ -322,7 +322,7 @@ private struct ExpandedHistoryContent: View {
                         }
                     }
                     .buttonStyle(.stSecondary)
-                    .disabled(isRetrying || !hasAudio)
+                    .disabled(isRetrying || (!hasAudio && item.isMeeting != true))
                 } else {
                     Button("Copy", action: onCopy)
                         .buttonStyle(.stSecondary)

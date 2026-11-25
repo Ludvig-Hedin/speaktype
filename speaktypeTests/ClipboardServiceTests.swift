@@ -5,9 +5,10 @@ final class ClipboardServiceTests: XCTestCase {
     
     func testCopy() {
         let text = "Copied Text Check"
-        ClipboardService.shared.copy(text: text)
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        ClipboardService(pasteboard: pasteboard).copy(text: text)
         
-        let pasteboard = NSPasteboard.general
         let copied = pasteboard.string(forType: .string)
         
         XCTAssertEqual(copied, text, "Clipboard content should match copied text")
