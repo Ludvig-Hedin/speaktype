@@ -11,7 +11,7 @@ import Foundation
 ///
 /// `ModelValidationService` still checks the live `/models` list on startup and disables slugs
 /// that stop resolving.
-struct CleanupModel: Identifiable, Equatable, Hashable {
+nonisolated struct CleanupModel: Identifiable, Equatable, Hashable {
     let id: String            // provider model_id
     let provider: CleanupProvider
     let label: String

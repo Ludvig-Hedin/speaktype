@@ -1,14 +1,19 @@
 import XCTest
+import Observation
 @testable import speaktype
 
 final class HistoryServiceTests: XCTestCase {
     
     var service: HistoryService!
     
-    override func setUp() {
-        super.setUp()
-        service = HistoryService.shared
-        service.resetAllDataForTesting()
+    override func setUp() async throws {
+        try await super.setUp()
+        let history = await HistoryService.shared
+        await history.waitForStartup()
+        await MainActor.run {
+            service = history
+            history.resetAllDataForTesting()
+        }
     }
     
     override func tearDown() {
@@ -29,6 +34,65 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(service.items.first?.duration, duration)
     }
     
+    func testHistoryWordCountTracksTranscriptEditsWithoutChangingJSON() throws {
+        var item = HistoryItem(id: UUID(), date: .now, transcript: "first\nsecond",
+                               duration: 2, audioFileURL: nil)
+        item.prepareForDisplay()
+        XCTAssertEqual(item.wordCount, 2)
+
+        item.transcript = "Edited\ttext here"
+        XCTAssertEqual(item.wordCount, 3)
+
+        let data = try JSONEncoder().encode(item)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNil(json["wordCount"])
+        var restored = try JSONDecoder().decode(HistoryItem.self, from: data)
+        restored.prepareForDisplay()
+        XCTAssertEqual(restored.wordCount, 3)
+    }
+
+    @MainActor
+    func testPlaybackProgressDoesNotInvalidatePlaybackButtons() {
+        let player = AudioPlayerService.shared
+        let previousTime = player.currentTime
+        defer { player.currentTime = previousTime }
+
+        withObservationTracking {
+            _ = player.isPlaying
+            _ = player.currentAudioURL
+        } onChange: {
+            XCTFail("Playback controls should not observe progress ticks")
+        }
+        player.currentTime += 0.1
+    }
+
+    func testHistoryMetricsKeepTheRollingPeriodAndCalendarDayCounts() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 24, hour: 12)))
+        let entries = [
+            HistoryStatsEntry(id: UUID(), date: now, wordCount: 12, duration: 5, estimatedCostUSD: 0.01),
+            HistoryStatsEntry(id: UUID(), date: now.addingTimeInterval(-86_400), wordCount: 8, duration: 4),
+            HistoryStatsEntry(id: UUID(), date: now.addingTimeInterval(-6 * 86_400 - 1), wordCount: 4, duration: 2),
+        ]
+
+        let dashboard = DashboardHistoryMetrics(entries: entries, now: now, calendar: calendar)
+        XCTAssertEqual(dashboard.wordCount, 24)
+        XCTAssertEqual(dashboard.todayCount, 1)
+        XCTAssertEqual(dashboard.weeklyData.map(\.count), [1, 0, 0, 0, 0, 1, 1])
+
+        let week = HistoryPeriodMetrics(entries: entries, period: .week, now: now, calendar: calendar)
+        XCTAssertEqual(week.buckets.map(\.wordCount), [0, 0, 0, 0, 0, 8, 12])
+        XCTAssertEqual(week.transcriptionCount, 2)
+        XCTAssertEqual(week.totalDuration, 9)
+        XCTAssertEqual(week.totalCost, 0.01)
+        XCTAssertEqual(week.averageWordsPerTranscription, 10)
+
+        let year = HistoryPeriodMetrics(entries: entries, period: .year, now: now, calendar: calendar)
+        XCTAssertEqual(year.buckets.last?.wordCount, 24)
+        XCTAssertEqual(year.totalDuration, 11)
+    }
+
     func testPersistence() {
         let transcript = "Persistent Item"
         service.addItem(transcript: transcript, duration: 5.0)
@@ -48,20 +112,22 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(decoded.first?.transcript, transcript)
     }
     
-    func testDeleteItem() {
+    @MainActor
+    func testDeleteItem() async {
         service.addItem(transcript: "Item 1", duration: 1.0)
         service.addItem(transcript: "Item 2", duration: 2.0)
         
         XCTAssertEqual(service.items.count, 2)
         
         let itemToDelete = service.items.last! // "Item 1" (since newest is first)
-        service.deleteItem(id: itemToDelete.id)
+        await service.deleteItem(id: itemToDelete.id)
         
         XCTAssertEqual(service.items.count, 1)
         XCTAssertEqual(service.items.first?.transcript, "Item 2")
     }
 
-    func testDeleteItemRemovesAudioFileWhenPresent() throws {
+    @MainActor
+    func testDeleteItemRemovesAudioFileWhenPresent() async throws {
         let audioURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("m4a")
@@ -76,13 +142,14 @@ final class HistoryServiceTests: XCTestCase {
         let itemID = try XCTUnwrap(service.items.first?.id)
         XCTAssertTrue(FileManager.default.fileExists(atPath: audioURL.path))
 
-        service.deleteItem(id: itemID)
+        await service.deleteItem(id: itemID)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.path))
         XCTAssertTrue(service.items.isEmpty)
     }
 
-    func testClearAllPreservesStatsHistory() {
+    @MainActor
+    func testClearAllPreservesStatsHistory() async {
         service.addItem(transcript: "One short note", duration: 10.0)
         service.addItem(transcript: "Another slightly longer note", duration: 20.0)
 
@@ -90,7 +157,7 @@ final class HistoryServiceTests: XCTestCase {
         let wordsBeforeClear = service.totalWordCount()
         let durationBeforeClear = service.totalDuration()
 
-        service.clearAll()
+        await service.clearAll()
 
         XCTAssertTrue(service.items.isEmpty)
         XCTAssertEqual(service.transcriptionCount(), countBeforeClear)

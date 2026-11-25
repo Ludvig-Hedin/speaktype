@@ -4,8 +4,9 @@ import SwiftUI
 struct HistoryDetailView: View {
     let item: HistoryItem
     
-    @StateObject private var audioPlayer = AudioPlayerService.shared
+    @Bindable private var audioPlayer = AudioPlayerService.shared
     @State private var showCopyAlert = false
+    @State private var hasAudio = false
     
     var body: some View {
         ScrollView {
@@ -68,8 +69,7 @@ struct HistoryDetailView: View {
                 // Audio playback section — only when the recording file is actually present, so we
                 // don't render a dead Play button for an item whose audio was deleted/moved
                 // (matches the existence gating already used in HistoryView).
-                if let audioURL = item.audioFileURL,
-                   FileManager.default.fileExists(atPath: audioURL.path) {
+                if let audioURL = item.audioFileURL, hasAudio {
                     VStack(spacing: 16) {
                         // Recording label with duration
                         HStack {
@@ -193,10 +193,9 @@ struct HistoryDetailView: View {
         }
         .background(Color.contentBackground)
         .navigationTitle("Transcript Details")
-        .onAppear {
-            if let audioURL = item.audioFileURL {
-                audioPlayer.loadAudio(from: audioURL)
-            }
+        .task(id: item.audioFileURL) {
+            guard let audioURL = item.audioFileURL else { return }
+            hasAudio = await audioPlayer.loadAudio(from: audioURL)
         }
         .onDisappear {
             audioPlayer.stop()

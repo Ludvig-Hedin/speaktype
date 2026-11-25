@@ -3,6 +3,33 @@ import XCTest
 
 final class WritingPolishModelsTests: XCTestCase {
 
+    @MainActor
+    func testAutomaticPolishKeepsResultWithinBudget() async {
+        let text = await TranscriptionFinalizer.polishWithinBudget(
+            rawTranscript: "raw text", budget: .seconds(1)
+        ) { "Polished text." }
+
+        XCTAssertEqual(text, "Polished text.")
+    }
+
+    @MainActor
+    func testAutomaticPolishReturnsRawTextAtDeadline() async {
+        let start = ContinuousClock.now
+        let text = await TranscriptionFinalizer.polishWithinBudget(
+            rawTranscript: "raw text", budget: .milliseconds(30)
+        ) {
+            // Simulate a provider that keeps working even after cancellation.
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global().asyncAfter(deadline: .now() + 1) {
+                    continuation.resume(returning: "A late result.")
+                }
+            }
+        }
+
+        XCTAssertEqual(text, "raw text")
+        XCTAssertLessThan(ContinuousClock.now - start, .milliseconds(800))
+    }
+
     func testPresetInstructionsAreNonEmpty() {
         for preset in WritingPolishPreset.allCases {
             let withFillers = preset.styleInstructions(removeFillers: true)

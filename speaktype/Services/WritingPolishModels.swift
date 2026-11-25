@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - User defaults keys (shared by Settings, Onboarding, TranscriptionFinalizer)
 
-enum WritingPolishUserDefaults {
+nonisolated enum WritingPolishUserDefaults {
     static let enabledKey = "writingPolishEnabled"
     static let presetKey = "writingPolishPreset"
     static let removeFillersKey = "writingPolishRemoveFillers"
@@ -43,7 +43,7 @@ enum WritingPolishUserDefaults {
 
 // MARK: - Preset
 
-enum WritingPolishPreset: String, CaseIterable, Identifiable {
+nonisolated enum WritingPolishPreset: String, CaseIterable, Identifiable {
     case clean
     case professional
     case casual
@@ -111,7 +111,7 @@ enum WritingPolishPreset: String, CaseIterable, Identifiable {
 
 // MARK: - Configuration
 
-struct WritingPolishConfiguration: Equatable {
+nonisolated struct WritingPolishConfiguration: Equatable {
     var isEnabled: Bool
     var preset: WritingPolishPreset
     var removeFillers: Bool

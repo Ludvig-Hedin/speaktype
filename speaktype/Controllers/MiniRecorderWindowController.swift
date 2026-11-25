@@ -109,8 +109,8 @@ class MiniRecorderWindowController: NSObject {
     private func setupPanel() {
         // Initialize View with callbacks
         let recorderView = MiniRecorderView(
-            onCommit: { [weak self] text in
-                self?.handleCommit(text: text)
+            onCommit: { [weak self] text, id, releasedAt in
+                self?.handleCommit(text: text, id: id, releasedAt: releasedAt)
             },
             onCancel: { [weak self] in
                 self?.hidePanel()
@@ -191,7 +191,8 @@ class MiniRecorderWindowController: NSObject {
         })
     }
 
-    private func handleCommit(text: String) {
+    private func handleCommit(text: String, id: UUID, releasedAt: ContinuousClock.Instant) {
+        let pasteStarted = ContinuousClock.now
         let pasteTarget = pendingPasteTarget ?? lastActiveApp
         pendingPasteTarget = nil
         pasteTask?.cancel()
@@ -203,11 +204,15 @@ class MiniRecorderWindowController: NSObject {
                 // make sure it can't hold key focus while ⌘V is sent to the target app.
                 beforePaste: { [weak self] in self?.panel?.resignKey() },
                 afterPaste: {
+                    MiniRecorderView.logStage("paste", id: id, startedAt: pasteStarted)
+                    MiniRecorderView.logStage("release_to_paste", id: id, startedAt: releasedAt)
                     NotificationCenter.default.post(name: .recordingPasteSucceeded, object: nil)
                 }
             )
 
             if result == .copiedOnly && !Task.isCancelled {
+                MiniRecorderView.logStage("clipboard_only", id: id, startedAt: pasteStarted)
+                MiniRecorderView.logStage("release_to_clipboard", id: id, startedAt: releasedAt)
                 // No Accessibility: say so in the panel instead of failing silently. The text
                 // stays on the clipboard for a manual ⌘V.
                 NotificationCenter.default.post(

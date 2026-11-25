@@ -224,7 +224,7 @@ struct TranscribeAudioView: View {
             do {
                 if fromMicrophone {
                     let duration = (try? await getAudioDuration(url: url)) ?? 0
-                    recordingID = try historyService.beginDictation(audioURL: url, duration: duration, language: language)
+                    recordingID = try await historyService.beginDictation(audioURL: url, duration: duration, language: language)
                 }
                 let outcome = try await TranscriptionCoordinator.transcribe(
                     audioFile: url, language: language,
@@ -239,15 +239,15 @@ struct TranscribeAudioView: View {
                 if let recordingID {
                     let raw = HistoryService.cleanedTranscript(rawTranscript)
                     guard !raw.isEmpty else {
-                        historyService.failDictation(id: recordingID, reason: "No speech detected")
+                        await historyService.failDictation(id: recordingID, reason: "No speech detected")
                         actionError = "No speech detected"
                         return
                     }
-                    var saved = historyService.saveDictationText(id: recordingID, transcript: raw, raw: raw, outcome: outcome)
+                    var saved = await historyService.saveDictationText(id: recordingID, transcript: raw, raw: raw, outcome: outcome)
                     if polishNewTranscripts {
                         let final = HistoryService.cleanedTranscript(await TranscriptionFinalizer.polishTranscriptOnDemand(raw))
                         if !final.isEmpty, final != raw {
-                            saved = historyService.saveDictationText(id: recordingID, transcript: final, raw: raw, outcome: outcome)
+                            saved = await historyService.saveDictationText(id: recordingID, transcript: final, raw: raw, outcome: outcome)
                         }
                     }
                     if !saved { actionError = "Could not save the transcript" }
@@ -267,7 +267,7 @@ struct TranscribeAudioView: View {
                     polishedTranscript: polishNewTranscripts ? transcribedText : nil)
             } catch {
                 if let recordingID {
-                    actionError = historyService.recordDictationError(error, id: recordingID, retryRoute: retryRoute)
+                    actionError = await historyService.recordDictationError(error, id: recordingID, retryRoute: retryRoute)
                 } else if fromMicrophone {
                     actionError = "Could not save to History. Audio kept on this Mac."
                 } else {
@@ -359,11 +359,9 @@ struct TranscribeAudioView: View {
         Task {
             let source = item.rawTranscript ?? item.transcript
             let result = await TranscriptionFinalizer.polishTranscriptOnDemand(source)
-            await MainActor.run {
-                historyService.setPolishedTranscript(result, for: item.id)
-                displayedVersion[item.id] = .polished
-                workingItemID = nil
-            }
+            await historyService.setPolishedTranscript(result, for: item.id)
+            displayedVersion[item.id] = .polished
+            workingItemID = nil
         }
     }
 
@@ -373,11 +371,9 @@ struct TranscribeAudioView: View {
         Task {
             do {
                 let result = try await TranscriptionFinalizer.summarizeTranscript(item.rawTranscript ?? item.transcript)
-                await MainActor.run {
-                    historyService.setSummary(result, for: item.id)
-                    displayedVersion[item.id] = .summary
-                    workingItemID = nil
-                }
+                await historyService.setSummary(result, for: item.id)
+                displayedVersion[item.id] = .summary
+                workingItemID = nil
             } catch {
                 await MainActor.run {
                     actionError = error.localizedDescription

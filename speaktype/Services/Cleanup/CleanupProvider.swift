@@ -2,7 +2,7 @@ import Foundation
 
 /// Where the LLM cleanup step runs. Both remote options are OpenAI-compatible
 /// `/chat/completions`, so one client handles them by swapping base URL + key + headers.
-enum CleanupProvider: String, CaseIterable, Codable, Identifiable {
+nonisolated enum CleanupProvider: String, CaseIterable, Codable, Identifiable {
     case openRouter   // default remote
     case openAI       // secondary remote
     case ollama       // local (existing behavior)
