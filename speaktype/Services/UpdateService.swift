@@ -162,9 +162,12 @@ class UpdateService: ObservableObject {
             return
         }
 
+        // Claim the install synchronously so a fast double click can't start two.
+        guard !isInstalling else { return }
+        isInstalling = true
+
         Task {
             await MainActor.run {
-                self.isInstalling = true
                 self.installProgress = 0
                 self.installPhase = "Downloading"
                 self.installStatus = "Preparing download…"
@@ -395,13 +398,27 @@ class UpdateService: ObservableObject {
             // The bundle folder keeps its old flags; drop quarantine like a fresh copy would.
             removexattr(destURL.path, "com.apple.quarantine", 0)
         } else {
-            _ = try fm.replaceItemAt(
-                destURL,
-                withItemAt: staging,
-                backupItemName: ".Taly-update-backup.app"
-            )
+            let newVersion = bundleVersion(at: staging)
+            do {
+                _ = try fm.replaceItemAt(
+                    destURL,
+                    withItemAt: staging,
+                    backupItemName: ".Taly-update-backup.app"
+                )
+            } catch {
+                // The new app may be in place even if removing the old copy failed.
+                guard newVersion != nil, bundleVersion(at: destURL) == newVersion else { throw error }
+            }
         }
         return renamedToCurrentName(destURL, fileManager: fm)
+    }
+
+    nonisolated private static func bundleVersion(at app: URL) -> String? {
+        let info = app.appendingPathComponent("Contents/Info.plist")
+        guard let dict = NSDictionary(contentsOf: info) else { return nil }
+        let short = dict["CFBundleShortVersionString"] as? String ?? ""
+        let build = dict["CFBundleVersion"] as? String ?? ""
+        return short.isEmpty && build.isEmpty ? nil : "\(short) (\(build))"
     }
 
     /// Removes staging folders left by an install that was interrupted (crash, power loss).

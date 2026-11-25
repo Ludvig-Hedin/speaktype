@@ -156,6 +156,7 @@ fi
 DMG_SRC="$(mktemp -d)"
 ditto "$APP_PATH" "$DMG_SRC/Taly.app"
 chmod 755 "$DMG_SRC"
+trap 'rm -rf "$DMG_SRC"' EXIT
 
 create-dmg \
   --volname "Taly" \
@@ -169,7 +170,6 @@ create-dmg \
   --app-drop-link 480 170 \
   "$DMG_PATH" \
   "$DMG_SRC"
-rm -rf "$DMG_SRC"
 
 echo ""
 echo "🔐 Signing DMG..."
