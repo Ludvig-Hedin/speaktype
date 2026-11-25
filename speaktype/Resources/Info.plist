@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>NSAudioCaptureUsageDescription</key>
-	<string>Taly records sound from your Mac so meeting recordings include other speakers.</string>
+	<string>Hum records sound from your Mac so meeting recordings include other speakers.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Taly</string>
+	<string>Hum</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Taly</string>
+	<string>Hum</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -42,15 +42,15 @@
 	<key>LSUIElement</key>
 	<false/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Taly needs permission to send keystrokes to paste transcribed text into the active application.</string>
+	<string>Hum needs permission to send keystrokes to paste transcribed text into the active application.</string>
 	<key>NSDesktopFolderUsageDescription</key>
-	<string>Taly only needs this if you transcribe an audio file stored on your Desktop.</string>
+	<string>Hum only needs this if you transcribe an audio file stored on your Desktop.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
-	<string>Taly only needs this if you transcribe an audio file stored in your Documents folder. AI models are stored in the app's own Application Support folder.</string>
+	<string>Hum only needs this if you transcribe an audio file stored in your Documents folder. AI models are stored in the app's own Application Support folder.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
-	<string>Taly only needs this if you transcribe an audio file stored in your Downloads folder.</string>
+	<string>Hum only needs this if you transcribe an audio file stored in your Downloads folder.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Taly needs access to your microphone to record your voice for transcription. All processing is done locally on your device.</string>
+	<string>Hum needs access to your microphone to record your voice for transcription. All processing is done locally on your device.</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<true/>
 	<key>NSSupportsSuddenTermination</key>

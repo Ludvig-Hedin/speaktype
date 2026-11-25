@@ -42,7 +42,7 @@ if pgrep -f "$DEV_PROCESS_PATH" >/dev/null 2>&1; then
 fi
 
 # Prevent duplicate menu bar items while developing by stopping installed app variants.
-for PROD_PATH in "/Applications/Taly.app/Contents/MacOS/speaktype" "/Applications/speaktype.app/Contents/MacOS/speaktype" "/Applications/SpeakType.app/Contents/MacOS/speaktype"; do
+for PROD_PATH in "/Applications/Hum.app/Contents/MacOS/speaktype" "/Applications/speaktype.app/Contents/MacOS/speaktype" "/Applications/SpeakType.app/Contents/MacOS/speaktype"; do
   if pgrep -f "$PROD_PATH" >/dev/null 2>&1; then
     echo "Stopping running production SpeakType instance at $PROD_PATH..."
     pkill -f "$PROD_PATH" || true

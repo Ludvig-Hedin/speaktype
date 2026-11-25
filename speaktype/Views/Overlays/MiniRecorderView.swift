@@ -84,7 +84,7 @@ struct MiniRecorderView: View {
 
     private var spokenLanguageHelpText: String {
         if transcriptionLanguage == "auto" {
-            return "Spoken language hint: Auto-detect. Taly will try to detect the language you are speaking."
+            return "Spoken language hint: Auto-detect. Hum will try to detect the language you are speaking."
         }
         if transcriptionLanguage == DictationHints.swedishEnglish {
             return "GPT Transcribe gets both Swedish and English as hints. Other models detect the language automatically."
@@ -267,7 +267,7 @@ struct MiniRecorderView: View {
         localEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.keyCode == 53, !event.isARepeat else { return event }
             // Local monitors run on the main thread. Only take Escape while the recorder is
-            // actually recording or transcribing, so other Taly windows (sheets,
+            // actually recording or transcribing, so other Hum windows (sheets,
             // menus, fields) keep their normal Escape behavior.
             let shouldSwallow = MainActor.assumeIsolated {
                 self.capturesEscape

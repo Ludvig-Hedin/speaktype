@@ -84,7 +84,7 @@ class UpdateService: ObservableObject {
                     }
                 } else {
                     self.availableUpdate = nil
-                    if manual { self.manualCheckMessage = "Taly is up to date." }
+                    if manual { self.manualCheckMessage = "Hum is up to date." }
                 }
                 self.lastCheckDate = Date()
                 self.saveLastCheckDate()
@@ -370,15 +370,15 @@ class UpdateService: ObservableObject {
     }
 
     /// File name the app should have in Applications. Older installs are called SpeakType.app.
-    nonisolated static let appFileName = "Taly.app"
+    nonisolated static let appFileName = "Hum.app"
 
     /// Hidden staging folders an install leaves next to the app if it is interrupted.
-    nonisolated static let stagingPrefixes = [".Taly-update-", ".SpeakType-update-"]
+    nonisolated static let stagingPrefixes = [".Hum-update-", ".SpeakType-update-"]
 
     /// Installs `sourceApp` over the app at `destURL` and returns where the app ends up.
     /// The new Contents folder is swapped in with one atomic rename, so the bundle folder stays
     /// the same item on disk and Dock or Finder links to it keep working, even after the rename
-    /// to Taly.app. If that swap is not possible (e.g. another user owns the app folder), it
+    /// to Hum.app. If that swap is not possible (e.g. another user owns the app folder), it
     /// falls back to replacing the whole bundle, as older versions did.
     nonisolated static func installUpdate(
         from sourceApp: URL,
@@ -387,7 +387,7 @@ class UpdateService: ObservableObject {
     ) throws -> URL {
         let folder = destURL.deletingLastPathComponent()
         removeStagingLeftovers(in: folder, fileManager: fm)
-        let staging = folder.appendingPathComponent(".Taly-update-\(UUID().uuidString).app")
+        let staging = folder.appendingPathComponent(".Hum-update-\(UUID().uuidString).app")
         defer { try? fm.removeItem(at: staging) }
         try fm.copyItem(at: sourceApp, to: staging)
 
@@ -403,7 +403,7 @@ class UpdateService: ObservableObject {
                 _ = try fm.replaceItemAt(
                     destURL,
                     withItemAt: staging,
-                    backupItemName: ".Taly-update-backup.app"
+                    backupItemName: ".Hum-update-backup.app"
                 )
             } catch {
                 // The new app may be in place even if removing the old copy failed.
@@ -433,7 +433,7 @@ class UpdateService: ObservableObject {
     }
 
     /// Gives an app in an Applications folder the current file name, so Finder and the Dock
-    /// show "Taly". Leaves it as is anywhere else, or if that name is already taken.
+    /// show "Hum". Leaves it as is anywhere else, or if that name is already taken.
     nonisolated static func renamedToCurrentName(
         _ appURL: URL,
         fileManager fm: FileManager = .default
@@ -493,7 +493,7 @@ class UpdateService: ObservableObject {
     }
 
     /// Installs updated by older versions are still called SpeakType.app. On the first launch
-    /// of this version, rename the app to Taly.app and reopen it from there. A move keeps the
+    /// of this version, rename the app to Hum.app and reopen it from there. A move keeps the
     /// same item on disk, so the Dock pin follows. Returns true if the app is about to quit.
     nonisolated static func moveToCurrentNameIfNeeded() -> Bool {
         guard !AppStorageIsolation.isRunningTests else { return false }
@@ -544,7 +544,7 @@ enum UpdateError: LocalizedError {
         case .appNotFoundInDMG: return "Could not find the app inside the downloaded update."
         case .copyFailed(let msg): return "Failed to install: \(msg)"
         case .verificationFailed: return "The downloaded update failed verification."
-        case .invalidAppSignature: return "The update is not a valid Taly app."
+        case .invalidAppSignature: return "The update is not a valid Hum app."
         }
     }
 }

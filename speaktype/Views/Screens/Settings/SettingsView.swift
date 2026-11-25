@@ -362,7 +362,7 @@ private struct UpdatesSection: View {
                 RowDivider()
 
                 HStack(spacing: 12) {
-                    Text("Taly \(AppVersion.currentVersion)")
+                    Text("Hum \(AppVersion.currentVersion)")
                         .font(Typography.bodyMedium)
                         .foregroundStyle(Color.textSecondary)
                     Spacer()

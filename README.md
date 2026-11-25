@@ -1,12 +1,12 @@
-# Taly
+# Hum
 
 <div align="center">
 
-![Taly icon](speaktype/Assets.xcassets/AppIcon.appiconset/icon_256x256.png)
+![Hum icon](speaktype/Assets.xcassets/AppIcon.appiconset/icon_256x256.png)
 
 **Fast, Offline Voice-to-Text for macOS**
 
-![Taly app screenshot](image.png)
+![Hum app screenshot](image.png)
 [![Download](https://img.shields.io/badge/Download-SpeakType.dmg-blueviolet?logo=apple&logoColor=white)](https://github.com/Ludvig-Hedin/speaktype/releases/latest)
 [![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-macOS%2013.0+-blue?logo=apple)](https://www.apple.com/macos/)
@@ -18,9 +18,9 @@
 
 ---
 
-## What is Taly?
+## What is Hum?
 
-Taly is a **privacy-first, offline voice dictation tool** for macOS. Unlike online dictation services, everything runs **100% locally** using OpenAI's Whisper AI model via [WhisperKit](https://github.com/argmaxinc/WhisperKit). Support for Parakeet coming soon!
+Hum is a **privacy-first, offline voice dictation tool** for macOS. Unlike online dictation services, everything runs **100% locally** using OpenAI's Whisper AI model via [WhisperKit](https://github.com/argmaxinc/WhisperKit). Support for Parakeet coming soon!
 
 - **Privacy First** - Zero data leaves your Mac
 - **Lightning Fast** - Optimized for Apple Silicon

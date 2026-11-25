@@ -174,21 +174,21 @@ fi
 # Remove old DMG if exists
 [ -f "$DMG_NAME" ] && rm "$DMG_NAME"
 
-# The DMG holds the app as Taly.app so new installs get the new name.
+# The DMG holds the app as Hum.app so new installs get the new name.
 DMG_SRC="$(mktemp -d)"
-ditto "$APP_PATH" "$DMG_SRC/Taly.app"
+ditto "$APP_PATH" "$DMG_SRC/Hum.app"
 chmod 755 "$DMG_SRC"
 trap 'rm -rf "$DMG_SRC"' EXIT
 
 create-dmg \
-  --volname "Taly" \
+  --volname "Hum" \
   --volicon "speaktype/Assets.xcassets/AppIcon.appiconset/icon_512x512.png" \
   --background "dmg-assets/dmg-background.png" \
   --window-pos 200 120 \
   --window-size 660 400 \
   --icon-size 160 \
-  --icon "Taly.app" 180 170 \
-  --hide-extension "Taly.app" \
+  --icon "Hum.app" 180 170 \
+  --hide-extension "Hum.app" \
   --app-drop-link 480 170 \
   "$DMG_NAME" \
   "$DMG_SRC"

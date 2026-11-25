@@ -30,7 +30,7 @@ nonisolated final class MeetingTrack: @unchecked Sendable {
     private let offsetURL: URL
     private let origin: Double
     private let anchorsURL: URL
-    private let offsetQueue = DispatchQueue(label: "Taly.meetingTrackStart")
+    private let offsetQueue = DispatchQueue(label: "Hum.meetingTrackStart")
     let url: URL
     init(url: URL, input: AudioStreamBasicDescription, origin: Double) throws {
         self.url = url
@@ -128,7 +128,7 @@ private nonisolated final class MeetingSystemTap {
     var track: MeetingTrack?
 
     private var formatListener: AudioObjectPropertyListenerBlock?
-    private let listenerQueue = DispatchQueue(label: "Taly.tapFormat")
+    private let listenerQueue = DispatchQueue(label: "Hum.tapFormat")
     let changed = OSAllocatedUnfairLock(initialState: false)
 
     func start(url: URL, origin: TimeInterval) throws {
@@ -139,15 +139,15 @@ private nonisolated final class MeetingSystemTap {
         var processSize = UInt32(MemoryLayout.size(ofValue: ownProcess))
         try checkAudio(AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &translation,
             UInt32(MemoryLayout.size(ofValue: pid)), &pid, &processSize, &ownProcess))
-        guard ownProcess != kAudioObjectUnknown else { throw MeetingAudioError(message: "Taly could not identify its audio process.") }
+        guard ownProcess != kAudioObjectUnknown else { throw MeetingAudioError(message: "Hum could not identify its audio process.") }
         let description = CATapDescription(monoGlobalTapButExcludeProcesses: [ownProcess])
-        description.name = "Taly meeting"
+        description.name = "Hum meeting"
         description.isPrivate = true
         try checkAudio(AudioHardwareCreateProcessTap(description, &tap))
         var address = AudioObjectPropertyAddress(mSelector: kAudioTapPropertyFormat,
             mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         let properties: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "Taly meeting",
+            kAudioAggregateDeviceNameKey: "Hum meeting",
             kAudioAggregateDeviceUIDKey: UUID().uuidString,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceTapAutoStartKey: true,
@@ -203,7 +203,7 @@ nonisolated final class MeetingCapture: @unchecked Sendable {
     private var installed = false
     private var observer: NSObjectProtocol?
     private var defaultInputListener: AudioObjectPropertyListenerBlock?
-    private let deviceQueue = DispatchQueue(label: "Taly.defaultInput")
+    private let deviceQueue = DispatchQueue(label: "Hum.defaultInput")
     private var defaultInputAddress = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
         mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
     private var micChanged = OSAllocatedUnfairLock(initialState: false)

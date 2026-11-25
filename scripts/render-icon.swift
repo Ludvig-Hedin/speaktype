@@ -1,4 +1,4 @@
-// Renders the Taly app icon, sidebar logo and menu-bar template from vector shapes.
+// Renders the Hum app icon, sidebar logo and menu-bar template from vector shapes.
 // usage: swift scripts/render-icon.swift <repo-root>
 // Mark: three rounded sound bars that end in a thin text caret ("voice becomes text").
 import AppKit

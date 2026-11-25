@@ -257,7 +257,7 @@ class MiniRecorderWindowController: NSObject {
         let alert = NSAlert()
         alert.messageText = "Accessibility Permission Required"
         alert.informativeText =
-            "Taly needs Accessibility permission to automatically paste transcriptions into the active app.\n\nYour transcription has been copied to the clipboard.\n\nTo enable auto-paste, grant permission in:\nSystem Settings → Privacy & Security → Accessibility"
+            "Hum needs Accessibility permission to automatically paste transcriptions into the active app.\n\nYour transcription has been copied to the clipboard.\n\nTo enable auto-paste, grant permission in:\nSystem Settings → Privacy & Security → Accessibility"
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open System Settings")
         alert.addButton(withTitle: "OK")

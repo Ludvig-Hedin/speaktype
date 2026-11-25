@@ -204,7 +204,7 @@ class HistoryService: ObservableObject {
         if let retryRoute, retryRoute == DictationRetryRoute.current, transient || offlineWithoutEngine {
             let retry = DictationRetry(route: retryRoute, nextAttempt: .now.addingTimeInterval(5))
             await failDictation(id: id, reason: "Waiting to retry transcription", retry: retry)
-            return "Audio saved. Taly will retry."
+            return "Audio saved. Hum will retry."
         }
         await failDictation(id: id, reason: error.localizedDescription)
         return "Audio saved. Retry in History."

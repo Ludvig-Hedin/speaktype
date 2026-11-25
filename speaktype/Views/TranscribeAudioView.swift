@@ -386,7 +386,7 @@ struct TranscribeAudioView: View {
     private func exportMarkdown(_ item: HistoryItem) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
-        panel.nameFieldStringValue = "Taly-Transcript.md"
+        panel.nameFieldStringValue = "Hum-Transcript.md"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let raw = item.rawTranscript ?? item.transcript
         var markdown = "# Transcript\n\nRecorded: \(item.date.formatted(date: .long, time: .shortened))\n\n## Raw\n\n\(raw)\n"

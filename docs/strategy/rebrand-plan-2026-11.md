@@ -29,3 +29,6 @@ MIT license requires keeping the original copyright notice; credit "based on Spe
 
 ## Decision (owner, 2026-11-25)
 Mark: "caret" concept (three rounded sound bars ending in a thin text cursor), monochrome. Name: owner only wants "short, simple, easy to spell and remember in Swedish". Caret (caret.so, Mac AI typing app) and Typist (erusev.com, Mac dictation) are taken, so the app is **Taly** (sounds like Swedish "tala", not a Swedish word). Free domains: gettaly.com / usetaly.com (~$12/yr on Vercel; Cloudflare price unknown, no token). Runner-up: Tono (trytono.app). Not bought yet.
+
+## Name change (owner, 2026-11-25)
+Owner asked for a better name than Taly before release ("släpp. men bättre namn") and picked **Hum** from: Hum, Tono, Lilt, Saywell. No Mac dictation app found under these names (web search 2026-11-25). Taken or too close: Murmur (several), Harker, Spoke, Jot, Aloud (Mac dev feedback tool), Talkie. Taly was never released, so the update goes straight from SpeakType.app to Hum.app. Domain not bought yet.

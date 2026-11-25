@@ -31,7 +31,7 @@ struct PermissionsView: View {
                         icon: "mic.fill",
                         color: .green,
                         title: "Microphone Access",
-                        desc: "Allow Taly to record your voice for transcription",
+                        desc: "Allow Hum to record your voice for transcription",
                         isGranted: permissions.isMicGranted,
                         action: { permissions.openSystemSettings(pane: "Privacy_Microphone") }
                     )
@@ -41,7 +41,7 @@ struct PermissionsView: View {
                         icon: "hand.raised.fill",
                         color: .green,
                         title: "Accessibility Access",
-                        desc: "Allow Taly to paste transcribed text directly",
+                        desc: "Allow Hum to paste transcribed text directly",
                         isGranted: permissions.isAccessibilityGranted,
                         action: { permissions.requestAccessibilityPermission() }
                     )

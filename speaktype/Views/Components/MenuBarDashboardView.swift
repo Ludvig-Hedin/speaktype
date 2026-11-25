@@ -69,7 +69,7 @@ struct MenuBarDashboardView: View {
                 }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Taly")
+                Text("Hum")
                     .font(Typography.headlineLarge)
                     .foregroundStyle(Color.textPrimary)
 
