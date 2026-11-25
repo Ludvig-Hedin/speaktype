@@ -57,7 +57,7 @@ struct AudioInputView: View {
                         .buttonStyle(.stPlain)
                     }
                     
-                    Text("Note: SpeakType will use the selected device for all recordings.")
+                    Text("Note: Taly will use the selected device for all recordings.")
                         .font(Typography.bodySmall)
                         .foregroundStyle(Color.textSecondary)
                     

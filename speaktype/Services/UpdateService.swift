@@ -84,7 +84,7 @@ class UpdateService: ObservableObject {
                     }
                 } else {
                     self.availableUpdate = nil
-                    if manual { self.manualCheckMessage = "SpeakType is up to date." }
+                    if manual { self.manualCheckMessage = "Taly is up to date." }
                 }
                 self.lastCheckDate = Date()
                 self.saveLastCheckDate()
@@ -453,7 +453,7 @@ enum UpdateError: LocalizedError {
         case .appNotFoundInDMG: return "Could not find the app inside the downloaded update."
         case .copyFailed(let msg): return "Failed to install: \(msg)"
         case .verificationFailed: return "The downloaded update failed verification."
-        case .invalidAppSignature: return "The update is not a valid SpeakType app."
+        case .invalidAppSignature: return "The update is not a valid Taly app."
         }
     }
 }

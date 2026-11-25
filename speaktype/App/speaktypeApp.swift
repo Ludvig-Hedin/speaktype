@@ -27,7 +27,7 @@ struct speaktypeApp: App {
 
     var body: some Scene {
         // Main Dashboard Window (Hidden by default, opened via Menu Bar or Dock)
-        WindowGroup("SpeakType", id: "main-dashboard") {
+        WindowGroup("Taly", id: "main-dashboard") {
             if #available(macOS 15, *) {
                 dashboardContent.windowFullScreenBehavior(.enabled)
             } else {
@@ -56,7 +56,7 @@ struct speaktypeApp: App {
         } label: {
             // Icon changes when the hotkey is disabled so the user has a persistent visual cue
             Label(
-                "SpeakType",
+                "Taly",
                 systemImage: hotkeyEnabled ? "waveform" : "waveform.badge.minus"
             )
             .labelStyle(.iconOnly)

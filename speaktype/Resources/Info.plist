@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>SpeakType</string>
+	<string>Taly</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>Taly</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -39,16 +39,16 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<false/>
-	<key>NSDesktopFolderUsageDescription</key>
-	<string>SpeakType only needs this if you transcribe an audio file stored on your Desktop.</string>
-	<key>NSDocumentsFolderUsageDescription</key>
-	<string>SpeakType only needs this if you transcribe an audio file stored in your Documents folder. AI models are stored in the app's own Application Support folder.</string>
-	<key>NSDownloadsFolderUsageDescription</key>
-	<string>SpeakType only needs this if you transcribe an audio file stored in your Downloads folder.</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>SpeakType needs permission to send keystrokes to paste transcribed text into the active application.</string>
+	<string>Taly needs permission to send keystrokes to paste transcribed text into the active application.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Taly only needs this if you transcribe an audio file stored on your Desktop.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Taly only needs this if you transcribe an audio file stored in your Documents folder. AI models are stored in the app's own Application Support folder.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Taly only needs this if you transcribe an audio file stored in your Downloads folder.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>SpeakType needs access to your microphone to record your voice for transcription. All processing is done locally on your device.</string>
+	<string>Taly needs access to your microphone to record your voice for transcription. All processing is done locally on your device.</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<true/>
 	<key>NSSupportsSuddenTermination</key>

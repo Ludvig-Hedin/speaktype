@@ -93,7 +93,7 @@ enum RemoteCleanupClient {
         if provider == .openRouter {
             // Headers OpenRouter asks integrators to send.
             request.setValue("https://speaktype.app", forHTTPHeaderField: "HTTP-Referer")
-            request.setValue("SpeakType", forHTTPHeaderField: "X-Title")
+            request.setValue("Taly", forHTTPHeaderField: "X-Title")
         }
 
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(
