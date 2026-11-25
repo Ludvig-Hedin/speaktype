@@ -15,7 +15,38 @@ final class MeetingRecorder: ObservableObject {
     private var wakeObserver: NSObjectProtocol?
     private var dictationNoticeUntil = Date.distantPast
     private var monitor: Task<Void, Never>?
-    var level: Float { capture?.liveLevel ?? 0 }
+    var level: Float {
+        #if DEBUG
+        if let demoLevel { return demoLevel }
+        #endif
+        return capture?.liveLevel ?? 0
+    }
+
+    #if DEBUG
+    private var demoLevel: Float?
+    /// Debug-only: shows the meeting pill with a fake level and clock. Records nothing,
+    /// writes nothing. Launch a Debug build with `--meeting-demo`.
+    func runDemo() {
+        guard !active else { return }
+        active = true
+        notice = nil
+        started = Date().addingTimeInterval(-12)
+        Task { @MainActor in
+            let begin = Date()
+            while Date().timeIntervalSince(begin) < 9 {
+                let t = Date().timeIntervalSince(begin)
+                demoLevel = Float(0.25 + 0.6 * abs(sin(t * 8)) * (0.5 + 0.5 * abs(sin(t * 1.3))))
+                if t > 4.5, (started ?? .now) > Date().addingTimeInterval(-3600) {
+                    started = Date().addingTimeInterval(-3845)  // shows the hour format
+                }
+                try? await Task.sleep(for: .milliseconds(33))
+            }
+            demoLevel = nil
+            active = false
+            started = nil
+        }
+    }
+    #endif
 
     func start() {
         guard !active, !AudioRecordingService.shared.isRecordingOrStarting else { return }

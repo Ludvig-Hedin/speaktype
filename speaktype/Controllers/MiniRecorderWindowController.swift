@@ -47,6 +47,12 @@ class MiniRecorderWindowController: NSObject {
     }
 
     #if DEBUG
+    /// Debug builds launched with `--meeting-demo` show the meeting pill (no capture, no files).
+    func runMeetingDemo() {
+        showPanel()
+        MeetingRecorder.shared.runDemo()
+    }
+
     /// Debug builds launched with `--recorder-demo` play every pill state (no mic, no paste).
     func runVisualDemo() {
         showPanel()

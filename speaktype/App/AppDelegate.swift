@@ -66,6 +66,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
         _ = HistoryService.shared
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--meeting-demo") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                self?.miniRecorderController?.runMeetingDemo()
+            }
+        }
         if ProcessInfo.processInfo.arguments.contains("--recorder-demo") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 self?.miniRecorderController?.runVisualDemo()
