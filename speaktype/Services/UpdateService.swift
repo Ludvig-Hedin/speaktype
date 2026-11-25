@@ -473,7 +473,8 @@ class UpdateService: ObservableObject {
     }
 
     /// Starts a small shell that waits for this process to exit, then opens `bundlePath`.
-    nonisolated static func relaunchAfterExit(at bundlePath: String) {
+    @discardableResult
+    nonisolated static func relaunchAfterExit(at bundlePath: String) -> Bool {
         let pid = ProcessInfo.processInfo.processIdentifier
         // The path is passed as an argument ($1), never pasted into the script text.
         let script = """
@@ -483,7 +484,12 @@ class UpdateService: ObservableObject {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/sh")
         proc.arguments = ["-c", script, "sh", bundlePath]
-        try? proc.run()
+        do {
+            try proc.run()
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// Installs updated by older versions are still called SpeakType.app. On the first launch
@@ -494,8 +500,10 @@ class UpdateService: ObservableObject {
         let current = Bundle.main.bundleURL
         let renamed = renamedToCurrentName(current)
         guard renamed != current else { return false }
-        relaunchAfterExit(at: renamed.path)
-        return true
+        if relaunchAfterExit(at: renamed.path) { return true }
+        // Nothing would reopen the app: undo the rename and keep running from the old path.
+        try? FileManager.default.moveItem(at: renamed, to: current)
+        return false
     }
 
     private func setError(_ message: String) {
