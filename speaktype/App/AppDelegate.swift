@@ -25,6 +25,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastExternalApp: NSRunningApplication?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        #if !DEBUG
+        // One-time move from SpeakType.app to Taly.app. Quit before any UI or data work;
+        // the new copy opens as soon as this process is gone.
+        if UpdateService.moveToCurrentNameIfNeeded() { exit(0) }
+        #endif
+
         // Register background-mode defaults before any UI is built so the activation policy
         // (Dock icon vs. background agent) is correct on the very first frame — no Dock flash.
         UserDefaults.standard.register(defaults: [
