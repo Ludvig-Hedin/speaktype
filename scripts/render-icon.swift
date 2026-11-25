@@ -81,9 +81,11 @@ write(png(size: 512) { ctx, s in
              color: CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
 }, "\(assets)/MenuBarWave.imageset/wave-sound.png")
 
-// macOS 26 icon (Icon Composer format). Older-format icons get a grey frame on macOS 26,
-// so the app ships this too: a solid ink fill with the white mark as one vector layer.
-// The system draws the rounded shape, edge and shadow itself.
+// macOS 26 icon (Icon Composer format). Older-format icons get a grey frame on macOS 26.
+// This is the app's real icon: with the same name "AppIcon" it wins over AppIcon.appiconset,
+// and Xcode also builds the icon for older macOS from it (the PNG set above is unused).
+// A solid ink fill with the white mark as one vector layer; the system draws shape, edge
+// and shadow. Note: this script rewrites icon.json, so edits made in Icon Composer are lost.
 let iconDir = "\(root)/speaktype/AppIcon.icon"
 try! FileManager.default.createDirectory(atPath: "\(iconDir)/Assets", withIntermediateDirectories: true)
 let canvas: CGFloat = 1024
