@@ -7,7 +7,7 @@ struct DictationRecoveryStore {
 
     static var live: Self {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return Self(directory: support.appendingPathComponent("SpeakType/DictationHistory", isDirectory: true))
+        return Self(directory: support.appendingPathComponent("\(AppStorageIsolation.supportFolderName)/DictationHistory", isDirectory: true))
     }
 
     func load() -> [HistoryItem] {
