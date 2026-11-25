@@ -7,27 +7,31 @@ import CoreGraphics
 let root = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
 let assets = "\(root)/speaktype/Assets.xcassets"
 
-/// Draws the mark into `rect` (the mark's bounding box) in `color`.
-func drawMark(_ ctx: CGContext, in rect: CGRect, color: CGColor, caretWidthRatio: CGFloat = 0.28) {
+/// Mark geometry in bar-width units (owner reference, 2026-11-25): four straight bars with
+/// fully round ends — short, tall reaching up, tall reaching down, short.
+/// Each bar is (top, bottom) measured from the top of the mark; total height 6.4, width 5.35.
+private let markBars: [(top: CGFloat, bottom: CGFloat)] = [(2.1, 4.3), (0, 4.3), (2.1, 6.4), (2.1, 4.3)]
+private let markGap: CGFloat = 0.45
+let markAspect: CGFloat = (4 + 3 * markGap) / 6.4  // width / height
+
+/// Draws the mark into `rect` (the mark's bounding box, aspect `markAspect`) in `color`.
+func drawMark(_ ctx: CGContext, in rect: CGRect, color: CGColor) {
     ctx.setFillColor(color)
-    // Unit design: bar width 1, gap 0.62, caret gap 0.9; heights relative to rect height.
-    let barW = rect.width / (3 + 2 * 0.62 + 0.9 + caretWidthRatio)
-    let gap = barW * 0.62
-    let caretGap = barW * 0.9
-    let heights: [CGFloat] = [0.46, 0.84, 0.58]
-    var x = rect.minX
-    for h in heights {
-        let bh = rect.height * h
-        let r = CGRect(x: x, y: rect.midY - bh / 2, width: barW, height: bh)
-        ctx.addPath(CGPath(roundedRect: r, cornerWidth: barW / 2, cornerHeight: barW / 2, transform: nil))
+    let u = rect.height / 6.4
+    for (i, bar) in markBars.enumerated() {
+        let x = rect.minX + CGFloat(i) * u * (1 + markGap)
+        // CoreGraphics y grows upward, the design is measured from the top.
+        let r = CGRect(x: x, y: rect.maxY - bar.bottom * u, width: u, height: (bar.bottom - bar.top) * u)
+        ctx.addPath(CGPath(roundedRect: r, cornerWidth: u / 2, cornerHeight: u / 2, transform: nil))
         ctx.fillPath()
-        x += barW + gap
     }
-    x += caretGap - gap
-    let cw = barW * caretWidthRatio
-    let caret = CGRect(x: x, y: rect.minY, width: cw, height: rect.height)
-    ctx.addPath(CGPath(roundedRect: caret, cornerWidth: cw / 2, cornerHeight: cw / 2, transform: nil))
-    ctx.fillPath()
+}
+
+/// The largest mark rect of the right aspect, centered in `box`, filling `fraction` of its height.
+func markRect(in box: CGRect, heightFraction fraction: CGFloat) -> CGRect {
+    let h = box.height * fraction
+    let w = h * markAspect
+    return CGRect(x: box.midX - w / 2, y: box.midY - h / 2, width: w, height: h)
 }
 
 func png(size: Int, _ draw: (CGContext, CGFloat) -> Void) -> Data {
@@ -54,10 +58,7 @@ func appIcon(_ ctx: CGContext, _ s: CGFloat) {
     ctx.addPath(CGPath(roundedRect: tile, cornerWidth: 185 * k, cornerHeight: 185 * k, transform: nil))
     ctx.fillPath()
     ctx.setShadow(offset: .zero, blur: 0, color: nil)
-    let markH = 380 * k
-    let markW = markH * 1.02
-    drawMark(ctx, in: CGRect(x: tile.midX - markW / 2, y: tile.midY - markH / 2, width: markW, height: markH),
-             color: white)
+    drawMark(ctx, in: markRect(in: tile, heightFraction: 0.52), color: white)
 }
 
 func write(_ data: Data, _ path: String) {
@@ -72,13 +73,11 @@ for s in [16, 32, 64, 128, 256, 512, 1024] {
 write(png(size: 512) { ctx, s in
     ctx.setFillColor(ink)
     ctx.fill(CGRect(x: 0, y: 0, width: s, height: s))
-    let markH = s * 0.46
-    let markW = markH * 1.02
-    drawMark(ctx, in: CGRect(x: (s - markW) / 2, y: (s - markH) / 2, width: markW, height: markH), color: white)
+    drawMark(ctx, in: markRect(in: CGRect(x: 0, y: 0, width: s, height: s), heightFraction: 0.56), color: white)
 }, "\(assets)/AppLogo.imageset/logo.png")
 // Template mark: black on transparent; the asset is marked as a template so views tint it.
 write(png(size: 512) { ctx, s in
-    drawMark(ctx, in: CGRect(x: s * 0.08, y: s * 0.17, width: s * 0.84, height: s * 0.66),
+    drawMark(ctx, in: markRect(in: CGRect(x: 0, y: 0, width: s, height: s), heightFraction: 0.9),
              color: CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
 }, "\(assets)/MenuBarWave.imageset/wave-sound.png")
 print("icons written")
