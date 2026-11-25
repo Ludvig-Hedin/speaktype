@@ -410,12 +410,12 @@ class HistoryService: ObservableObject {
 
     nonisolated private static func encodeAndStore<T: Encodable>(_ value: T, forKey key: String) {
         if let encoded = try? JSONEncoder().encode(value) {
-            UserDefaults.standard.set(encoded, forKey: key)
+            AppStorageIsolation.historyDefaults.set(encoded, forKey: key)
         }
     }
     
     private func loadHistory() {
-        if let data = UserDefaults.standard.data(forKey: saveKey),
+        if let data = AppStorageIsolation.historyDefaults.data(forKey: saveKey),
            let decoded = try? JSONDecoder().decode([HistoryItem].self, from: data) {
             let normalizedItems = decoded.compactMap { item -> HistoryItem? in
                 // Failed items have no transcript yet; keep them so they can be retried.
@@ -455,7 +455,7 @@ class HistoryService: ObservableObject {
     }
 
     private func loadStats() {
-        if let data = UserDefaults.standard.data(forKey: statsSaveKey),
+        if let data = AppStorageIsolation.historyDefaults.data(forKey: statsSaveKey),
            let decoded = try? JSONDecoder().decode([HistoryStatsEntry].self, from: data) {
             statsEntries = decoded.sorted { $0.date > $1.date }
         }
@@ -504,12 +504,14 @@ class HistoryService: ObservableObject {
     }
 
     func resetAllDataForTesting() {
+        // Never touch real history outside a test run.
+        guard AppStorageIsolation.isRunningTests else { return }
         Self.persistenceQueue.sync {}
         items = []
         retryingItemIDs = []
         statsEntries = []
-        UserDefaults.standard.removeObject(forKey: saveKey)
-        UserDefaults.standard.removeObject(forKey: statsSaveKey)
+        AppStorageIsolation.historyDefaults.removeObject(forKey: saveKey)
+        AppStorageIsolation.historyDefaults.removeObject(forKey: statsSaveKey)
     }
 #endif
 }
