@@ -7,6 +7,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 - **Web:** Free-only launch. Pricing shows one free plan with every feature and a note that Pro comes later; price rows and FAQ answers follow. Set `NEXT_PUBLIC_PAID_PLANS_OPEN=1` to show paid plans.
 
+## [1.0.39] - 2026-11-25
+- **New name: Hum.** New minimal icon (four rounded bars). On update, SpeakType.app in Applications is renamed to Hum.app and keeps its place in the Dock.
+- **History and Dashboard no longer freeze** when scrolling, and dictation waits less for cleanup.
+- **Meeting recording:** a shortcut records you and the Mac's sound together, then transcribes the meeting.
+- **Settings:** calmer layout, the OpenRouter key is asked for once, times read like "3h 28m".
+
 ## [1.0.38] - 2026-11-24
 - **macOS, recorder:** Hovering the pill while you speak shows a grey X (cancel, same as Esc: nothing is pasted and the audio stays in History) and a white checkmark (finish and paste), like Wispr Flow. The language button is gone from the pill; pick the language in Settings. The pill now shows its own dark tooltips above it ("Cancel", "Finish and paste", what it is working on), because macOS never showed tooltips there.
 
