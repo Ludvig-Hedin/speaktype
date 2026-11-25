@@ -7,6 +7,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 - **Web:** Free-only launch. Pricing shows one free plan with every feature and a note that Pro comes later; price rows and FAQ answers follow. Set `NEXT_PUBLIC_PAID_PLANS_OPEN=1` to show paid plans.
 
+## [1.0.40] - 2026-11-25
+- **App icon:** no grey frame around the icon on macOS 26.
+
 ## [1.0.39] - 2026-11-25
 - **New name: Hum.** New minimal icon (four rounded bars). On update, SpeakType.app in Applications is renamed to Hum.app and keeps its place in the Dock.
 - **History and Dashboard no longer freeze** when scrolling, and dictation waits less for cleanup.
