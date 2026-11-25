@@ -244,11 +244,11 @@ struct StatsCard: View {
             HStack(alignment: .top, spacing: 0) {
                 StatBlock(value: wordCount.formatted(), label: "Words transcribed")
                 statDivider
-                StatBlock(value: "\(timeSaved)m", label: "Time saved typing")
+                StatBlock(value: Self.hoursAndMinutes(timeSaved), label: "Time saved typing")
                 statDivider
-                StatBlock(value: "\(allTimeCount)", label: "Total transcriptions")
+                StatBlock(value: allTimeCount.formatted(), label: "Total transcriptions")
                 statDivider
-                StatBlock(value: "\(todayCount)", label: "Transcriptions today")
+                StatBlock(value: todayCount.formatted(), label: "Transcriptions today")
             }
             .padding(.vertical, 18)
 
@@ -277,6 +277,11 @@ struct StatsCard: View {
             .fill(Color.border.opacity(0.6))
             .frame(width: 0.5)
             .padding(.vertical, 2)
+    }
+
+    /// "45m" under an hour, "3h 28m" above, like Statistics' total duration.
+    static func hoursAndMinutes(_ minutes: Int) -> String {
+        minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h \(minutes % 60)m"
     }
 
     private func formatMinutes(_ minutes: Int) -> String {

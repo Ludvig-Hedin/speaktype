@@ -179,12 +179,6 @@ struct RemoteTranscriptionSettingsSection: View {
                 }
             }
 
-            if provider == .openRouter {
-                Text("Shared with writing polish.")
-                    .font(Typography.caption)
-                    .foregroundStyle(Color.textMuted)
-            }
-
             if !statusMessage.isEmpty {
                 Text(statusMessage)
                     .font(Typography.caption)
@@ -216,6 +210,7 @@ struct RemoteTranscriptionSettingsSection: View {
                 .font(Typography.labelMedium)
                 .foregroundStyle(Color.textSecondary)
             TextEditor(text: $dictionary)
+                .help("Names and terms, one per line. Up to \(DictationHints.maximumTerms).")
                 .font(Typography.bodySmall)
                 .foregroundStyle(Color.textPrimary)
                 .scrollContentBackground(.hidden)
@@ -228,10 +223,16 @@ struct RemoteTranscriptionSettingsSection: View {
                 }
                 .accessibilityLabel("Personal dictionary")
                 .accessibilityIdentifier("dictationDictionary")
-            Text("Names and terms, one per line. Up to \(DictationHints.maximumTerms).")
-                .font(Typography.caption)
-                .foregroundStyle(Color.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
+                .overlay(alignment: .topLeading) {
+                    if dictionary.isEmpty {
+                        Text("One name or term per line")
+                            .font(Typography.bodySmall)
+                            .foregroundStyle(Color.textMuted)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .allowsHitTesting(false)
+                    }
+                }
         }
     }
 

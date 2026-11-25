@@ -42,8 +42,10 @@ final class MeetingRecorder: ObservableObject {
                 try? await Task.sleep(for: .milliseconds(33))
             }
             demoLevel = nil
-            active = false
-            started = nil
+            // End like a real meeting: the saving notice, then the pill closes.
+            notice = "Saving meeting…"
+            try? await Task.sleep(for: .milliseconds(900))
+            finish(message: nil)
         }
     }
     #endif

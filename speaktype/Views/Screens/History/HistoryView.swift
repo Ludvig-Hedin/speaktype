@@ -282,8 +282,10 @@ struct HistoryCard: View {
         if seconds < 60 {
             return "\(seconds)s"
         } else {
+            // Same as the Dashboard: "1m 9s", or "1m" when it is whole minutes.
             let mins = seconds / 60
-            return "\(mins)m"
+            let secs = seconds % 60
+            return secs == 0 ? "\(mins)m" : "\(mins)m \(secs)s"
         }
     }
 }

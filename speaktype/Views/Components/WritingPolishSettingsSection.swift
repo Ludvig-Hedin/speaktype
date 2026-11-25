@@ -30,6 +30,18 @@ struct WritingPolishSettingsSection: View {
         CleanupProvider(rawValue: cleanupProviderRaw) ?? .openRouter
     }
 
+    @AppStorage(TranscriptionModeUserDefaults.modeKey) private var transcriptionModeRaw =
+        TranscriptionMode.localOnly.rawValue
+    @AppStorage(TranscriptionModeUserDefaults.remoteProviderKey) private var remoteProviderRaw = ""
+
+    /// The cloud transcription section already shows this exact key (same Keychain entry),
+    /// so asking for it a second time here would only confuse.
+    private var keyShownInCloudSection: Bool {
+        guard (TranscriptionMode(rawValue: transcriptionModeRaw) ?? .localOnly).canUseRemote,
+              let remote = RemoteProvider(rawValue: remoteProviderRaw) else { return false }
+        return remote.keychainAccount == cleanupProvider.keychainAccount
+    }
+
     private var selectedPreset: WritingPolishPreset {
         WritingPolishPreset(rawValue: writingPolishPresetRaw) ?? .clean
     }
@@ -99,7 +111,7 @@ struct WritingPolishSettingsSection: View {
                 }
             } else {
                 HStack(spacing: 8) {
-                    SecureField("sk-…" + (cleanupProvider.envVar.map { "  (or $\($0))" } ?? ""), text: $cleanupKeyInput)
+                    SecureField("sk-…", text: $cleanupKeyInput)
                         .textFieldStyle(.app)
                     Button("Save") { saveCleanupKey() }
                         .buttonStyle(.stAction)
@@ -190,7 +202,9 @@ struct WritingPolishSettingsSection: View {
                             .clickActionPointerCursor()
                         }
 
-                        cleanupKeyField
+                        if !keyShownInCloudSection {
+                            cleanupKeyField
+                        }
                     }
                 }
                 .disabled(!writingPolishEnabled)
