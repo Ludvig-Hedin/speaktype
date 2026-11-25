@@ -22,7 +22,7 @@ struct StatisticsView: View {
     var body: some View {
         PageScaffold(
             title: "Statistics",
-            subtitle: "\(metrics.totalWords) words this \(selectedPeriod.rawValue.lowercased())",
+            subtitle: "\(metrics.totalWords.formatted()) words this \(selectedPeriod.rawValue.lowercased())",
             spacing: 24
         ) {
             periodPicker
@@ -82,13 +82,13 @@ struct StatisticsView: View {
 
     private var summaryCards: some View {
         HStack(alignment: .top, spacing: 0) {
-            StatBlock(value: "\(metrics.totalWords)", label: "Total words")
+            StatBlock(value: metrics.totalWords.formatted(), label: "Total words")
             summaryDivider
-            StatBlock(value: "\(metrics.dailyAverage)", label: "Daily average")
+            StatBlock(value: metrics.dailyAverage.formatted(), label: "Daily average")
             summaryDivider
-            StatBlock(value: "\(metrics.bestDay)", label: "Best day")
+            StatBlock(value: metrics.bestDay.formatted(), label: "Best day")
             summaryDivider
-            StatBlock(value: "\(metrics.transcriptionCount)", label: "Transcriptions")
+            StatBlock(value: metrics.transcriptionCount.formatted(), label: "Transcriptions")
 
             // Only surfaces once cloud transcription has actually incurred a cost.
             if metrics.totalCost > 0 {
@@ -203,7 +203,7 @@ struct StatisticsView: View {
             DetailCard(
                 icon: "number",
                 label: "Avg. words per note",
-                value: "\(metrics.averageWordsPerTranscription)"
+                value: metrics.averageWordsPerTranscription.formatted()
             )
             DetailCard(
                 icon: "star.fill",
